@@ -1,0 +1,80 @@
+## Interface: 120000
+## Title: InventoryManager
+## Notes: Comprehensive inventory management - auto-sell, item locking, and auto-repair
+## Author: Cheddarbound
+## Version: 1.0.0
+## SavedVariables: InventoryManagerDB
+## IconTexture: Interface\Icons\INV_Misc_Bag_07
+
+# Core files
+Core.lua
+Database.lua
+Filters.lua
+
+# Modules (load BagHooks early to capture originals)
+Modules\BagHooks.lua
+Modules\BagData.lua
+Modules\CustomCategories.lua
+Modules\ItemLock.lua
+Modules\JunkList.lua
+Modules\CategoryExclusions.lua
+Modules\AutoRepair.lua
+Modules\AutoSell.lua
+Modules\SellHistory.lua
+Modules\Ledger.lua
+Modules\AuctionHouseProtection.lua
+Modules\TooltipInfo.lua
+
+# Tracking Modules (Ledger System)
+Modules\Tracking\LootTracking.lua
+Modules\Tracking\QuestTracking.lua
+Modules\Tracking\VendorTracking.lua
+Modules\Tracking\RepairTracking.lua
+Modules\Tracking\AuctionTracking.lua
+Modules\Tracking\MailTracking.lua
+Modules\Tracking\TradeTracking.lua
+Modules\Tracking\WarbandBankTracking.lua
+Modules\Tracking\BankItemTracking.lua
+Modules\Tracking\GuildBankTracking.lua
+Modules\Tracking\FlightTracking.lua
+Modules\Tracking\TransmogTracking.lua
+Modules\Tracking\BarberTracking.lua
+Modules\Tracking\BMAHTracking.lua
+Modules\Tracking\UnclaimedGoldTracking.lua
+
+# Net Worth & Alt Tracking
+Modules\NetWorth.lua
+Modules\InventorySnapshot.lua
+Modules\MailHelper.lua
+Modules\CurrencySearch.lua
+
+# UI
+UI\Core.lua
+UI\Config.lua
+UI\OverlayFactory.lua
+UI\BagIntegration.lua
+
+# UI Popups
+UI\MailPopup.lua
+UI\Dashboard.lua
+UI\AutoSellPopup.lua
+UI\MinimapButton.lua
+
+# Bag UI
+UI\BagUI\Core.lua
+UI\BagUI\ItemSlot.lua
+UI\BagUI\Container.lua
+
+# UI Panels
+UI\Panels\General.lua
+UI\Panels\UI.lua
+UI\Panels\BagUI.lua
+UI\Panels\AutoSell.lua
+UI\Panels\Categories.lua
+UI\Panels\Whitelist.lua
+UI\Panels\JunkList.lua
+UI\Panels\Selling.lua
+UI\Panels\History.lua
+UI\Panels\Dashboard.lua
+UI\Panels\MailHelper.lua
+UI\Panels\Currency.lua
