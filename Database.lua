@@ -20,24 +20,6 @@ local defaults = {
         -- Feature toggles
         autoSellEnabled = true,
         autoRepairEnabled = true,
-        useIMBags = true,                      -- Use InventoryManager bag UI (false = Blizzard bags)
-        bagUI = {
-            includeReagentBag = true,
-            collapsedCategories = {},
-            collapsedGroups = {},
-            scale = 1,
-            maxColumns = 10,
-            maxRows = 12,
-            itemColumns = 10,
-            categoryColumns = 2,
-            categoryRows = 14,
-            groupingMode = "category",
-            showGearSets = true,
-            showItemLevel = false,
-            windowPosition = nil,
-            windowMode = "fixed",
-            windowRows = 12,
-        },
 
         -- Auto-sell filters
         autoSell = {

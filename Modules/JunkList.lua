@@ -1,6 +1,10 @@
 --[[
     InventoryManager - Modules/JunkList.lua
-    Junk item marking with visual overlay and click handling
+    Junk item marking and click handling.
+
+    Note: Visual overlays are handled by UI.OverlayFactory (green sell overlay
+    shows for junk items since they will be auto-sold). This module handles
+    Ctrl+Alt+Click to toggle junk status and provides junk list management.
 ]]
 
 local addonName, IM = ...
@@ -8,110 +12,31 @@ local addonName, IM = ...
 local JunkList = {}
 IM:RegisterModule("JunkList", JunkList)
 
--- Cache of overlay frames keyed by item button
-local _overlayFrames = {}
-
--- Junk/trash icon texture
-local JUNK_ICON = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
-
 function JunkList:OnEnable()
-    -- Register for bag update events to refresh overlays
-    IM:RegisterEvent("BAG_UPDATE", function(event, bagID)
-        self:RefreshBagOverlays(bagID)
-    end)
-
-    IM:RegisterEvent("BAG_UPDATE_DELAYED", function()
-        self:RefreshAllOverlays()
-    end)
-
     -- Hook item button clicks for Ctrl+Alt+Click to mark as junk
     self:HookItemButtons()
 
-    -- Refresh overlays when junk list changes (from UI panel, slash command, etc.)
+    -- Note: Overlay refresh is handled by ItemLock module which uses OverlayFactory
+    -- JunkList just needs to trigger a refresh when junk status changes
     IM:RegisterJunkListCallback(function(itemID, added)
-        self:RefreshAllOverlays()
-    end)
-
-    -- Refresh overlays when whitelist changes (locked items can't be junk)
-    IM:RegisterWhitelistCallback(function(itemID, added)
-        self:RefreshAllOverlays()
-    end)
-end
-
--- Create overlay frame for an item button
-function JunkList:CreateOverlay(itemButton)
-    if _overlayFrames[itemButton] then
-        return _overlayFrames[itemButton]
-    end
-
-    local overlay = CreateFrame("Frame", nil, itemButton)
-    overlay:SetAllPoints(itemButton)
-    overlay:SetFrameLevel(itemButton:GetFrameLevel() + 10)
-
-    -- Junk indicator border
-    overlay.border = overlay:CreateTexture(nil, "OVERLAY")
-    overlay.border:SetAllPoints()
-    overlay.border:SetColorTexture(0.6, 0.6, 0.6, 0.3) -- Gray tint
-    overlay.border:Hide()
-
-    -- Junk icon (trash)
-    overlay.junkIcon = overlay:CreateTexture(nil, "OVERLAY", nil, 1)
-    overlay.junkIcon:SetSize(14, 14)
-    overlay.junkIcon:SetPoint("BOTTOMRIGHT", -2, 2)
-    overlay.junkIcon:SetTexture(JUNK_ICON)
-    overlay.junkIcon:Hide()
-
-    overlay:Hide()
-
-    _overlayFrames[itemButton] = overlay
-    return overlay
-end
-
--- Update overlay for a specific item button
-function JunkList:UpdateOverlay(itemButton, bagID, slotID)
-    local overlay = self:CreateOverlay(itemButton)
-
-    -- Get item in this slot
-    local info = C_Container.GetContainerItemInfo(bagID, slotID)
-
-    if not info or not info.itemID then
-        overlay:Hide()
-        return
-    end
-
-    local itemID = info.itemID
-    local isJunk = IM:IsJunk(itemID)
-    local isLocked = IM:IsWhitelisted(itemID)
-
-    -- Don't show junk indicator if locked (lock takes priority)
-    if isJunk and not isLocked then
-        overlay.border:Show()
-        overlay.junkIcon:Show()
-        overlay:Show()
-    else
-        overlay:Hide()
-    end
-end
-
--- Refresh overlays for a specific bag
-function JunkList:RefreshBagOverlays(bagID)
-    -- Get the container frame for this bag
-    local containerFrame = _G["ContainerFrame" .. (bagID + 1)]
-    if not containerFrame then return end
-
-    local numSlots = C_Container.GetContainerNumSlots(bagID)
-    for slotID = 1, numSlots do
-        local itemButton = _G[containerFrame:GetName() .. "Item" .. slotID]
-        if itemButton then
-            self:UpdateOverlay(itemButton, bagID, slotID)
+        -- Trigger overlay refresh via ItemLock
+        if IM.modules.ItemLock then
+            IM.modules.ItemLock:RequestRefresh()
         end
+    end)
+end
+
+-- Refresh overlays for a specific bag (delegates to ItemLock/OverlayFactory)
+function JunkList:RefreshBagOverlays(bagID)
+    if IM.modules.ItemLock then
+        IM.modules.ItemLock:RefreshBagOverlays(bagID)
     end
 end
 
--- Refresh all bag overlays
+-- Refresh all bag overlays (delegates to ItemLock/OverlayFactory)
 function JunkList:RefreshAllOverlays()
-    for _, bagID in ipairs(IM:GetBagIDsToScan()) do
-        self:RefreshBagOverlays(bagID)
+    if IM.modules.ItemLock then
+        IM.modules.ItemLock:RefreshAllOverlays()
     end
 end
 
@@ -159,8 +84,7 @@ function JunkList:OnItemButtonClick(itemButton, button)
                     IM:Print("Unmarked from junk: " .. (info.hyperlink or itemName))
                 end
 
-                -- Refresh overlay (also refresh lock overlay in case it changed)
-                self:UpdateOverlay(itemButton, bagID, slotID)
+                -- Refresh overlay via ItemLock/OverlayFactory
                 if IM.modules.ItemLock then
                     IM.modules.ItemLock:UpdateOverlay(itemButton, bagID, slotID)
                 end

@@ -112,9 +112,6 @@ local function _RebuildEquipmentSetIndex()
 end
 
 local function _GetGearSetCategory(itemID)
-    if not (IM.db and IM.db.global and IM.db.global.bagUI and IM.db.global.bagUI.showGearSets) then
-        return nil
-    end
     local setName = _equipmentSetIndex[itemID]
     if setName then
         return "Gear: " .. setName
