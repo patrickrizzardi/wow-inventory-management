@@ -197,7 +197,9 @@ function OverlayFactory:Create(itemButton)
     -- Create main overlay frame
     local overlay = CreateFrame("Frame", nil, itemButton)
     overlay:SetAllPoints(itemButton)
-    overlay:SetFrameLevel(itemButton:GetFrameLevel() + 10)
+    -- Use a high frame level and OVERLAY strata to ensure visibility above bag addons
+    overlay:SetFrameStrata("HIGH")
+    overlay:SetFrameLevel(itemButton:GetFrameLevel() + 20)
 
     -- ============ LOCK STATE (red) ============
 

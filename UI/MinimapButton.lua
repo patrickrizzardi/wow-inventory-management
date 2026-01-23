@@ -40,7 +40,7 @@ function MinimapButton:Create()
     local icon = button:CreateTexture(nil, "ARTWORK")
     icon:SetSize(20, 20)
     icon:SetPoint("CENTER")
-    icon:SetTexture("Interface\\Icons\\INV_Misc_Bag_07")
+    icon:SetTexture(237381)  -- Gold coins icon
 
     -- Border
     local border = button:CreateTexture(nil, "OVERLAY")
@@ -277,7 +277,7 @@ function MinimapButton:RegisterWithLibDBIcon()
         -- Create a data broker object
         local dataObj = LDB:NewDataObject("InventoryManager", {
             type = "launcher",
-            icon = "Interface\\Icons\\INV_Misc_Bag_07",
+            icon = 237381,  -- Gold coins icon
             OnClick = function(self, button)
                 if button == "LeftButton" then
                     if IM.UI and IM.UI.Config and IM.UI.Config.Toggle then
