@@ -479,26 +479,22 @@ SlashCmdList["INVENTORYMANAGER"] = function(msg)
         else
             IM:Print("MinimapButton module not loaded")
         end
-    elseif cmd == "baghooks" then
-        -- Debug BagHooks state
-        if IM.modules.BagHooks and IM.modules.BagHooks.DebugShow then
-            IM.modules.BagHooks:DebugShow()
+    elseif cmd == "bags" or cmd == "bagdiag" then
+        -- Run bag integration diagnostics
+        if IM.UI and IM.UI.BagIntegration then
+            IM.UI.BagIntegration:RunDiagnostics()
         else
-            IM:Print("BagHooks module not loaded")
+            IM:Print("BagIntegration module not loaded")
         end
-    elseif cmd == "bags" then
-        -- Manually toggle IM bags
-        if IM.UI and IM.UI.BagUI then
-            IM.UI.BagUI:Toggle()
-        else
-            IM:Print("BagUI not loaded")
-        end
+    elseif cmd == "refresh" then
+        -- Force refresh all bag overlays
+        IM:RefreshBagOverlays()
+        IM:Print("Bag overlays refreshed")
     elseif cmd == "help" then
         IM:Print("Commands:")
         IM:Print("  /im - Open settings panel")
         IM:Print("  /im d or /im dashboard - Open dashboard")
         IM:Print("  /im inv or /im inventory - Search inventory")
-        IM:Print("  /im bags - Toggle IM bags directly")
         IM:Print("  /im sell - Trigger auto-sell (at vendor)")
         IM:Print("  /im repair - Trigger repair (at vendor)")
         IM:Print("  /im lock - Lock/unlock hovered item")
@@ -506,8 +502,9 @@ SlashCmdList["INVENTORYMANAGER"] = function(msg)
         IM:Print("  /im status - Show addon status")
         IM:Print("  /im reset [section] - Reset settings")
         IM:Print("  /im minimap - Toggle minimap button")
+        IM:Print("  /im bags - Run bag addon diagnostics")
+        IM:Print("  /im refresh - Force refresh bag overlays")
         IM:Print("  /im debug - Toggle debug mode")
-        IM:Print("  /im baghooks - Debug BagHooks state")
         IM:Print("  /im test [type] - Test logging system")
     else
         IM:Print("Unknown command: " .. cmd .. ". Type /im help for commands.")

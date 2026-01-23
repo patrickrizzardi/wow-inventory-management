@@ -5,14 +5,14 @@
 ## Version: 1.0.0
 ## SavedVariables: InventoryManagerDB
 ## IconTexture: Interface\Icons\INV_Misc_Bag_07
+## X-Curse-Project-ID: 
 
 # Core files
 Core.lua
 Database.lua
 Filters.lua
 
-# Modules (load BagHooks early to capture originals)
-Modules\BagHooks.lua
+# Modules
 Modules\BagData.lua
 Modules\CustomCategories.lua
 Modules\ItemLock.lua
@@ -60,15 +60,9 @@ UI\Dashboard.lua
 UI\AutoSellPopup.lua
 UI\MinimapButton.lua
 
-# Bag UI
-UI\BagUI\Core.lua
-UI\BagUI\ItemSlot.lua
-UI\BagUI\Container.lua
-
 # UI Panels
 UI\Panels\General.lua
 UI\Panels\UI.lua
-UI\Panels\BagUI.lua
 UI\Panels\AutoSell.lua
 UI\Panels\Categories.lua
 UI\Panels\Whitelist.lua
