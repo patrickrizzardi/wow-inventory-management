@@ -1,6 +1,7 @@
 # InventoryManager
 
 A comprehensive inventory management addon for World of Warcraft featuring auto-sell, item protection, gold tracking, and an optional bag replacement UI.
+[Donate](https://www.paypal.com/donate/?business=5BBHTUHKML2SL&no_recurring=0&item_name=Help+me+continue+to+improve+and+update+the+addons+you+love&currency_code=USD)
 
 ---
 
@@ -13,7 +14,7 @@ Saves time by handling gray items automatically while protecting anything you ac
 
 - Quality threshold filtering (gray, white, green, etc.)
 - Category exclusions (consumables, recipes, trade goods, housing items, pets, mounts, toys, currency tokens)
-- Subcategory filtering (e.g., exclude only "Trade Goods > Cooking")
+- Subcategory filtering (e.g., exclude only "Trade Goods &gt; Cooking")
 - Custom exclusions via classID or classID_subclassID
 - Soulbound item handling (protect all OR only sell soulbound)
 - Uncollected transmog protection
