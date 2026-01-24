@@ -101,6 +101,9 @@ function WarbandBankTracking:OnAccountMoneyChanged()
     -- Update reference and save to database
     _lastWarbandGold = currentGold
     IM:SetWarbandBankGold(currentGold)
+    
+    -- CRITICAL: Update character gold since PLAYER_MONEY might not fire for warband transactions
+    IM:UpdateCharacterGold()
 
     -- Skip if no meaningful change
     if math.abs(delta) < 1 then
