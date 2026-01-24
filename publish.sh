@@ -161,13 +161,46 @@ create_git_tag() {
     if git push origin "$tag" 2>&1; then
         echo -e "${GREEN}✓ Pushed tag ${tag} to remote${NC}"
         
-        # Verify tag actually exists on remote
-        if git ls-remote --tags origin | grep -q "refs/tags/${tag}$"; then
-            echo -e "${GREEN}✓ Verified tag exists on GitHub${NC}"
+        # GitHub can take 5-30 seconds to propagate tags
+        echo -e "${BLUE}Waiting for GitHub to sync tag...${NC}"
+        
+        local max_seconds=30
+        local elapsed=0
+        local spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+        local spinner_idx=0
+        
+        # Check immediately first (sometimes it's instant)
+        if git ls-remote --tags origin 2>/dev/null | grep -q "refs/tags/${tag}$"; then
+            echo -e "\r${GREEN}✓ Verified tag exists on GitHub (instant!)${NC}                    "
         else
-            echo -e "${YELLOW}Warning: Tag push succeeded but tag not found on remote${NC}"
-            echo -e "${YELLOW}Waiting 2 seconds for GitHub to sync...${NC}"
-            sleep 2
+            # Start spinner and keep checking
+            while [ $elapsed -lt $max_seconds ]; do
+                # Show spinner
+                printf "\r${YELLOW}${spinner[$spinner_idx]}${NC} Checking GitHub... (${elapsed}s)"
+                
+                # Check if tag exists
+                if git ls-remote --tags origin 2>/dev/null | grep -q "refs/tags/${tag}$"; then
+                    echo -e "\r${GREEN}✓ Verified tag exists on GitHub (after ${elapsed}s)${NC}                    "
+                    break
+                fi
+                
+                # Update spinner and wait
+                spinner_idx=$(( (spinner_idx + 1) % ${#spinner[@]} ))
+                sleep 1
+                elapsed=$((elapsed + 1))
+            done
+            
+            # Final check if we timed out
+            if [ $elapsed -ge $max_seconds ]; then
+                echo -e "\r${RED}✗ Tag not found after ${max_seconds} seconds${NC}                              "
+                echo -e "${YELLOW}GitHub may be experiencing delays. The tag might appear shortly.${NC}"
+                echo -e "${YELLOW}Check: https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/tags${NC}"
+                echo ""
+                read -p "Continue anyway and try to create release? (y/N): " CONTINUE
+                if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+                    return 1
+                fi
+            fi
         fi
     else
         echo -e "${RED}Error: Failed to push tag${NC}"
