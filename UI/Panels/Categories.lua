@@ -21,7 +21,44 @@ function CategoriesPanel:Create(parent)
     local scrollFrame, content = UI:CreateSettingsContainer(parent)
 
     -- ============================================================
-    -- ITEM STATE PROTECTION CARD (First - most important)
+    -- CATEGORY EXCLUSIONS CARD
+    -- ============================================================
+    local categoryCard = UI:CreateCard(content, {
+        title = "Category Exclusions",
+        description = "Control which categories of items are protected from auto-sell. Items matching any exclusion will never be sold, regardless of other filters.",
+    })
+
+    -- Define category order and display info
+    local categoryOrder = {
+        {key = "consumables", label = "Consumables", tooltip = "Food, potions, flasks"},
+        {key = "questItems", label = "Quest Items", tooltip = "Items used for quests"},
+        {key = "craftingReagents", label = "Crafting Reagents", tooltip = "Profession materials"},
+        {key = "tradeGoods", label = "Trade Goods", tooltip = "Trade skill items"},
+        {key = "recipes", label = "Recipes", tooltip = "Patterns, schematics, formulas"},
+        {key = "toys", label = "Toys", tooltip = "Items in Toy Box"},
+        {key = "pets", label = "Battle Pets", tooltip = "Pet cages and items"},
+        {key = "mounts", label = "Mounts", tooltip = "Mount items"},
+        {key = "currencyTokens", label = "Currency Tokens", tooltip = "Event tokens, valor, etc."},
+        {key = "housingItems", label = "Housing Items", tooltip = "Player housing decorations"},
+    }
+
+    -- Add checkboxes for each category
+    for _, category in ipairs(categoryOrder) do
+        local check = categoryCard:AddCheckbox(
+            category.label,
+            IM.db.global.categoryExclusions[category.key],
+            category.tooltip
+        )
+        check.checkbox.OnValueChanged = function(self, value)
+            IM.db.global.categoryExclusions[category.key] = value
+            IM:RefreshAllUI()
+        end
+    end
+
+    content:AdvanceY(categoryCard:GetContentHeight() + UI.layout.cardSpacing)
+
+    -- ============================================================
+    -- ITEM STATE PROTECTION CARD
     -- ============================================================
     local stateCard = UI:CreateCard(content, {
         title = "Item State Protection",

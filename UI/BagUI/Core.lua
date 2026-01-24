@@ -117,6 +117,22 @@ function BagUI:Create()
     contentContainer:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
     contentContainer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, UI.layout.bottomBarHeight + UI.layout.padding)
     frame.contentContainer = contentContainer
+    
+    -- Enable drops on content container to accept items
+    contentContainer:EnableMouse(true)
+    contentContainer:RegisterForDrag("LeftButton")
+    contentContainer:SetScript("OnReceiveDrag", function(self)
+        if CursorHasItem() then
+            -- Put item in first available bag slot
+            PutItemInBackpack()
+        end
+    end)
+    contentContainer:SetScript("OnMouseUp", function(self, button)
+        if button == "LeftButton" and CursorHasItem() then
+            -- Put item in first available bag slot
+            PutItemInBackpack()
+        end
+    end)
 
     -- Scroll frame for categories using DRY CreateScrollFrame
     local scrollFrame = UI:CreateScrollFrame(contentContainer, nil, nil, true)
@@ -460,6 +476,8 @@ end
 
 function BagUI:HookBagToggleNormal()
     -- Standard hooks when no other bag addon is present
+    
+    -- Hook ToggleAllBags (called when pressing B key)
     hooksecurefunc("ToggleAllBags", function()
         if self:IsEnabled() then
             -- Close Blizzard bags IMMEDIATELY (no timer delay)
@@ -489,17 +507,10 @@ function BagUI:HookBagToggleNormal()
         end
     end)
     
-    IM:Debug("[BagUI] Normal bag toggle hooks applied")
-end
-
-function BagUI:HookBagToggleWithPriority(otherAddon)
-    -- Aggressive hooks that take priority over other bag addons
-    hooksecurefunc("ToggleAllBags", function()
-        if not self:IsEnabled() then return end
-        
-        -- Use a slightly delayed close to override other addons
-        C_Timer.After(0.05, function()
-            -- Close regular Blizzard bags
+    -- Hook OpenAllBags (called when opening vendor/AH)
+    hooksecurefunc("OpenAllBags", function(forceOpen)
+        if self:IsEnabled() then
+            -- Close Blizzard bags
             for i = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
                 local frame = _G["ContainerFrame"..(i+1)]
                 if frame and frame:IsShown() then
@@ -507,12 +518,10 @@ function BagUI:HookBagToggleWithPriority(otherAddon)
                 end
             end
             
-            -- Close combined bags
             if ContainerFrameCombinedBags and ContainerFrameCombinedBags:IsShown() then
                 ContainerFrameCombinedBags:Hide()
             end
             
-            -- Close reagent bag
             if Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag then
                 local reagentFrame = _G["ContainerFrame"..(NUM_BAG_SLOTS + 2)]
                 if reagentFrame and reagentFrame:IsShown() then
@@ -520,45 +529,103 @@ function BagUI:HookBagToggleWithPriority(otherAddon)
                 end
             end
             
-            -- Close BetterBags
-            if otherAddon == "BetterBags" then
-                if _G.BetterBags then
-                    -- Try to close BetterBags frames
-                    if _G.BetterBagsBagBackpack and _G.BetterBagsBagBackpack:IsShown() then
-                        _G.BetterBagsBagBackpack:Hide()
-                    end
-                    if _G.BetterBagsBackpack and _G.BetterBagsBackpack:IsShown() then
-                        _G.BetterBagsBackpack:Hide()
-                    end
+            -- Show our UI
+            if not self:IsShown() then
+                self:Show()
+            end
+        end
+    end)
+    
+    IM:Debug("[BagUI] Normal bag toggle hooks applied")
+end
+
+function BagUI:HookBagToggleWithPriority(otherAddon)
+    -- Aggressive hooks that take priority over other bag addons
+    
+    local function CloseAllBagFrames()
+        -- Close regular Blizzard bags
+        for i = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
+            local frame = _G["ContainerFrame"..(i+1)]
+            if frame and frame:IsShown() then
+                frame:Hide()
+            end
+        end
+        
+        -- Close combined bags
+        if ContainerFrameCombinedBags and ContainerFrameCombinedBags:IsShown() then
+            ContainerFrameCombinedBags:Hide()
+        end
+        
+        -- Close reagent bag
+        if Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag then
+            local reagentFrame = _G["ContainerFrame"..(NUM_BAG_SLOTS + 2)]
+            if reagentFrame and reagentFrame:IsShown() then
+                reagentFrame:Hide()
+            end
+        end
+        
+        -- Close BetterBags
+        if otherAddon == "BetterBags" then
+            if _G.BetterBags then
+                -- Try to close BetterBags frames
+                if _G.BetterBagsBagBackpack and _G.BetterBagsBagBackpack:IsShown() then
+                    _G.BetterBagsBagBackpack:Hide()
+                end
+                if _G.BetterBagsBackpack and _G.BetterBagsBackpack:IsShown() then
+                    _G.BetterBagsBackpack:Hide()
                 end
             end
+        end
+        
+        -- Close AdiBags
+        if otherAddon == "AdiBags" and _G.AdiBags and _G.AdiBags.frame then
+            if _G.AdiBags.frame:IsShown() then
+                _G.AdiBags.frame:Hide()
+            end
+        end
+        
+        -- Close Bagnon
+        if otherAddon == "Bagnon" and _G.Bagnon then
+            for _, frameName in ipairs({"bags", "bank"}) do
+                local frame = _G.Bagnon[frameName]
+                if frame and frame:IsShown() then
+                    frame:Hide()
+                end
+            end
+        end
+        
+        -- Close ArkInventory
+        if otherAddon == "ArkInventory" then
+            for loc = 1, 9 do
+                local frame = _G["ARKINV_Frame" .. loc]
+                if frame and frame:IsShown() then
+                    frame:Hide()
+                end
+            end
+        end
+    end
+    
+    -- Hook ToggleAllBags
+    hooksecurefunc("ToggleAllBags", function()
+        if not self:IsEnabled() then return end
+        
+        -- Use a slightly delayed close to override other addons
+        C_Timer.After(0.05, function()
+            CloseAllBagFrames()
             
-            -- Close AdiBags
-            if otherAddon == "AdiBags" and _G.AdiBags and _G.AdiBags.frame then
-                if _G.AdiBags.frame:IsShown() then
-                    _G.AdiBags.frame:Hide()
-                end
+            -- Show our UI
+            if not self:IsShown() then
+                self:Show()
             end
-            
-            -- Close Bagnon
-            if otherAddon == "Bagnon" and _G.Bagnon then
-                for _, frameName in ipairs({"bags", "bank"}) do
-                    local frame = _G.Bagnon[frameName]
-                    if frame and frame:IsShown() then
-                        frame:Hide()
-                    end
-                end
-            end
-            
-            -- Close ArkInventory
-            if otherAddon == "ArkInventory" then
-                for loc = 1, 9 do
-                    local frame = _G["ARKINV_Frame" .. loc]
-                    if frame and frame:IsShown() then
-                        frame:Hide()
-                    end
-                end
-            end
+        end)
+    end)
+    
+    -- Hook OpenAllBags (for vendor/AH)
+    hooksecurefunc("OpenAllBags", function(forceOpen)
+        if not self:IsEnabled() then return end
+        
+        C_Timer.After(0.05, function()
+            CloseAllBagFrames()
             
             -- Show our UI
             if not self:IsShown() then
