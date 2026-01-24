@@ -26,11 +26,11 @@ function AutoSellPopup:Create()
 
     local popup = CreateFrame("Frame", "InventoryManagerAutoSellPopup", UIParent, "BackdropTemplate")
     popup:SetSize(280, 260)
-    popup:SetPoint("TOPLEFT", MerchantFrame or UIParent, "TOPRIGHT", 10, 0)
+    popup:SetPoint("TOPLEFT", MerchantFrame or UIParent, "TOPRIGHT", UI.layout.cardSpacing, 0)
     popup:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     popup:SetBackdropColor(unpack(UI.colors.background))
     popup:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -48,21 +48,22 @@ function AutoSellPopup:Create()
 
     -- Title bar (inset by 1px for border, match content padding on sides)
     local titleBar = CreateFrame("Frame", nil, popup, "BackdropTemplate")
-    titleBar:SetHeight(20)
-    titleBar:SetPoint("TOPLEFT", 1, -1)
-    titleBar:SetPoint("TOPRIGHT", -1, -1)
+    titleBar:SetHeight(UI.layout.iconSize)
+    titleBar:SetPoint("TOPLEFT", UI.layout.borderSize, -UI.layout.borderSize)
+    titleBar:SetPoint("TOPRIGHT", -UI.layout.borderSize, -UI.layout.borderSize)
     titleBar:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
     })
-    titleBar:SetBackdropColor(0.15, 0.12, 0.05, 1)
+    titleBar:SetBackdropColor(unpack(UI.colors.headerBar))
 
     local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    title:SetPoint("LEFT", 6, 0)
+    title:SetPoint("LEFT", UI.layout.elementSpacing, 0)
     title:SetText(UI:ColorText("Auto-Sell", "accent"))
 
     -- Close button
+    local closeBtnSize = UI.layout.iconSizeSmall
     local closeBtn = CreateFrame("Button", nil, titleBar)
-    closeBtn:SetSize(16, 16)
+    closeBtn:SetSize(closeBtnSize, closeBtnSize)
     closeBtn:SetPoint("RIGHT", -2, 0)
     closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     closeBtn.text:SetPoint("CENTER")
@@ -74,25 +75,25 @@ function AutoSellPopup:Create()
     -- Summary section
     local summaryBox = CreateFrame("Frame", nil, popup, "BackdropTemplate")
     summaryBox:SetHeight(50)
-    summaryBox:SetPoint("TOPLEFT", 6, -24)
-    summaryBox:SetPoint("RIGHT", -6, 0)
+    summaryBox:SetPoint("TOPLEFT", UI.layout.elementSpacing, -(UI.layout.iconSize + UI.layout.paddingSmall))
+    summaryBox:SetPoint("RIGHT", -UI.layout.elementSpacing, 0)
     summaryBox:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
     })
     summaryBox:SetBackdropColor(0.12, 0.12, 0.12, 1)
 
     local itemCountLabel = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    itemCountLabel:SetPoint("TOPLEFT", 10, -8)
+    itemCountLabel:SetPoint("TOPLEFT", UI.layout.cardSpacing, -UI.layout.padding)
     popup.itemCountLabel = itemCountLabel
 
     local totalValueLabel = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    totalValueLabel:SetPoint("TOPLEFT", 10, -26)
+    totalValueLabel:SetPoint("TOPLEFT", UI.layout.cardSpacing, -(UI.layout.rowHeightSmall + 2))
     totalValueLabel:SetTextColor(1, 0.84, 0, 1)
     popup.totalValueLabel = totalValueLabel
 
     -- Sell button (prominent)
-    local sellBtn = UI:CreateButton(popup, "Sell All", 80, 26)
-    sellBtn:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -10, -32)
+    local sellBtn = UI:CreateButton(popup, "Sell All", UI.layout.buttonWidth, UI.layout.rowHeightSmall + 2)
+    sellBtn:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -UI.layout.cardSpacing, -(UI.layout.rowHeight + UI.layout.paddingSmall))
     sellBtn:SetScript("OnClick", function()
         if IM.modules.AutoSell then
             IM.modules.AutoSell:SellJunk()
@@ -102,14 +103,14 @@ function AutoSellPopup:Create()
 
     -- Items header
     local itemsHeader = popup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    itemsHeader:SetPoint("TOPLEFT", 6, -80)
+    itemsHeader:SetPoint("TOPLEFT", UI.layout.elementSpacing, -UI.layout.buttonWidth)
     itemsHeader:SetText("Items to Sell")
     itemsHeader:SetTextColor(unpack(UI.colors.textDim))
 
     -- Items list container
     local itemsBox = CreateFrame("Frame", nil, popup, "BackdropTemplate")
-    itemsBox:SetPoint("TOPLEFT", 6, -95)
-    itemsBox:SetPoint("RIGHT", -6, 0)
+    itemsBox:SetPoint("TOPLEFT", UI.layout.elementSpacing, -(UI.layout.buttonWidth + UI.layout.iconSizeSmall))
+    itemsBox:SetPoint("RIGHT", -UI.layout.elementSpacing, 0)
     itemsBox:SetPoint("BOTTOM", 0, 55)
     itemsBox:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -118,8 +119,8 @@ function AutoSellPopup:Create()
 
     -- Scroll frame for items list
     local scrollFrame = CreateFrame("ScrollFrame", nil, itemsBox, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 4, -4)
-    scrollFrame:SetPoint("BOTTOMRIGHT", -24, 4)
+    scrollFrame:SetPoint("TOPLEFT", UI.layout.paddingSmall, -UI.layout.paddingSmall)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -UI.layout.titleBarHeight, UI.layout.paddingSmall)
     popup.itemsScrollFrame = scrollFrame
 
     local scrollContent = CreateFrame("Frame", nil, scrollFrame)
@@ -130,17 +131,17 @@ function AutoSellPopup:Create()
     -- Bottom bar
     local bottomBar = CreateFrame("Frame", nil, popup)
     bottomBar:SetHeight(50)
-    bottomBar:SetPoint("BOTTOMLEFT", 6, 4)
-    bottomBar:SetPoint("BOTTOMRIGHT", -6, 4)
+    bottomBar:SetPoint("BOTTOMLEFT", UI.layout.elementSpacing, UI.layout.paddingSmall)
+    bottomBar:SetPoint("BOTTOMRIGHT", -UI.layout.elementSpacing, UI.layout.paddingSmall)
 
     -- Quality filter info
     local filterInfo = bottomBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    filterInfo:SetPoint("TOPLEFT", 0, -4)
+    filterInfo:SetPoint("TOPLEFT", 0, -UI.layout.paddingSmall)
     filterInfo:SetTextColor(unpack(UI.colors.textDim))
     popup.filterInfo = filterInfo
 
     -- Edit settings button
-    local editBtn = UI:CreateButton(bottomBar, "Settings", 70, 22)
+    local editBtn = UI:CreateButton(bottomBar, "Settings", 70, UI.layout.buttonHeightSmall)
     editBtn:SetPoint("BOTTOMRIGHT", 0, 0)
     editBtn:SetScript("OnClick", function()
         if IM.UI and IM.UI.Config and IM.UI.Config.Show then
@@ -216,18 +217,21 @@ function AutoSellPopup:RefreshItems(sellableItems)
     local yOffset = 0
     local maxItems = 8  -- Show up to 8 items before "...and X more"
 
+    local rowHeight = UI.layout.iconSize
+    local iconSize = UI.layout.iconSizeSmall
+    
     for i, item in ipairs(sellableItems) do
         if i > maxItems then break end
 
         local itemRow = CreateFrame("Frame", nil, scrollContent)
-        itemRow:SetHeight(20)
+        itemRow:SetHeight(rowHeight)
         itemRow:SetPoint("TOPLEFT", 0, yOffset)
         itemRow:SetPoint("RIGHT", 0, 0)
 
         -- Item icon
         local icon = itemRow:CreateTexture(nil, "OVERLAY")
-        icon:SetSize(16, 16)
-        icon:SetPoint("LEFT", 4, 0)
+        icon:SetSize(iconSize, iconSize)
+        icon:SetPoint("LEFT", UI.layout.paddingSmall, 0)
         if item.itemID then
             local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(item.itemID)
             icon:SetTexture(itemTexture or "Interface\\Icons\\INV_Misc_QuestionMark")
@@ -235,7 +239,7 @@ function AutoSellPopup:RefreshItems(sellableItems)
 
         -- Item name with quantity
         local itemLabel = itemRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        itemLabel:SetPoint("LEFT", icon, "RIGHT", 4, 0)
+        itemLabel:SetPoint("LEFT", icon, "RIGHT", UI.layout.paddingSmall, 0)
         itemLabel:SetPoint("RIGHT", -60, 0)
         itemLabel:SetJustifyH("LEFT")
         local itemText = item.itemLink or ("Item #" .. (item.itemID or "?"))
@@ -246,32 +250,32 @@ function AutoSellPopup:RefreshItems(sellableItems)
 
         -- Value
         local valueLabel = itemRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        valueLabel:SetPoint("RIGHT", -4, 0)
+        valueLabel:SetPoint("RIGHT", -UI.layout.paddingSmall, 0)
         valueLabel:SetTextColor(1, 0.84, 0, 1)
         if item.totalValue and item.totalValue > 0 then
             valueLabel:SetText(IM:FormatMoney(item.totalValue))
         end
 
-        yOffset = yOffset - 20
+        yOffset = yOffset - rowHeight
     end
 
     -- Show "...and X more" if there are more items
     if #sellableItems > maxItems then
         local moreLabel = scrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        moreLabel:SetPoint("TOPLEFT", 4, yOffset)
+        moreLabel:SetPoint("TOPLEFT", UI.layout.paddingSmall, yOffset)
         moreLabel:SetText("|cff888888... and " .. (#sellableItems - maxItems) .. " more|r")
-        yOffset = yOffset - 20
+        yOffset = yOffset - rowHeight
     end
 
     -- If no items
     if #sellableItems == 0 then
         if not scrollContent.noDataLabel then
             scrollContent.noDataLabel = scrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            scrollContent.noDataLabel:SetPoint("TOPLEFT", 4, 0)
+            scrollContent.noDataLabel:SetPoint("TOPLEFT", UI.layout.paddingSmall, 0)
         end
         scrollContent.noDataLabel:SetText("|cff888888All items are protected or excluded|r")
         scrollContent.noDataLabel:Show()
-        yOffset = -20
+        yOffset = -rowHeight
         scrollContent:SetHeight(math.max(math.abs(yOffset), 1))
         return
     end
