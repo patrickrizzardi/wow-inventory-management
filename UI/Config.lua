@@ -37,23 +37,24 @@ function UI:CreateConfigFrame()
     local header = self:CreateHeader(configFrame, "InventoryManager Settings")
 
     -- Tab container (left side) - anchored to stretch with frame
+    local sidebarWidth = 100
     local tabContainer = CreateFrame("Frame", nil, configFrame, "BackdropTemplate")
-    tabContainer:SetWidth(100)
-    tabContainer:SetPoint("TOPLEFT", configFrame, "TOPLEFT", 0, -28)
+    tabContainer:SetWidth(sidebarWidth)
+    tabContainer:SetPoint("TOPLEFT", configFrame, "TOPLEFT", 0, -self.layout.rowHeight)
     tabContainer:SetPoint("BOTTOMLEFT", configFrame, "BOTTOMLEFT", 0, 0)
     tabContainer:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = self.layout.borderSize,
     })
     tabContainer:SetBackdropColor(0.06, 0.06, 0.06, 1)
     tabContainer:SetBackdropBorderColor(unpack(self.colors.border))
 
     -- Create tab buttons
-    local yOffset = -10
+    local yOffset = -self.layout.cardSpacing
     for i, tabInfo in ipairs(tabs) do
         local tabButton = CreateFrame("Button", nil, tabContainer, "BackdropTemplate")
-        tabButton:SetSize(96, 28)
+        tabButton:SetSize(sidebarWidth - self.layout.paddingSmall, self.layout.rowHeight)
         tabButton:SetPoint("TOP", tabContainer, "TOP", 0, yOffset)
 
         tabButton:SetBackdrop({
@@ -62,7 +63,7 @@ function UI:CreateConfigFrame()
         tabButton:SetBackdropColor(0, 0, 0, 0)
 
         tabButton.text = tabButton:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        tabButton.text:SetPoint("LEFT", 10, 0)
+        tabButton.text:SetPoint("LEFT", self.layout.cardSpacing, 0)
         tabButton.text:SetText(tabInfo.name)
         tabButton.text:SetTextColor(unpack(self.colors.textDim))
 
@@ -72,8 +73,8 @@ function UI:CreateConfigFrame()
 
         tabButton.selected = tabButton:CreateTexture(nil, "BACKGROUND")
         tabButton.selected:SetAllPoints()
-        tabButton.selected:SetColorTexture(unpack(self.colors.accent))
-        tabButton.selected:SetAlpha(0.2)
+        tabButton.selected:SetColorTexture(unpack(self.colors.accentMuted))
+        tabButton.selected:SetAlpha(0.6)
         tabButton.selected:Hide()
 
         tabButton.tabIndex = i
@@ -94,7 +95,7 @@ function UI:CreateConfigFrame()
         end)
 
         tabs[i].button = tabButton
-        yOffset = yOffset - 30
+        yOffset = yOffset - (self.layout.rowHeight + 2)
     end
 
     -- Content area (right side)
