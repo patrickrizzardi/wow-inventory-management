@@ -168,6 +168,162 @@ create_git_tag() {
     return 0
 }
 
+# Function to show manual release instructions
+show_manual_release_instructions() {
+    local tag=$1
+    local zip_file=$2
+    
+    echo ""
+    echo -e "${BLUE}Manual release instructions:${NC}"
+    echo "  1. Go to: https://github.com/YOUR_USERNAME/${ADDON_NAME}/releases/new"
+    echo "  2. Tag: ${tag}"
+    echo "  3. Title: Release ${tag#v}"
+    echo "  4. Upload: ${zip_file}"
+    echo ""
+}
+
+# Function to install GitHub CLI
+install_github_cli() {
+    echo ""
+    echo -e "${BLUE}GitHub CLI Installation${NC}"
+    echo ""
+    
+    # Detect OS and package manager
+    if command -v apt-get &> /dev/null; then
+        # Debian/Ubuntu
+        echo -e "${YELLOW}Detected Debian/Ubuntu system${NC}"
+        echo ""
+        echo "GitHub CLI will be installed using apt. This requires sudo."
+        read -p "Install GitHub CLI now? (y/N): " INSTALL
+        
+        if [[ "$INSTALL" =~ ^[Yy]$ ]]; then
+            echo ""
+            echo -e "${BLUE}Installing GitHub CLI...${NC}"
+            
+            # Official installation method for Debian/Ubuntu
+            if type -p curl >/dev/null 2>&1; then
+                curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+                && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+                && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+                && sudo apt update \
+                && sudo apt install gh -y
+            else
+                echo -e "${RED}Error: curl not found. Please install curl first:${NC}"
+                echo "  sudo apt install curl"
+                return 1
+            fi
+            
+            if command -v gh &> /dev/null; then
+                echo ""
+                echo -e "${GREEN}✓ GitHub CLI installed successfully!${NC}"
+                echo ""
+                echo -e "${BLUE}Next step: Authenticate with GitHub${NC}"
+                read -p "Run 'gh auth login' now? (y/N): " AUTH
+                
+                if [[ "$AUTH" =~ ^[Yy]$ ]]; then
+                    gh auth login
+                    return 0
+                else
+                    echo -e "${YELLOW}Run 'gh auth login' later to authenticate${NC}"
+                    return 0
+                fi
+            else
+                echo -e "${RED}Error: Installation failed${NC}"
+                return 1
+            fi
+        else
+            echo -e "${YELLOW}Skipped. Install manually later: https://cli.github.com/${NC}"
+            return 1
+        fi
+        
+    elif command -v yum &> /dev/null; then
+        # RHEL/CentOS/Fedora
+        echo -e "${YELLOW}Detected RHEL/CentOS/Fedora system${NC}"
+        echo ""
+        echo "GitHub CLI will be installed using yum/dnf. This requires sudo."
+        read -p "Install GitHub CLI now? (y/N): " INSTALL
+        
+        if [[ "$INSTALL" =~ ^[Yy]$ ]]; then
+            echo ""
+            echo -e "${BLUE}Installing GitHub CLI...${NC}"
+            sudo yum install -y 'dnf-command(config-manager)' \
+            && sudo yum config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo \
+            && sudo yum install -y gh
+            
+            if command -v gh &> /dev/null; then
+                echo ""
+                echo -e "${GREEN}✓ GitHub CLI installed successfully!${NC}"
+                echo ""
+                echo -e "${BLUE}Next step: Authenticate with GitHub${NC}"
+                read -p "Run 'gh auth login' now? (y/N): " AUTH
+                
+                if [[ "$AUTH" =~ ^[Yy]$ ]]; then
+                    gh auth login
+                    return 0
+                else
+                    echo -e "${YELLOW}Run 'gh auth login' later to authenticate${NC}"
+                    return 0
+                fi
+            else
+                echo -e "${RED}Error: Installation failed${NC}"
+                return 1
+            fi
+        else
+            echo -e "${YELLOW}Skipped. Install manually later: https://cli.github.com/${NC}"
+            return 1
+        fi
+        
+    elif command -v brew &> /dev/null; then
+        # macOS with Homebrew
+        echo -e "${YELLOW}Detected Homebrew (macOS)${NC}"
+        echo ""
+        echo "GitHub CLI will be installed using Homebrew."
+        read -p "Install GitHub CLI now? (y/N): " INSTALL
+        
+        if [[ "$INSTALL" =~ ^[Yy]$ ]]; then
+            echo ""
+            echo -e "${BLUE}Installing GitHub CLI...${NC}"
+            brew install gh
+            
+            if command -v gh &> /dev/null; then
+                echo ""
+                echo -e "${GREEN}✓ GitHub CLI installed successfully!${NC}"
+                echo ""
+                echo -e "${BLUE}Next step: Authenticate with GitHub${NC}"
+                read -p "Run 'gh auth login' now? (y/N): " AUTH
+                
+                if [[ "$AUTH" =~ ^[Yy]$ ]]; then
+                    gh auth login
+                    return 0
+                else
+                    echo -e "${YELLOW}Run 'gh auth login' later to authenticate${NC}"
+                    return 0
+                fi
+            else
+                echo -e "${RED}Error: Installation failed${NC}"
+                return 1
+            fi
+        else
+            echo -e "${YELLOW}Skipped. Install manually later: https://cli.github.com/${NC}"
+            return 1
+        fi
+        
+    else
+        # Unknown system
+        echo -e "${YELLOW}Could not detect package manager${NC}"
+        echo ""
+        echo -e "${BLUE}Please install GitHub CLI manually:${NC}"
+        echo "  https://cli.github.com/manual/installation"
+        echo ""
+        echo "Or use one of these methods:"
+        echo "  - Debian/Ubuntu: See https://github.com/cli/cli/blob/trunk/docs/install_linux.md"
+        echo "  - RHEL/CentOS/Fedora: See https://github.com/cli/cli/blob/trunk/docs/install_linux.md"
+        echo "  - macOS: brew install gh"
+        echo "  - Other: Download from https://github.com/cli/cli/releases"
+        return 1
+    fi
+}
+
 # Function to create GitHub release (requires gh CLI)
 create_github_release() {
     local version=$1
@@ -177,15 +333,30 @@ create_github_release() {
     # Check if gh CLI is available
     if ! command -v gh &> /dev/null; then
         echo ""
-        echo -e "${YELLOW}Note: GitHub CLI (gh) not found. Skipping GitHub release creation.${NC}"
-        echo -e "${YELLOW}Install gh CLI to auto-create releases: https://cli.github.com/${NC}"
+        echo -e "${YELLOW}GitHub CLI (gh) not found${NC}"
         echo ""
-        echo -e "${BLUE}Manual release instructions:${NC}"
-        echo "  1. Go to: https://github.com/YOUR_USERNAME/${ADDON_NAME}/releases/new"
-        echo "  2. Tag: ${tag}"
-        echo "  3. Title: Release ${version}"
-        echo "  4. Upload: ${zip_file}"
-        return 0
+        read -p "Would you like to install GitHub CLI now? (y/N): " INSTALL_GH
+        
+        if [[ "$INSTALL_GH" =~ ^[Yy]$ ]]; then
+            if install_github_cli; then
+                # Try to create release after installation
+                if command -v gh &> /dev/null; then
+                    echo ""
+                    echo -e "${BLUE}Attempting to create GitHub release...${NC}"
+                    # Continue with release creation below
+                else
+                    echo -e "${YELLOW}GitHub CLI not available. Skipping release creation.${NC}"
+                    show_manual_release_instructions "$tag" "$zip_file"
+                    return 0
+                fi
+            else
+                show_manual_release_instructions "$tag" "$zip_file"
+                return 0
+            fi
+        else
+            show_manual_release_instructions "$tag" "$zip_file"
+            return 0
+        fi
     fi
     
     echo ""

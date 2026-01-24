@@ -91,7 +91,8 @@ Summary:
 
 ### Optional (for GitHub releases)
 - GitHub CLI (`gh`) installed and authenticated
-  - Install: https://cli.github.com/
+  - The script can install it for you automatically!
+  - Or install manually: https://cli.github.com/
   - Authenticate: `gh auth login`
   - Without `gh`, you can manually create releases on GitHub
 
@@ -219,12 +220,36 @@ git push origin --delete v1.0.1
 ```
 
 ### GitHub CLI Not Installed
+If GitHub CLI is not installed, the script will:
+- Offer to install it for you automatically (on Debian/Ubuntu/RHEL/macOS)
+- Walk you through authentication if installed
+- Fall back to manual instructions if you decline or installation fails
+
+**Auto-Installation Process:**
+```bash
+# When running ./publish.sh, if gh is not found:
+GitHub CLI (gh) not found
+
+Would you like to install GitHub CLI now? (y/N): y
+
+# Script will detect your OS and install using:
+# - Debian/Ubuntu: apt
+# - RHEL/CentOS/Fedora: yum/dnf
+# - macOS: homebrew
+
+✓ GitHub CLI installed successfully!
+
+Next step: Authenticate with GitHub
+Run 'gh auth login' now? (y/N): y
+```
+
+**Manual Installation:**
 The script will still work without `gh` CLI - it will:
 - Skip GitHub release creation
 - Show manual instructions for creating the release
 - Still create the git tag and zip package
 
-To install GitHub CLI:
+To install manually later:
 ```bash
 # See: https://cli.github.com/
 # Then authenticate:
