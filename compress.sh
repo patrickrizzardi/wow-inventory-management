@@ -25,6 +25,180 @@ show_version() {
     fi
 }
 
+# Function to check if we're in a git repository
+check_git_repo() {
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo -e "${RED}Error: Not a git repository${NC}"
+        exit 1
+    fi
+}
+
+# Function to check git status
+check_git_status() {
+    echo ""
+    echo -e "${BLUE}Checking git status...${NC}"
+    
+    # Check for uncommitted changes
+    if ! git diff-index --quiet HEAD --; then
+        echo -e "${RED}Error: You have uncommitted changes${NC}"
+        echo ""
+        echo -e "${YELLOW}Uncommitted changes:${NC}"
+        git status --short
+        echo ""
+        echo -e "${YELLOW}Please commit your changes first:${NC}"
+        echo "  git add ."
+        echo "  git commit -m \"Your commit message\""
+        return 1
+    fi
+    
+    # Check for untracked files (excluding VERSION_GUIDE.md and zip files)
+    local untracked=$(git ls-files --others --exclude-standard | grep -v "VERSION_GUIDE.md" | grep -v "\.zip$")
+    if [ -n "$untracked" ]; then
+        echo -e "${YELLOW}Warning: You have untracked files:${NC}"
+        echo "$untracked"
+        echo ""
+        read -p "Continue anyway? (y/N): " CONTINUE
+        if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+            return 1
+        fi
+    fi
+    
+    # Check if branch has upstream
+    local branch=$(git rev-parse --abbrev-ref HEAD)
+    if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} > /dev/null 2>&1; then
+        echo -e "${YELLOW}Warning: Current branch '${branch}' has no upstream${NC}"
+        echo -e "${YELLOW}You may want to push your branch first${NC}"
+        echo ""
+        read -p "Continue anyway? (y/N): " CONTINUE
+        if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+            return 1
+        fi
+        return 0
+    fi
+    
+    # Check if local is ahead of remote
+    local ahead=$(git rev-list @{u}..HEAD --count 2>/dev/null)
+    if [ "$ahead" -gt 0 ]; then
+        echo -e "${RED}Error: Your branch is ahead of remote by ${ahead} commit(s)${NC}"
+        echo ""
+        echo -e "${YELLOW}Please push your changes first:${NC}"
+        echo "  git push"
+        return 1
+    fi
+    
+    # Check if local is behind remote
+    local behind=$(git rev-list HEAD..@{u} --count 2>/dev/null)
+    if [ "$behind" -gt 0 ]; then
+        echo -e "${RED}Error: Your branch is behind remote by ${behind} commit(s)${NC}"
+        echo ""
+        echo -e "${YELLOW}Please pull changes first:${NC}"
+        echo "  git pull"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓ Git status is clean and synced${NC}"
+    return 0
+}
+
+# Function to create and push git tag
+create_git_tag() {
+    local version=$1
+    local tag="v${version}"
+    
+    echo ""
+    echo -e "${BLUE}Creating git tag...${NC}"
+    
+    # Check if tag already exists locally
+    if git rev-parse "$tag" >/dev/null 2>&1; then
+        echo -e "${RED}Error: Tag ${tag} already exists locally${NC}"
+        return 1
+    fi
+    
+    # Check if tag exists on remote
+    if git ls-remote --tags origin | grep -q "refs/tags/${tag}$"; then
+        echo -e "${RED}Error: Tag ${tag} already exists on remote${NC}"
+        return 1
+    fi
+    
+    # Create annotated tag
+    if git tag -a "$tag" -m "Release version ${version}"; then
+        echo -e "${GREEN}✓ Created tag ${tag}${NC}"
+    else
+        echo -e "${RED}Error: Failed to create tag${NC}"
+        return 1
+    fi
+    
+    # Push tag to remote
+    echo -e "${BLUE}Pushing tag to remote...${NC}"
+    if git push origin "$tag"; then
+        echo -e "${GREEN}✓ Pushed tag ${tag} to remote${NC}"
+    else
+        echo -e "${RED}Error: Failed to push tag${NC}"
+        echo -e "${YELLOW}You can manually push with: git push origin ${tag}${NC}"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Function to create GitHub release (requires gh CLI)
+create_github_release() {
+    local version=$1
+    local tag="v${version}"
+    local zip_file="${ADDON_NAME}-${version}.zip"
+    
+    # Check if gh CLI is available
+    if ! command -v gh &> /dev/null; then
+        echo ""
+        echo -e "${YELLOW}Note: GitHub CLI (gh) not found. Skipping GitHub release creation.${NC}"
+        echo -e "${YELLOW}Install gh CLI to auto-create releases: https://cli.github.com/${NC}"
+        echo ""
+        echo -e "${BLUE}Manual release instructions:${NC}"
+        echo "  1. Go to: https://github.com/YOUR_USERNAME/${ADDON_NAME}/releases/new"
+        echo "  2. Tag: ${tag}"
+        echo "  3. Title: Release ${version}"
+        echo "  4. Upload: ${zip_file}"
+        return 0
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Creating GitHub release...${NC}"
+    
+    # Check if already authenticated
+    if ! gh auth status &> /dev/null; then
+        echo -e "${YELLOW}GitHub CLI not authenticated. Please run: gh auth login${NC}"
+        return 1
+    fi
+    
+    # Create release with zip file
+    if gh release create "$tag" "$zip_file" \
+        --title "Release ${version}" \
+        --notes "Release version ${version}
+
+## Installation
+Download \`${zip_file}\` and extract it to your WoW AddOns folder.
+
+## Changes
+See commit history for detailed changes." \
+        --verify-tag; then
+        echo -e "${GREEN}✓ Created GitHub release ${tag}${NC}"
+        echo -e "${GREEN}✓ Uploaded ${zip_file}${NC}"
+        
+        # Get release URL
+        local release_url=$(gh release view "$tag" --json url -q .url 2>/dev/null)
+        if [ -n "$release_url" ]; then
+            echo ""
+            echo -e "${BLUE}Release URL: ${GREEN}${release_url}${NC}"
+        fi
+    else
+        echo -e "${YELLOW}Note: Failed to create GitHub release${NC}"
+        echo -e "${YELLOW}You can manually create it at: https://github.com/YOUR_USERNAME/${ADDON_NAME}/releases/new${NC}"
+        return 1
+    fi
+    
+    return 0
+}
+
 # Function to validate semantic version format
 validate_version_format() {
     local version=$1
@@ -196,6 +370,15 @@ case "${1:-}" in
         echo "  -h, --help       Show this help message"
         echo "  (no options)     Create package with version bump"
         echo ""
+        echo "Process:"
+        echo "  1. Check git status (must be committed and pushed)"
+        echo "  2. Prompt for new version"
+        echo "  3. Update VERSION and .toc files"
+        echo "  4. Commit version changes"
+        echo "  5. Create and push git tag"
+        echo "  6. Create GitHub release (if gh CLI available)"
+        echo "  7. Create versioned zip package"
+        echo ""
         echo "Version rules:"
         echo "  - Format: X.Y.Z (semantic versioning)"
         echo "  - Each segment can only increment by 1"
@@ -207,9 +390,17 @@ case "${1:-}" in
         ;;
 esac
 
+# Check if we're in a git repository
+check_git_repo
+
 # Show current version
 show_version
 CURRENT_VERSION=$(cat "$VERSION_FILE")
+
+# Check git status before proceeding
+if ! check_git_status; then
+    exit 1
+fi
 
 echo ""
 echo -e "${YELLOW}Enter new version (or press Enter to cancel):${NC}"
@@ -255,6 +446,8 @@ if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
 fi
 
 # Update VERSION file
+echo ""
+echo -e "${BLUE}Updating version files...${NC}"
 echo "$NEW_VERSION" > "$VERSION_FILE"
 echo -e "${GREEN}✓ Updated VERSION file to ${NEW_VERSION}${NC}"
 
@@ -266,9 +459,49 @@ if ! update_toc_version "$NEW_VERSION"; then
     exit 1
 fi
 
+# Commit version changes
+echo ""
+echo -e "${BLUE}Committing version changes...${NC}"
+if git add VERSION "$TOC_FILE" && git commit -m "Bump version to ${NEW_VERSION}"; then
+    echo -e "${GREEN}✓ Committed version changes${NC}"
+else
+    echo -e "${RED}Error: Failed to commit version changes${NC}"
+    # Rollback
+    echo "$CURRENT_VERSION" > "$VERSION_FILE"
+    update_toc_version "$CURRENT_VERSION"
+    git reset HEAD VERSION "$TOC_FILE" 2>/dev/null
+    exit 1
+fi
+
+# Push commit
+echo -e "${BLUE}Pushing commit to remote...${NC}"
+if git push; then
+    echo -e "${GREEN}✓ Pushed commit to remote${NC}"
+else
+    echo -e "${RED}Error: Failed to push commit${NC}"
+    echo -e "${YELLOW}You can manually push with: git push${NC}"
+    echo -e "${YELLOW}Then run the script again or manually create the tag${NC}"
+    exit 1
+fi
+
+# Create and push git tag
+if ! create_git_tag "$NEW_VERSION"; then
+    echo -e "${YELLOW}Warning: Tag creation failed, but version is committed${NC}"
+    echo -e "${YELLOW}Continuing with package creation...${NC}"
+fi
+
 # Create package
 echo ""
 create_package "$NEW_VERSION"
 
+# Create GitHub release
+create_github_release "$NEW_VERSION"
+
 echo ""
 echo -e "${GREEN}✓ Version ${NEW_VERSION} released!${NC}"
+echo ""
+echo -e "${BLUE}Summary:${NC}"
+echo -e "  ${GREEN}✓${NC} Version files updated and committed"
+echo -e "  ${GREEN}✓${NC} Changes pushed to remote"
+echo -e "  ${GREEN}✓${NC} Git tag v${NEW_VERSION} created"
+echo -e "  ${GREEN}✓${NC} Package ${ADDON_NAME}-${NEW_VERSION}.zip created"
