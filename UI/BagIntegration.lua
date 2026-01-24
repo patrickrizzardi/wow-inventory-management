@@ -1120,20 +1120,34 @@ function BagIntegration:HookGoldFrame()
     local function HookGoldButton(frame)
         if not frame then return end
 
-        frame:HookScript("OnClick", function(self, button)
-            if IsShiftKeyDown() then
-                -- Open Net Worth Dashboard
-                if IM.UI and IM.UI.Dashboard and IM.UI.Dashboard.Toggle then
-                    IM.UI.Dashboard:Toggle()
+        -- Check if frame already has an OnClick script
+        local hasOnClick = frame:GetScript("OnClick") ~= nil
+
+        if hasOnClick then
+            -- Hook existing script
+            frame:HookScript("OnClick", function(self, button)
+                if IsShiftKeyDown() then
+                    if IM.UI and IM.UI.Dashboard and IM.UI.Dashboard.Toggle then
+                        IM.UI.Dashboard:Toggle()
+                    end
                 end
-            end
-        end)
+            end)
+        else
+            -- Enable mouse and set our own click handler
+            frame:EnableMouse(true)
+            frame:RegisterForClicks("AnyUp")
+            frame:SetScript("OnClick", function(self, button)
+                if IsShiftKeyDown() then
+                    if IM.UI and IM.UI.Dashboard and IM.UI.Dashboard.Toggle then
+                        IM.UI.Dashboard:Toggle()
+                    end
+                end
+            end)
+        end
     end
 
-    -- Try to hook Blizzard's gold frame
-    if BackpackTokenFrame then
-        HookGoldButton(BackpackTokenFrame)
-    end
+    -- Try to hook Blizzard's gold frame (BackpackTokenFrame shows currencies, not gold)
+    -- Skip BackpackTokenFrame as it's for tracked currencies, not gold clicking
 
     -- Hook money frames in container frames
     for i = 1, 13 do
