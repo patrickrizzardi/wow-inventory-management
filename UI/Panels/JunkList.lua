@@ -1,6 +1,7 @@
 --[[
     InventoryManager - UI/Panels/JunkList.lua
     Junk list management panel
+    Uses DRY components: CreateSettingsContainer, CreateCard
 ]]
 
 local addonName, IM = ...
@@ -12,117 +13,202 @@ UI.Panels.JunkList = {}
 local JunkListPanel = UI.Panels.JunkList
 
 function JunkListPanel:Create(parent)
-    -- Create scroll frame using the standard panel factory
-    local scrollFrame, content = UI:CreateScrollPanel(parent)
-    local yOffset = -10
+    local scrollFrame, content = UI:CreateSettingsContainer(parent)
 
-    -- Feature Card (amber tint)
-    local featureCard = UI:CreateFeatureCard(content, yOffset, 90)
-    local featureY = -10
+    -- ============================================================
+    -- JUNK LIST OVERVIEW CARD
+    -- ============================================================
+    local mainCard = UI:CreateCard(content, {
+        title = "Junk List",
+        description = "Items on the junk list will always be auto-sold, regardless of quality or value.",
+    })
 
-    local title = UI:CreateSectionHeader(featureCard, "Junk List")
-    title:SetPoint("TOPLEFT", featureCard, "TOPLEFT", 10, featureY)
-    featureY = featureY - 25
+    mainCard:AddText("Ctrl+Alt+Click on any item to add/remove from junk list.")
 
-    local desc = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    desc:SetPoint("TOPLEFT", featureCard, "TOPLEFT", 10, featureY)
-    desc:SetPoint("RIGHT", featureCard, "RIGHT", -10, 0)
-    desc:SetJustifyH("LEFT")
-    desc:SetText("Items on the junk list will always be auto-sold, regardless of quality or value.\n\nCtrl+Alt+Click on any item to add/remove from junk list.")
-    desc:SetTextColor(unpack(UI.colors.textDim))
-
-    yOffset = yOffset - 100
-
-    -- Stats Card (dark)
-    local statsCard = UI:CreateSettingsCard(content, yOffset, 40)
-    local statsY = -10
-
-    local countLabel = statsCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    countLabel:SetPoint("TOPLEFT", statsCard, "TOPLEFT", 10, statsY)
+    -- Stats display
+    local statsY = mainCard:AddContent(24)
+    local countLabel = mainCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    countLabel:SetPoint("TOPLEFT", mainCard, "TOPLEFT", mainCard._leftPadding, statsY)
     countLabel:SetTextColor(unpack(UI.colors.text))
 
     local function UpdateCount()
         local count = IM:GetJunkListCount()
-        countLabel:SetText("Junk items: " .. count)
+        countLabel:SetText("Junk items: |cffffd700" .. count .. "|r")
     end
     UpdateCount()
 
-    yOffset = yOffset - 50
+    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.spacing)
 
-    -- Junk Items List Card (dark, dynamic height)
-    local listCard = UI:CreateSettingsCard(content, yOffset, 200)
-    local listY = -10
+    -- ============================================================
+    -- JUNK ITEMS LIST CARD
+    -- ============================================================
+    local listCard = UI:CreateCard(content, {
+        title = "Junk Items",
+    })
 
-    local listHeader = UI:CreateSectionHeader(listCard, "Junk Items")
-    listHeader:SetPoint("TOPLEFT", listCard, "TOPLEFT", 10, listY)
-    listY = listY - 30
+    -- List container (inside card)
+    local listContainer = CreateFrame("Frame", nil, listCard)
+    listContainer:SetPoint("TOPLEFT", listCard, "TOPLEFT", listCard._leftPadding, -listCard._contentHeight - 4)
+    listContainer:SetPoint("RIGHT", listCard, "RIGHT", -listCard._padding, 0)
+    listContainer:SetHeight(UI.layout.listInitialHeight)
 
-    -- Create item list using shared builder
-    local RefreshList, listContainer = UI:CreateItemListBuilder(
-        listCard,
-        IM.db.global.junkList,
-        "No junk items. Ctrl+Alt+Click items in your bags to add them.",
-        function(itemID)
-            IM:RemoveFromJunkList(itemID)
-            local h = RefreshList()
-            local cardHeight = 40 + math.max(h, 50) + 50 -- header + list + clear button
-            listCard:SetHeight(cardHeight)
-            content:SetHeight(math.abs(yOffset) + cardHeight + 100)
-            UpdateCount()
-            IM:RefreshAllUI()
+    local noItemsLabel = listContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    noItemsLabel:SetPoint("TOPLEFT", 0, 0)
+    noItemsLabel:SetText("|cff888888No junk items. Ctrl+Alt+Click items in your bags to add them.|r")
+    noItemsLabel:Hide()
+
+    local RefreshList
+
+    local function CreateItemRow(parentContainer, itemID, yOffset, onRemove)
+        local row = CreateFrame("Frame", nil, parentContainer, "BackdropTemplate")
+        row:SetHeight(UI.layout.rowHeight)
+        row:SetPoint("TOPLEFT", 0, yOffset)
+        row:SetPoint("RIGHT", parentContainer, "RIGHT", 0, 0)
+        row:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = UI.layout.borderSize,
+        })
+        row:SetBackdropColor(0.12, 0.12, 0.12, 1)
+        row:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
+
+        -- Item icon
+        local icon = row:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(UI.layout.buttonHeightSmall, UI.layout.buttonHeightSmall)
+        icon:SetPoint("LEFT", 4, 0)
+
+        -- Item name
+        local nameLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nameLabel:SetPoint("LEFT", icon, "RIGHT", 6, 0)
+        nameLabel:SetPoint("RIGHT", row, "RIGHT", -30, 0)
+        nameLabel:SetJustifyH("LEFT")
+        nameLabel:SetWordWrap(false)
+
+        -- Load item info
+        local item = Item:CreateFromItemID(itemID)
+        item:ContinueOnItemLoad(function()
+            local name = item:GetItemName()
+            local quality = item:GetItemQuality()
+            local iconTexture = item:GetItemIcon()
+            
+            icon:SetTexture(iconTexture)
+            if quality and ITEM_QUALITY_COLORS[quality] then
+                local color = ITEM_QUALITY_COLORS[quality]
+                nameLabel:SetText(color.hex .. name .. "|r")
+            else
+                nameLabel:SetText(name or "Loading...")
+            end
+        end)
+
+        -- Remove button
+        local removeBtn = CreateFrame("Button", nil, row, "BackdropTemplate")
+        removeBtn:SetSize(UI.layout.buttonHeightSmall, UI.layout.buttonHeightSmall)
+        removeBtn:SetPoint("RIGHT", -2, 0)
+        removeBtn:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
+        removeBtn:SetBackdropColor(0.3, 0.1, 0.1, 1)
+        removeBtn.text = removeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        removeBtn.text:SetPoint("CENTER")
+        removeBtn.text:SetText("|cffff6666X|r")
+        removeBtn:SetScript("OnClick", function()
+            onRemove(itemID)
+        end)
+        removeBtn:SetScript("OnEnter", function(self)
+            self:SetBackdropColor(0.5, 0.1, 0.1, 1)
+            self.text:SetText("|cffff0000X|r")
+        end)
+        removeBtn:SetScript("OnLeave", function(self)
+            self:SetBackdropColor(0.3, 0.1, 0.1, 1)
+            self.text:SetText("|cffff6666X|r")
+        end)
+
+        return row
+    end
+
+    RefreshList = function()
+        for _, child in pairs({listContainer:GetChildren()}) do
+            child:Hide()
+            child:SetParent(nil)
         end
-    )
 
-    -- Position the list container after the header
-    listContainer:SetPoint("TOPLEFT", listCard, "TOPLEFT", 0, listY)
+        local yOff = 0
+        local hasEntries = false
 
-    listY = listY - 10 -- Space after list container (will be dynamic)
+        for itemID, _ in pairs(IM.db.global.junkList or {}) do
+            hasEntries = true
+            CreateItemRow(listContainer, itemID, yOff, function(id)
+                IM:RemoveFromJunkList(id)
+                RefreshList()
+                UpdateCount()
+                IM:RefreshAllUI()
+            end)
+            yOff = yOff - 30
+        end
 
-    -- Clear button at bottom of list card
+        if not hasEntries then
+            noItemsLabel:Show()
+            yOff = -24
+        else
+            noItemsLabel:Hide()
+        end
+
+        local listHeight = math.max(math.abs(yOff), 24)
+        listContainer:SetHeight(listHeight)
+        return listHeight
+    end
+
+    -- Initial list refresh - must happen before button positioning
+    local listHeight = RefreshList()
+    listCard._contentHeight = listCard._contentHeight + listHeight + 12
+
+    -- Clear button (positioned after list)
     local clearBtn = UI:CreateButton(listCard, "Clear All", 80, 24)
-    clearBtn:SetPoint("TOPLEFT", listContainer, "BOTTOMLEFT", 10, -10)
+    clearBtn:SetPoint("TOPLEFT", listContainer, "BOTTOMLEFT", 0, -8)
     clearBtn:SetScript("OnClick", function()
         StaticPopup_Show("INVENTORYMANAGER_CLEAR_JUNKLIST")
     end)
 
-    yOffset = yOffset - 210 -- Initial estimate, will be updated by RefreshList
+    -- Add space for button
+    listCard._contentHeight = listCard._contentHeight + 36
+    listCard:SetHeight(listCard:GetContentHeight())
+
+    content:AdvanceY(listCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- TIPS SECTION
+    -- TIPS CARD
     -- ============================================================
-    local tipsHeader = UI:CreateSectionHeader(content, "Tips")
-    tipsHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 22
+    local tipsCard = UI:CreateCard(content, {
+        title = "Tips",
+    })
 
-    local tipsText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    tipsText:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    tipsText:SetPoint("RIGHT", content, "RIGHT", -10, 0)
-    tipsText:SetJustifyH("LEFT")
-    tipsText:SetSpacing(2)
-    tipsText:SetText(
-        "|cffaaaaaa" ..
-        "- Use Ctrl+Alt+Click on items in your bags to add to junk list\n" ..
-        "- Junk items will be auto-sold regardless of quality or value\n" ..
-        "- Use this for items you never want to keep\n" ..
-        "|r"
-    )
+    tipsCard:AddText("- Use Ctrl+Alt+Click on items in your bags to add to junk list")
+    tipsCard:AddText("- Junk items will be auto-sold regardless of quality or value")
+    tipsCard:AddText("- Use this for items you never want to keep")
 
-    yOffset = yOffset - 60
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+
+    content:FinalizeHeight()
+
+    -- Full refresh function
+    local function FullRefresh()
+        local listHeight = RefreshList()
+        -- Recalculate: title (36) + list + button spacing (8) + button (24) + padding (16)
+        listCard._contentHeight = 36 + listHeight + 8 + 24 + 16
+        listCard:SetHeight(listCard:GetContentHeight())
+        UpdateCount()
+    end
 
     -- Auto-refresh when panel is shown
-    parent:SetScript("OnShow", function()
-        RefreshList()
-    end)
+    parent:SetScript("OnShow", FullRefresh)
 
-    -- Auto-refresh when junk list changes (Ctrl+Alt+Click in bags)
+    -- Auto-refresh when junk list changes
     IM:RegisterJunkListCallback(function(itemID, added)
         if parent:IsVisible() then
-            RefreshList()
+            FullRefresh()
         end
     end)
 
     -- Initial refresh
-    C_Timer.After(0.1, RefreshList)
+    C_Timer.After(0.1, FullRefresh)
 
     -- Clear confirmation popup
     StaticPopupDialogs["INVENTORYMANAGER_CLEAR_JUNKLIST"] = {
@@ -133,13 +219,10 @@ function JunkListPanel:Create(parent)
             if IM.modules.JunkList then
                 IM.modules.JunkList:ClearAllJunk()
             end
-            RefreshList()
+            FullRefresh()
         end,
         timeout = 0,
         whileDead = true,
         hideOnEscape = true,
     }
-
-    -- Set final content height
-    content:SetHeight(math.abs(yOffset) + 20)
 end
