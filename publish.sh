@@ -390,12 +390,10 @@ generate_ai_changelog() {
     
     # Check if jq is available
     if ! command -v jq &> /dev/null; then
-        echo ""
         return 1
     fi
     
-    echo ""
-    echo -e "${BLUE}Generating AI changelog...${NC}"
+    echo -e "${BLUE}Generating AI changelog...${NC}" >&2
     
     # Get commit history since last tag
     local commits
@@ -407,7 +405,7 @@ generate_ai_changelog() {
     fi
     
     if [ -z "$commits" ]; then
-        echo -e "${YELLOW}No commits found for changelog${NC}"
+        echo -e "${YELLOW}No commits found for changelog${NC}" >&2
         return 1
     fi
     
@@ -490,17 +488,17 @@ Generate a user-friendly changelog for version ${version}."
     local changelog=$(echo "$response" | jq -r '.content[] | select(.type == "text") | .text' 2>/dev/null)
     
     if [ -z "$changelog" ]; then
-        echo -e "${YELLOW}AI changelog generation failed${NC}"
+        echo -e "${YELLOW}AI changelog generation failed${NC}" >&2
         return 1
     fi
     
     # Check if AI detected no user-facing changes
     if echo "$changelog" | grep -q "NO_USER_CHANGES"; then
-        echo -e "${YELLOW}No user-facing addon changes detected${NC}"
+        echo -e "${YELLOW}No user-facing addon changes detected${NC}" >&2
         return 1
     fi
     
-    echo -e "${GREEN}✓ AI changelog generated${NC}"
+    echo -e "${GREEN}✓ AI changelog generated${NC}" >&2
     echo "$changelog"
     return 0
 }
@@ -572,9 +570,15 @@ create_github_release() {
         release_notes="$ai_changelog
 
 ## 📦 Installation
-Download \`${zip_file}\` and extract it to your WoW AddOns folder.
+
+**Option 1: CurseForge (Recommended)**
+Install via [CurseForge](https://www.curseforge.com/wow/addons/inventorymanager) for automatic updates
+
+**Option 2: Manual**
+Download \`${zip_file}\` and extract it to your WoW AddOns folder
 
 ## 🔗 Links
+- [CurseForge Page](https://www.curseforge.com/wow/addons/inventorymanager)
 - [Issues](https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/issues)
 - [Changelog](https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/releases)"
     else
@@ -592,10 +596,19 @@ Download \`${zip_file}\` and extract it to your WoW AddOns folder.
         release_notes="Release version ${version}
 
 ## 📦 Installation
-Download \`${zip_file}\` and extract it to your WoW AddOns folder.
+
+**Option 1: CurseForge (Recommended)**
+Install via [CurseForge](https://www.curseforge.com/wow/addons/inventorymanager) for automatic updates
+
+**Option 2: Manual**
+Download \`${zip_file}\` and extract it to your WoW AddOns folder
 
 ## 📝 Changes
-See commit history for detailed changes."
+See commit history for detailed changes.
+
+## 🔗 Links
+- [CurseForge Page](https://www.curseforge.com/wow/addons/inventorymanager)
+- [Issues](https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/issues)"
     fi
     
     # Create release with zip file
