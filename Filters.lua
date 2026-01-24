@@ -502,7 +502,24 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
         return false, "Item info not available"
     end
 
-    IM:Debug("[Filters] Checking: " .. itemName .. " (quality=" .. tostring(itemQuality) .. ", class=" .. tostring(classID) .. "_" .. tostring(subclassID) .. ", price=" .. tostring(sellPrice) .. ")")
+    -- Prefer the item instance's current item level (bag/slot) over GetItemInfo().
+    -- This avoids incorrect ilvls for scaling/upgrade items and does NOT require hovering.
+    local effectiveItemLevel = itemLevel
+    if ItemLocation and C_Item and C_Item.GetCurrentItemLevel then
+        local itemLoc = ItemLocation:CreateFromBagAndSlot(bagID, slotID)
+        if itemLoc and itemLoc.IsValid and itemLoc:IsValid() then
+            local ilvl = C_Item.GetCurrentItemLevel(itemLoc)
+            if ilvl and ilvl > 0 then
+                effectiveItemLevel = ilvl
+            end
+        end
+    end
+
+    IM:Debug("[Filters] Checking: " .. itemName ..
+        " (quality=" .. tostring(itemQuality) ..
+        ", ilvl=" .. tostring(effectiveItemLevel) ..
+        ", class=" .. tostring(classID) .. "_" .. tostring(subclassID) ..
+        ", price=" .. tostring(sellPrice) .. ")")
 
     -- WHITELIST CHECK (highest priority - NEVER sell whitelisted items)
     if IM:IsWhitelisted(itemID) then
@@ -583,7 +600,7 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
     end
 
     -- Check item level threshold (if enabled)
-    if db.autoSell.maxItemLevel > 0 and itemLevel > db.autoSell.maxItemLevel then
+    if db.autoSell.maxItemLevel > 0 and (effectiveItemLevel or 0) > db.autoSell.maxItemLevel then
         IM:Debug("[Filters]   -> Rejected: Item level too high")
         return false, "Item level too high"
     end

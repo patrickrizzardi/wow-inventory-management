@@ -241,13 +241,38 @@ function TooltipInfo:AddTooltipInfo(tooltip, itemID, itemLink)
     if not self:IsEnabled() then return end
 
     -- Get item info
-    local itemName, _, itemQuality, itemLevel, _, itemType, itemSubType,
+    local itemName, _, itemQuality, baseItemLevel, _, itemType, itemSubType,
           _, _, _, sellPrice, classID, subclassID, bindType = GetItemInfo(itemLink or itemID)
 
     if not itemName then return end
 
-    -- Try to find item in bags for binding checks
-    local bagID, slotID = self:FindItemInBags(itemID)
+    -- Prefer bag/slot context captured from the tooltip APIs (most accurate).
+    local bagID = tooltip and tooltip._imBagID
+    local slotID = tooltip and tooltip._imSlotID
+
+    -- Fallback: try to find item in bags (less accurate if multiple copies exist).
+    if not bagID or not slotID then
+        bagID, slotID = self:FindItemInBags(itemID)
+    end
+
+    -- Determine current/effective item level without relying on hovering:
+    -- Use instance-based APIs when we know the item location (bag slot or equipment slot).
+    local itemLevel = baseItemLevel
+    if ItemLocation and C_Item and C_Item.GetCurrentItemLevel then
+        local itemLoc = nil
+        if bagID and slotID then
+            itemLoc = ItemLocation:CreateFromBagAndSlot(bagID, slotID)
+        elseif tooltip and tooltip._imEquipSlot then
+            itemLoc = ItemLocation:CreateFromEquipmentSlot(tooltip._imEquipSlot)
+        end
+
+        if itemLoc and itemLoc.IsValid and itemLoc:IsValid() then
+            local ilvl = C_Item.GetCurrentItemLevel(itemLoc)
+            if ilvl and ilvl > 0 then
+                itemLevel = ilvl
+            end
+        end
+    end
 
     -- Check for special states
     local isWhitelisted = IM:IsWhitelisted(itemID)
@@ -319,6 +344,32 @@ end
 
 -- Hook tooltips using TooltipDataProcessor (modern API)
 function TooltipInfo:HookTooltips()
+    if self._imContextHooksApplied then
+        -- Avoid double-hooking
+        return
+    end
+
+    -- Capture context so we can use ItemLocation-based APIs (no guessing, no hovering needed).
+    if GameTooltip and hooksecurefunc then
+        hooksecurefunc(GameTooltip, "SetBagItem", function(tooltip, bag, slot)
+            tooltip._imBagID = bag
+            tooltip._imSlotID = slot
+            tooltip._imEquipSlot = nil
+        end)
+
+        hooksecurefunc(GameTooltip, "SetInventoryItem", function(tooltip, unit, slot)
+            tooltip._imBagID = nil
+            tooltip._imSlotID = nil
+            tooltip._imEquipSlot = slot
+        end)
+
+        GameTooltip:HookScript("OnTooltipCleared", function(tooltip)
+            tooltip._imBagID = nil
+            tooltip._imSlotID = nil
+            tooltip._imEquipSlot = nil
+        end)
+    end
+
     -- Use the modern TooltipDataProcessor if available (10.0.2+)
     if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall then
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
@@ -353,4 +404,6 @@ function TooltipInfo:HookTooltips()
 
         IM:Debug("TooltipInfo: Hooked via OnTooltipSetItem")
     end
+
+    self._imContextHooksApplied = true
 end

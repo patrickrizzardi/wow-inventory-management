@@ -251,6 +251,45 @@ function ItemButton:SetItem(button, bagID, slotID)
             end
         end
         
+        -- Set item level text (for equippable gear)
+        if not button._imItemLevel then
+            button._imItemLevel = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            button._imItemLevel:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
+            button._imItemLevel:SetTextColor(1, 1, 0, 1)  -- Yellow
+            button._imItemLevel:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+        end
+        
+        -- Show ilvl for equippable items
+        local itemLink = itemInfo.hyperlink
+        local effectiveILvl = nil
+
+        -- Prefer instance-based ilvl from bag/slot (does not require hovering)
+        if ItemLocation and C_Item and C_Item.GetCurrentItemLevel then
+            local itemLoc = ItemLocation:CreateFromBagAndSlot(bagID, slotID)
+            if itemLoc and itemLoc.IsValid and itemLoc:IsValid() then
+                effectiveILvl = C_Item.GetCurrentItemLevel(itemLoc)
+            end
+        end
+
+        -- Fallback to link-based (less reliable for some scaling items)
+        if (not effectiveILvl or effectiveILvl <= 0) and itemLink and GetDetailedItemLevelInfo then
+            effectiveILvl = GetDetailedItemLevelInfo(itemLink)
+        end
+
+        if itemLink then
+            local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
+
+            -- Show ilvl if item is equippable and has meaningful ilvl
+            if effectiveILvl and effectiveILvl > 1 and equipLoc and equipLoc ~= "" and equipLoc ~= "INVTYPE_BAG" then
+                button._imItemLevel:SetText(effectiveILvl)
+                button._imItemLevel:Show()
+            else
+                button._imItemLevel:Hide()
+            end
+        else
+            button._imItemLevel:Hide()
+        end
+        
         -- Set quality border
         local quality = itemInfo.quality
         if quality and quality > 1 then  -- Show border for uncommon+
