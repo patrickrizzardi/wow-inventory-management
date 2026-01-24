@@ -30,7 +30,7 @@ function LedgerPanel:Create(parent)
     descBox:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     descBox:SetBackdropColor(0.12, 0.10, 0.06, 0.9)
     descBox:SetBackdropBorderColor(unpack(UI.colors.accent))
@@ -88,7 +88,7 @@ function LedgerPanel:Create(parent)
     filterBox:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     filterBox:SetBackdropColor(0.08, 0.08, 0.08, 0.8)
     filterBox:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
