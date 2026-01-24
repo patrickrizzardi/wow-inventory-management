@@ -83,9 +83,22 @@ function BagUI:Create()
     local gearBtn = CreateFrame("Button", nil, header)
     gearBtn:SetSize(UI.layout.iconSize, UI.layout.iconSize)
     gearBtn:SetPoint("RIGHT", header.closeButton, "LEFT", -UI.layout.paddingSmall, 0)
-    gearBtn:SetNormalTexture("Interface\\Icons\\Trade_Engineering")
-    gearBtn:SetHighlightTexture("Interface\\Icons\\Trade_Engineering", "ADD")
-    gearBtn:GetNormalTexture():SetTexCoord(0.1, 0.9, 0.1, 0.9)
+    
+    -- Use a cleaner settings icon without background
+    local normalTex = gearBtn:CreateTexture(nil, "ARTWORK")
+    normalTex:SetAllPoints()
+    normalTex:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+    normalTex:SetTexCoord(0, 1, 0, 1)
+    normalTex:SetVertexColor(1, 1, 1, 0.8)
+    gearBtn:SetNormalTexture(normalTex)
+    
+    local highlightTex = gearBtn:CreateTexture(nil, "HIGHLIGHT")
+    highlightTex:SetAllPoints()
+    highlightTex:SetTexture("Interface\\Buttons\\UI-OptionsButton")
+    highlightTex:SetTexCoord(0, 1, 0, 1)
+    highlightTex:SetVertexColor(1, 1, 1, 1)
+    highlightTex:SetBlendMode("ADD")
+    
     gearBtn:SetScript("OnClick", function()
         if IM.UI and IM.UI.ToggleConfig then
             IM.UI:ToggleConfig()

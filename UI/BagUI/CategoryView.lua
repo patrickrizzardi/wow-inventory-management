@@ -360,22 +360,35 @@ function CategoryView:GetItemCategory(item)
 end
 
 function CategoryView:GetItemSubcategory(item)
-    local _, _, _, _, _, classID, subclassID = C_Item.GetItemInfoInstant(item.itemID)
+    -- IMPORTANT: C_Item.GetItemInfoInstant() does NOT return equipLoc reliably
+    -- We must use GetItemInfo() to get equipLoc for equipment items
+    local _, _, _, _, _, _, _, _, equipLoc, _, _, classID, subclassID = GetItemInfo(item.itemID)
     
-    -- For equipment, use equipment slot
-    if classID == IM.ITEM_CLASS.Armor or classID == IM.ITEM_CLASS.Weapon then
-        local _, _, _, equipLoc = C_Item.GetItemInfoInstant(item.itemID)
-        if equipLoc and equipLoc ~= "" then
-            return _G[equipLoc] or equipLoc
+    -- Step 1: Check if it's equippable - use equipment slot
+    if equipLoc and equipLoc ~= "" and equipLoc ~= "nil" and equipLoc ~= "INVTYPE_NON_EQUIP" and equipLoc ~= "INVTYPE_BAG" then
+        local slotName = _G[equipLoc]
+        if slotName and slotName ~= "" then
+            return slotName
         end
     end
     
-    -- For other items, use subclass name
+    -- Step 2: Not equipment - for armor/weapons without slots, return "Other"
+    -- This prevents showing "Plate", "Mail", "Leather", "Cloth" as categories
+    if classID == IM.ITEM_CLASS.Armor or classID == IM.ITEM_CLASS.Weapon then
+        return "Other"
+    end
+    
+    -- Step 3: For non-equipment items, get the subcategory name
     if classID and subclassID then
         local subclassName = C_Item.GetItemSubClassInfo(classID, subclassID)
-        if subclassName then
+        if subclassName and subclassName ~= "" then
             return subclassName
         end
+    end
+    
+    -- Fallback: Use ITEM_CLASS_NAMES
+    if classID and IM.ITEM_CLASS_NAMES[classID] then
+        return IM.ITEM_CLASS_NAMES[classID]
     end
     
     return "Other"
@@ -400,13 +413,32 @@ function CategoryView:GetCategoryOrder(categoryName)
 end
 
 function CategoryView:GetSubcategoryOrder(subcategoryName, item)
+    -- Get equipLoc from GetItemInfo (not GetItemInfoInstant)
+    local _, _, _, _, _, _, _, _, equipLoc, _, _, classID, subclassID = GetItemInfo(item.itemID)
+    
     -- For equipment slots, use predefined order
-    local _, _, _, equipLoc = C_Item.GetItemInfoInstant(item.itemID)
-    if equipLoc and SLOT_ORDER_MAP[equipLoc] then
+    if equipLoc and equipLoc ~= "" and equipLoc ~= "nil" and equipLoc ~= "INVTYPE_NON_EQUIP" and SLOT_ORDER_MAP[equipLoc] then
         return SLOT_ORDER_MAP[equipLoc]
     end
     
-    -- Alphabetical for everything else
+    -- For non-equipment, order by classID
+    if classID then
+        local classOrder = {
+            [0] = 100,  -- Consumable
+            [1] = 200,  -- Container
+            [3] = 300,  -- Gem
+            [5] = 400,  -- Reagent
+            [7] = 500,  -- Trade Goods
+            [9] = 600,  -- Recipe
+            [12] = 50,  -- Quest (high priority)
+            [15] = 700, -- Miscellaneous
+            [20] = 800, -- Player Housing
+        }
+        local baseOrder = classOrder[classID] or 900
+        return baseOrder + (string.byte(subcategoryName, 1) or 0)
+    end
+    
+    -- Fallback: alphabetical
     return 1000 + (string.byte(subcategoryName, 1) or 0)
 end
 

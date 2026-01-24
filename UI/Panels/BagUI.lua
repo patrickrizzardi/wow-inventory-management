@@ -179,7 +179,6 @@ function BagUIPanel:Create(parent)
     tipsCard:AddText("- Press B to toggle bags (same as Blizzard)")
     tipsCard:AddText("- Click gold to open Tracker Dashboard")
     tipsCard:AddText("- Click gear icon to open Settings")
-    tipsCard:AddText("- All overlays (lock, sell, mail) work in custom bags")
     tipsCard:AddText("- |cffffb000Alt+Click|r item to add to whitelist (lock/protect)")
     tipsCard:AddText("- |cffffb000Ctrl+Alt+Click|r item to add to junk list (force sell)")
 
