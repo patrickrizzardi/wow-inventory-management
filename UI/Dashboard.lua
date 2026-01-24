@@ -32,6 +32,12 @@ local _framePool = {
     inventory = {}, -- Inventory row frames
 }
 
+-- Track "Show More" buttons separately (they're outside the pool)
+local _showMoreButtons = {
+    ledger = nil,
+    inventory = nil,
+}
+
 -- Class colors for character display
 local CLASS_COLORS = {
     WARRIOR = {0.78, 0.61, 0.43},
@@ -71,6 +77,10 @@ local function ReleaseAllFrames(poolKey)
         frame:Hide()
         frame:ClearAllPoints()
     end
+    -- Also hide the "Show More" button for this pool if it exists
+    if _showMoreButtons[poolKey] then
+        _showMoreButtons[poolKey]:Hide()
+    end
 end
 
 -- Create the dashboard frame
@@ -83,7 +93,7 @@ function Dashboard:Create()
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     frame:SetBackdropColor(unpack(UI.colors.background))
     frame:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -157,22 +167,23 @@ function Dashboard:Create()
 
     -- Title bar (inset by 1px for border)
     local titleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    titleBar:SetHeight(24)
-    titleBar:SetPoint("TOPLEFT", 1, -1)
-    titleBar:SetPoint("TOPRIGHT", -1, -1)
+    titleBar:SetHeight(UI.layout.titleBarHeight)
+    titleBar:SetPoint("TOPLEFT", UI.layout.borderSize, -UI.layout.borderSize)
+    titleBar:SetPoint("TOPRIGHT", -UI.layout.borderSize, -UI.layout.borderSize)
     titleBar:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
     })
-    titleBar:SetBackdropColor(0.15, 0.12, 0.05, 1)
+    titleBar:SetBackdropColor(unpack(UI.colors.headerBar))
 
     local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("LEFT", 8, 0)
+    title:SetPoint("LEFT", UI.layout.padding, 0)
     title:SetText(UI:ColorText("InventoryManager Dashboard", "accent"))
 
     -- Close button
+    local closeBtnSize = UI.layout.iconSize - 2
     local closeBtn = CreateFrame("Button", nil, titleBar)
-    closeBtn:SetSize(18, 18)
-    closeBtn:SetPoint("RIGHT", -4, 0)
+    closeBtn:SetSize(closeBtnSize, closeBtnSize)
+    closeBtn:SetPoint("RIGHT", -UI.layout.paddingSmall, 0)
     closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     closeBtn.text:SetPoint("CENTER")
     closeBtn.text:SetText("|cffff6666X|r")
@@ -180,81 +191,45 @@ function Dashboard:Create()
     closeBtn:SetScript("OnEnter", function(self) self.text:SetText("|cffff0000X|r") end)
     closeBtn:SetScript("OnLeave", function(self) self.text:SetText("|cffff6666X|r") end)
 
-    -- Tab bar (inset by 1px to sit inside border)
-    local tabBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    tabBar:SetHeight(28)
-    tabBar:SetPoint("TOPLEFT", 1, -24)
-    tabBar:SetPoint("TOPRIGHT", -1, -24)
-    tabBar:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
-    tabBar:SetBackdropColor(0.1, 0.1, 0.1, 1)
-
-    -- Create tabs
-    local tabs = {}
+    -- Tab bar using reusable component (inset by 1px to sit inside border)
     local tabData = {
         {id = "networth", label = "Net Worth"},
         {id = "ledger", label = "Ledger"},
         {id = "inventory", label = "Inventory"},
     }
 
-    local function SelectTab(tabId)
-        _activeTab = tabId
-        for _, tab in pairs(tabs) do
-            if tab.id == tabId then
-                tab:SetBackdropColor(unpack(UI.colors.accent))
-                tab.text:SetTextColor(0, 0, 0, 1)
-            else
-                tab:SetBackdropColor(0.15, 0.15, 0.15, 1)
-                tab.text:SetTextColor(unpack(UI.colors.text))
+    local tabBar, selectTab = UI:CreateTabBar(frame, {
+        tabs = tabData,
+        height = UI.layout.tabHeight,
+        tabWidth = UI.layout.buttonWidth,
+        padding = UI.layout.paddingSmall,
+        spacing = 2,
+        onSelect = function(tabId)
+            _activeTab = tabId
+            -- Show/hide content
+            if frame.networthContent then
+                frame.networthContent:SetShown(tabId == "networth")
             end
-        end
-        -- Show/hide content
-        if frame.networthContent then
-            frame.networthContent:SetShown(tabId == "networth")
-        end
-        if frame.ledgerContent then
-            frame.ledgerContent:SetShown(tabId == "ledger")
-        end
-        if frame.inventoryContent then
-            frame.inventoryContent:SetShown(tabId == "inventory")
-        end
-        -- Refresh active tab
-        Dashboard:RefreshContent()
-    end
+            if frame.ledgerContent then
+                frame.ledgerContent:SetShown(tabId == "ledger")
+            end
+            if frame.inventoryContent then
+                frame.inventoryContent:SetShown(tabId == "inventory")
+            end
+            -- Refresh active tab
+            Dashboard:RefreshContent()
+        end,
+    })
+    tabBar:SetPoint("TOPLEFT", UI.layout.borderSize, -UI.layout.titleBarHeight)
+    tabBar:SetPoint("TOPRIGHT", -UI.layout.borderSize, -UI.layout.titleBarHeight)
 
-    local tabX = 4
-    local TAB_WIDTH = 80
-    local TAB_SPACING = 2
-    for _, data in ipairs(tabData) do
-        local tab = CreateFrame("Button", nil, tabBar, "BackdropTemplate")
-        tab:SetSize(TAB_WIDTH, 22)
-        tab:SetPoint("LEFT", tabX, 0)
-        tab:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
-        tab:SetBackdropBorderColor(unpack(UI.colors.border))
-
-        tab.text = tab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        tab.text:SetPoint("CENTER")
-        tab.text:SetText(data.label)
-
-        tab.id = data.id
-        tab:SetScript("OnClick", function() SelectTab(data.id) end)
-
-        tabs[data.id] = tab
-        tabX = tabX + TAB_WIDTH + TAB_SPACING
-    end
-
-    frame.tabs = tabs
-    frame.SelectTab = SelectTab
+    frame.tabs = tabBar.buttons
+    frame.SelectTab = selectTab
 
     -- Content area
     local contentArea = CreateFrame("Frame", nil, frame)
-    contentArea:SetPoint("TOPLEFT", 8, -56)
-    contentArea:SetPoint("BOTTOMRIGHT", -8, 36)
+    contentArea:SetPoint("TOPLEFT", UI.layout.padding, -(UI.layout.titleBarHeight + UI.layout.tabHeight + UI.layout.padding))
+    contentArea:SetPoint("BOTTOMRIGHT", -UI.layout.padding, UI.layout.bottomBarHeight + UI.layout.paddingSmall)
     frame.contentArea = contentArea
 
     -- Create Net Worth content
@@ -268,12 +243,12 @@ function Dashboard:Create()
 
     -- Bottom bar with "Open Settings" button (inset by 1px for border)
     local bottomBar = CreateFrame("Frame", nil, frame)
-    bottomBar:SetHeight(30)
-    bottomBar:SetPoint("BOTTOMLEFT", 1, 1)
-    bottomBar:SetPoint("BOTTOMRIGHT", -1, 1)
+    bottomBar:SetHeight(UI.layout.bottomBarHeight)
+    bottomBar:SetPoint("BOTTOMLEFT", UI.layout.borderSize, UI.layout.borderSize)
+    bottomBar:SetPoint("BOTTOMRIGHT", -UI.layout.borderSize, UI.layout.borderSize)
 
-    local settingsBtn = UI:CreateButton(bottomBar, "Open Full Settings", 130, 24)
-    settingsBtn:SetPoint("CENTER", 0, 4)
+    local settingsBtn = UI:CreateButton(bottomBar, "Open Full Settings", UI.layout.buttonWidthLarge + 10, UI.layout.rowHeightSmall)
+    settingsBtn:SetPoint("CENTER", 0, UI.layout.paddingSmall)
     settingsBtn:SetScript("OnClick", function()
         if IM.UI and IM.UI.Config and IM.UI.Config.Show then
             IM.UI.Config:Show()
@@ -288,7 +263,7 @@ function Dashboard:Create()
     end)
 
     -- Initialize with networth tab
-    SelectTab("networth")
+    selectTab("networth")
 
     _dashboard = frame
     return frame
@@ -308,7 +283,7 @@ function Dashboard:CreateNetWorthContent(frame)
     breakdownBox:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
     })
-    breakdownBox:SetBackdropColor(0.12, 0.12, 0.12, 1)
+    breakdownBox:SetBackdropColor(unpack(UI.colors.backgroundLight))
 
     local headerLabel = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     headerLabel:SetPoint("TOPLEFT", 10, -6)
@@ -471,7 +446,7 @@ function Dashboard:CreateLedgerContent(frame)
     searchInput:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     searchInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
     searchInput:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -680,7 +655,7 @@ function Dashboard:CreateLedgerContent(frame)
     summaryBox:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
     })
-    summaryBox:SetBackdropColor(0.12, 0.12, 0.12, 1)
+    summaryBox:SetBackdropColor(unpack(UI.colors.backgroundLight))
 
     local summaryLabel = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     summaryLabel:SetPoint("TOPLEFT", 10, -8)
@@ -824,7 +799,7 @@ function Dashboard:CreateInventoryContent(frame)
     infoBox:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
     })
-    infoBox:SetBackdropColor(0.12, 0.10, 0.05, 1)
+    infoBox:SetBackdropColor(unpack(UI.colors.backgroundLight))
 
     local infoTitle = infoBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     infoTitle:SetPoint("TOPLEFT", 10, -6)
@@ -864,7 +839,7 @@ function Dashboard:CreateInventoryContent(frame)
     searchInput:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     searchInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
     searchInput:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -1152,7 +1127,7 @@ function Dashboard:RefreshInventory()
         headerRow:SetPoint("TOPLEFT", 0, yOffset)
         headerRow:SetPoint("RIGHT", 0, 0)
         headerRow:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
-        headerRow:SetBackdropColor(0.15, 0.12, 0.05, 1)
+        headerRow:SetBackdropColor(unpack(UI.colors.headerBar))
 
         local headerText = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         headerText:SetPoint("LEFT", 8, 0)
@@ -1174,7 +1149,7 @@ function Dashboard:RefreshInventory()
             -- Make row clickable - sets character filter and shows their items
             row:EnableMouse(true)
             row:SetScript("OnEnter", function(self)
-                self:SetBackdropColor(0.2, 0.18, 0.1, 0.8)
+                self:SetBackdropColor(unpack(UI.colors.rowHover))
             end)
             row:SetScript("OnLeave", function(self)
                 self:SetBackdropColor(0.12, 0.12, 0.12, bgAlpha)
@@ -1260,12 +1235,12 @@ function Dashboard:RefreshInventory()
         headerRow:SetPoint("TOPLEFT", 0, yOffset)
         headerRow:SetPoint("RIGHT", 0, 0)
         headerRow:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
-        headerRow:SetBackdropColor(0.15, 0.12, 0.05, 1)
+        headerRow:SetBackdropColor(unpack(UI.colors.headerBar))
 
         -- Back button
         headerRow:EnableMouse(true)
         headerRow:SetScript("OnEnter", function(self)
-            self:SetBackdropColor(0.2, 0.16, 0.05, 1)
+            self:SetBackdropColor(unpack(UI.colors.headerBarHover))
         end)
         headerRow:SetScript("OnLeave", function(self)
             self:SetBackdropColor(0.15, 0.12, 0.05, 1)
@@ -1326,7 +1301,7 @@ function Dashboard:RefreshInventory()
         row:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",
             edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
+            edgeSize = UI.layout.borderSize,
         })
         row:SetBackdropColor(0.12, 0.12, 0.12, 1)
         row:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
@@ -1373,23 +1348,32 @@ function Dashboard:RefreshInventory()
         yOffset = yOffset - (ROW_HEIGHT + ROW_SPACING)
     end
 
-    -- Show More button if there are more results (UX Fix #6: More prominent styling)
+    -- Show More button if there are more results (reuse existing or create new)
     if #results > _inventoryPaginationLimit then
-        local showMoreBtn = CreateFrame("Button", nil, resultsList, "BackdropTemplate")
-        showMoreBtn:SetHeight(28)
+        local showMoreBtn = _showMoreButtons.inventory
+        if not showMoreBtn then
+            showMoreBtn = CreateFrame("Button", nil, resultsList, "BackdropTemplate")
+            showMoreBtn:SetHeight(28)
+            showMoreBtn:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Buttons\\WHITE8X8",
+                edgeSize = 2,
+            })
+            showMoreBtn.text = showMoreBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            showMoreBtn.text:SetPoint("CENTER")
+            _showMoreButtons.inventory = showMoreBtn
+        end
+        
+        showMoreBtn:SetParent(resultsList)
+        showMoreBtn:ClearAllPoints()
         showMoreBtn:SetPoint("TOPLEFT", 0, yOffset - 4)
         showMoreBtn:SetPoint("RIGHT", 0, 0)
-        showMoreBtn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 2,
-        })
-        showMoreBtn:SetBackdropColor(0.2, 0.17, 0.08, 1)
+        showMoreBtn:SetBackdropColor(unpack(UI.colors.tabSelected))
         showMoreBtn:SetBackdropBorderColor(unpack(UI.colors.accent))
-
-        local showMoreText = showMoreBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        showMoreText:SetPoint("CENTER")
-        showMoreText:SetText(UI:ColorText("Show More Items", "accent") .. " |cff888888(" .. (#results - _inventoryPaginationLimit) .. " remaining)|r")
+        
+        local remaining = #results - _inventoryPaginationLimit
+        showMoreBtn.text:SetText(UI:ColorText("Show More Items", "accent") .. " |cff888888(" .. remaining .. " remaining)|r")
+        showMoreBtn:Show()
 
         local module = Dashboard
         showMoreBtn:SetScript("OnClick", function()
@@ -1397,12 +1381,12 @@ function Dashboard:RefreshInventory()
             module:RefreshInventory()
         end)
         showMoreBtn:SetScript("OnEnter", function(self)
-            self:SetBackdropColor(0.25, 0.22, 0.10, 1)
-            showMoreText:SetText(UI:ColorText("► Show More Items", "accent") .. " |cffaaaaaa(" .. (#results - _inventoryPaginationLimit) .. " remaining)|r")
+            self:SetBackdropColor(unpack(UI.colors.rowHover))
+            self.text:SetText(UI:ColorText("► Show More Items", "accent") .. " |cffaaaaaa(" .. remaining .. " remaining)|r")
         end)
         showMoreBtn:SetScript("OnLeave", function(self)
             self:SetBackdropColor(0.2, 0.17, 0.08, 1)
-            showMoreText:SetText(UI:ColorText("Show More Items", "accent") .. " |cff888888(" .. (#results - _inventoryPaginationLimit) .. " remaining)|r")
+            self.text:SetText(UI:ColorText("Show More Items", "accent") .. " |cff888888(" .. remaining .. " remaining)|r")
         end)
 
         yOffset = yOffset - 32
@@ -1488,7 +1472,7 @@ function Dashboard:RefreshNetWorth()
         row:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",
             edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
+            edgeSize = UI.layout.borderSize,
         })
         row:SetBackdropColor(0.12, 0.12, 0.12, 1)
         row:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
@@ -1726,35 +1710,45 @@ function Dashboard:RefreshLedger()
         if content.noDataMsg then
             content.noDataMsg:Hide()
         end
-        -- Show More button (UX Fix #6: More prominent styling)
-        local showMoreBtn = CreateFrame("Button", nil, transList, "BackdropTemplate")
-        showMoreBtn:SetHeight(28)
+        -- Show More button (reuse existing or create new)
+        local showMoreBtn = _showMoreButtons.ledger
+        if not showMoreBtn then
+            showMoreBtn = CreateFrame("Button", nil, transList, "BackdropTemplate")
+            showMoreBtn:SetHeight(28)
+            showMoreBtn:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Buttons\\WHITE8X8",
+                edgeSize = 2,
+            })
+            showMoreBtn.text = showMoreBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            showMoreBtn.text:SetPoint("CENTER")
+            _showMoreButtons.ledger = showMoreBtn
+        end
+        
+        showMoreBtn:SetParent(transList)
+        showMoreBtn:ClearAllPoints()
         showMoreBtn:SetPoint("TOPLEFT", 0, yOffset - 4)
         showMoreBtn:SetPoint("RIGHT", 0, 0)
-        showMoreBtn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 2,
-        })
-        showMoreBtn:SetBackdropColor(0.2, 0.17, 0.08, 1)
+        showMoreBtn:SetBackdropColor(unpack(UI.colors.tabSelected))
         showMoreBtn:SetBackdropBorderColor(unpack(UI.colors.accent))
-
-        local showMoreText = showMoreBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        showMoreText:SetPoint("CENTER")
-        showMoreText:SetText(UI:ColorText("Show More Transactions", "accent") .. " |cff888888(" .. (#entries - _paginationLimit) .. " remaining)|r")
+        
+        local remaining = #entries - _paginationLimit
+        showMoreBtn.text:SetText(UI:ColorText("Show More Transactions", "accent") .. " |cff888888(" .. remaining .. " remaining)|r")
+        showMoreBtn:Show()
 
         local module = Dashboard
+        local currentEntries = entries  -- Capture for closure
         showMoreBtn:SetScript("OnClick", function()
             _paginationLimit = _paginationLimit + 10
             module:RefreshLedger()
         end)
         showMoreBtn:SetScript("OnEnter", function(self)
-            self:SetBackdropColor(0.25, 0.22, 0.10, 1)
-            showMoreText:SetText(UI:ColorText("► Show More Transactions", "accent") .. " |cffaaaaaa(" .. (#entries - _paginationLimit) .. " remaining)|r")
+            self:SetBackdropColor(unpack(UI.colors.rowHover))
+            self.text:SetText(UI:ColorText("► Show More Transactions", "accent") .. " |cffaaaaaa(" .. remaining .. " remaining)|r")
         end)
         showMoreBtn:SetScript("OnLeave", function(self)
             self:SetBackdropColor(0.2, 0.17, 0.08, 1)
-            showMoreText:SetText(UI:ColorText("Show More Transactions", "accent") .. " |cff888888(" .. (#entries - _paginationLimit) .. " remaining)|r")
+            self.text:SetText(UI:ColorText("Show More Transactions", "accent") .. " |cff888888(" .. remaining .. " remaining)|r")
         end)
         yOffset = yOffset - 32
     else

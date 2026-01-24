@@ -1,11 +1,7 @@
 --[[
     InventoryManager - UI/Panels/Dashboard.lua
     Settings panel for Dashboard features: Ledger, Net Worth, and Inventory Search.
-
-    Design Standard (based on Currency panel):
-    1. Feature Card - Amber-tinted box with accent border explaining the feature
-    2. Settings Sections - Darker cards for grouped settings
-    3. Tips Section - At the bottom with helpful hints
+    Uses DRY components: CreateSettingsContainer, CreateCard
 ]]
 
 local addonName, IM = ...
@@ -18,22 +14,14 @@ local DashboardPanel = UI.Panels.Dashboard
 
 -- Store references to dynamic elements for refresh
 local _dynamicElements = {}
-
--- Module-level references for cross-function access
-local _refs = {
-    purgeBtn = nil,
-}
+local _refs = { purgeBtn = nil }
 
 -- Helper to get purge button text based on retention
 local function GetPurgeButtonText(days)
-    if days > 0 then
-        return "Purge >" .. days .. " Days"
-    else
-        return "Purge (N/A)"
-    end
+    return days > 0 and ("Purge >" .. days .. " Days") or "Purge (N/A)"
 end
 
--- Refresh dynamic values (called on show and when data changes)
+-- Refresh dynamic values
 local function RefreshDynamicValues()
     if not _dynamicElements.charCountLabel then return end
 
@@ -68,38 +56,26 @@ local function RefreshDynamicValues()
     _dynamicElements.snapshotLabel:SetText("Characters with inventory data: |cffffd700" .. snapshotCount .. "|r")
 end
 
--- Create the Dashboard settings panel
 function DashboardPanel:Create(parent)
-    -- Create scroll frame for all content (fill mode - resizes with panel)
-    local scrollFrame, content = UI:CreateScrollPanel(parent)
-    local yOffset = 0
+    local scrollFrame, content = UI:CreateSettingsContainer(parent)
 
     -- ============================================================
-    -- FEATURE CARD: Dashboard Overview
+    -- DASHBOARD OVERVIEW CARD
     -- ============================================================
-    local featureCard = UI:CreateFeatureCard(content, yOffset, 80)
+    local mainCard = UI:CreateCard(content, {
+        title = "Dashboard & Tracking",
+        description = "Track gold, transactions, and inventory across all characters.",
+    })
 
-    local featureTitle = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    featureTitle:SetPoint("TOPLEFT", 10, -8)
-    featureTitle:SetText(UI:ColorText("Dashboard & Tracking", "accent"))
-
-    local featureDesc = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    featureDesc:SetPoint("TOPLEFT", 10, -26)
-    featureDesc:SetPoint("RIGHT", featureCard, "RIGHT", -10, 0)
-    featureDesc:SetJustifyH("LEFT")
-    featureDesc:SetText("Track gold, transactions, and inventory across all characters.")
-    featureDesc:SetTextColor(0.9, 0.9, 0.9)
-
-    -- Quick access buttons inside feature card
-    local dashboardBtn = UI:CreateButton(featureCard, "Dashboard", 90, 22)
-    dashboardBtn:SetPoint("BOTTOMLEFT", 10, 8)
+    -- Quick access buttons
+    local btnY = mainCard:AddContent(30)
+    local dashboardBtn = UI:CreateButton(mainCard, "Dashboard", 90, 22)
+    dashboardBtn:SetPoint("TOPLEFT", mainCard, "TOPLEFT", mainCard._leftPadding, btnY)
     dashboardBtn:SetScript("OnClick", function()
-        if IM.UI and IM.UI.Dashboard then
-            IM.UI.Dashboard:Show()
-        end
+        if IM.UI and IM.UI.Dashboard then IM.UI.Dashboard:Show() end
     end)
 
-    local networthBtn = UI:CreateButton(featureCard, "Net Worth", 80, 22)
+    local networthBtn = UI:CreateButton(mainCard, "Net Worth", 80, 22)
     networthBtn:SetPoint("LEFT", dashboardBtn, "RIGHT", 4, 0)
     networthBtn:SetScript("OnClick", function()
         if IM.UI and IM.UI.Dashboard then
@@ -112,7 +88,7 @@ function DashboardPanel:Create(parent)
         end
     end)
 
-    local ledgerBtn = UI:CreateButton(featureCard, "Ledger", 60, 22)
+    local ledgerBtn = UI:CreateButton(mainCard, "Ledger", 60, 22)
     ledgerBtn:SetPoint("LEFT", networthBtn, "RIGHT", 4, 0)
     ledgerBtn:SetScript("OnClick", function()
         if IM.UI and IM.UI.Dashboard then
@@ -125,7 +101,7 @@ function DashboardPanel:Create(parent)
         end
     end)
 
-    local inventoryBtn = UI:CreateButton(featureCard, "Inventory", 70, 22)
+    local inventoryBtn = UI:CreateButton(mainCard, "Inventory", 70, 22)
     inventoryBtn:SetPoint("LEFT", ledgerBtn, "RIGHT", 4, 0)
     inventoryBtn:SetScript("OnClick", function()
         if IM.UI and IM.UI.Dashboard then
@@ -138,20 +114,20 @@ function DashboardPanel:Create(parent)
         end
     end)
 
-    yOffset = yOffset - 90  -- 80 card + 10 padding
+    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- SETTINGS CARD: Ledger Settings
+    -- LEDGER SETTINGS CARD
     -- ============================================================
-    local ledgerHeader = UI:CreateSectionHeader(content, "Ledger Settings")
-    ledgerHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
+    local ledgerCard = UI:CreateCard(content, {
+        title = "Ledger Settings",
+        description = "Configure transaction tracking and data retention.",
+    })
 
-    local ledgerCard = UI:CreateSettingsCard(content, yOffset, 210)  -- Increased for 4 rows of checkboxes
-
-    -- Retention period row
+    -- Retention period dropdown
+    local retentionY = ledgerCard:AddContent(32)
     local retentionLabel = ledgerCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    retentionLabel:SetPoint("TOPLEFT", 10, -10)
+    retentionLabel:SetPoint("TOPLEFT", ledgerCard, "TOPLEFT", ledgerCard._leftPadding, retentionY)
     retentionLabel:SetText("Retention Period:")
     retentionLabel:SetTextColor(unpack(UI.colors.text))
 
@@ -168,7 +144,6 @@ function DashboardPanel:Create(parent)
         { label = "Forever", value = 0 },
     }
 
-    -- Build label lookup to avoid closure capture issues in loop
     local retentionLabels = {}
     for _, opt in ipairs(retentionOptions) do
         retentionLabels[opt.value] = opt.label
@@ -183,18 +158,11 @@ function DashboardPanel:Create(parent)
             info.checked = (currentVal == opt.value)
             info.func = function(self)
                 local selectedValue = self.value
-                local selectedLabel = retentionLabels[selectedValue]
                 IM.db.global.ledger.maxAgeDays = selectedValue
-                UIDropDownMenu_SetText(retentionDropdown, selectedLabel)
-                -- Update purge button via module-level reference
-                -- Note: UI:CreateButton stores text in button.text (FontString), not button:SetText()
+                UIDropDownMenu_SetText(retentionDropdown, retentionLabels[selectedValue])
                 if _refs.purgeBtn and _refs.purgeBtn.text then
                     _refs.purgeBtn.text:SetText(GetPurgeButtonText(selectedValue))
-                    if selectedValue == 0 then
-                        _refs.purgeBtn:Disable()
-                    else
-                        _refs.purgeBtn:Enable()
-                    end
+                    if selectedValue == 0 then _refs.purgeBtn:Disable() else _refs.purgeBtn:Enable() end
                 end
             end
             UIDropDownMenu_AddButton(info)
@@ -202,12 +170,12 @@ function DashboardPanel:Create(parent)
     end
 
     UIDropDownMenu_Initialize(retentionDropdown, RetentionDropdown_Init)
-    local currentRetention = IM.db.global.ledger.maxAgeDays
-    UIDropDownMenu_SetText(retentionDropdown, retentionLabels[currentRetention] or "30 Days")
+    UIDropDownMenu_SetText(retentionDropdown, retentionLabels[IM.db.global.ledger.maxAgeDays] or "30 Days")
 
-    -- Track transaction toggles (2 columns for better spacing)
+    -- Track transaction toggles
+    local trackLabelY = ledgerCard:AddContent(24)
     local trackLabel = ledgerCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    trackLabel:SetPoint("TOPLEFT", 10, -38)
+    trackLabel:SetPoint("TOPLEFT", ledgerCard, "TOPLEFT", ledgerCard._leftPadding, trackLabelY)
     trackLabel:SetText("Track Transactions:")
     trackLabel:SetTextColor(unpack(UI.colors.text))
 
@@ -221,141 +189,122 @@ function DashboardPanel:Create(parent)
         { key = "trackWarbank", label = "Warbank" },
     }
 
-    local trackY = -54
+    local trackY = ledgerCard:AddContent(90)  -- Space for 4 rows of checkboxes
     local col = 0
+    local rowOffset = 0
     for _, opt in ipairs(trackOptions) do
-        local xOffset = 10 + (col * 120)  -- 120px spacing (was 100)
-        local check = UI:CreateCheckbox(ledgerCard, opt.label, IM.db.global.ledger[opt.key], function(self)
-            IM.db.global.ledger[opt.key] = self:GetChecked()
-        end)
-        check:SetPoint("TOPLEFT", ledgerCard, "TOPLEFT", xOffset, trackY)
+        local xOffset = ledgerCard._leftPadding + (col * 120)
+        local check = UI:CreateCheckbox(ledgerCard, opt.label, IM.db.global.ledger[opt.key])
+        check:SetPoint("TOPLEFT", ledgerCard, "TOPLEFT", xOffset, trackY + rowOffset)
         check:SetScale(0.9)
-
+        check.checkbox.OnValueChanged = function(self, value)
+            IM.db.global.ledger[opt.key] = value
+        end
         col = col + 1
-        if col >= 2 then  -- 2 columns (was 3) for better spacing
+        if col >= 2 then
             col = 0
-            trackY = trackY - 22
+            rowOffset = rowOffset - 22
         end
     end
 
-    -- Create purge button and store in module reference table
+    -- Purge and Clear buttons
+    local purgeY = ledgerCard:AddContent(32)
     local retentionDays = IM.db.global.ledger.maxAgeDays or 30
     local purgeBtn = UI:CreateButton(ledgerCard, GetPurgeButtonText(retentionDays), 130, 22)
-    purgeBtn:SetPoint("BOTTOMLEFT", 10, 10)
-    _refs.purgeBtn = purgeBtn  -- Store in module-level table for dropdown callback
+    purgeBtn:SetPoint("TOPLEFT", ledgerCard, "TOPLEFT", ledgerCard._leftPadding, purgeY)
+    _refs.purgeBtn = purgeBtn
     purgeBtn:SetScript("OnClick", function()
         local purged = IM:PurgeOldEntries()
-        if purged and purged > 0 then
-            IM:Print("Purged " .. purged .. " old ledger entries.")
-        else
-            IM:Print("No entries to purge.")
-        end
+        IM:Print(purged and purged > 0 and ("Purged " .. purged .. " old entries.") or "No entries to purge.")
     end)
-    if retentionDays == 0 then
-        purgeBtn:Disable()
-    end
+    if retentionDays == 0 then purgeBtn:Disable() end
 
     local clearLedgerBtn = UI:CreateButton(ledgerCard, "Clear ALL", 90, 22)
     clearLedgerBtn:SetPoint("LEFT", purgeBtn, "RIGHT", 6, 0)
     clearLedgerBtn:SetScript("OnClick", function()
         StaticPopupDialogs["IM_CLEAR_LEDGER"] = {
             text = "Delete ALL ledger history? This cannot be undone.",
-            button1 = "Yes",
-            button2 = "Cancel",
+            button1 = "Yes", button2 = "Cancel",
             OnAccept = function()
                 IM.db.global.transactions.entries = {}
                 IM:Print("All ledger data cleared.")
-                if IM.UI.Dashboard and IM.UI.Dashboard.RefreshContent then
-                    IM.UI.Dashboard:RefreshContent()
-                end
+                if IM.UI.Dashboard and IM.UI.Dashboard.RefreshContent then IM.UI.Dashboard:RefreshContent() end
             end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
+            timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
         }
         StaticPopup_Show("IM_CLEAR_LEDGER")
     end)
 
-    yOffset = yOffset - 220  -- 210 card + 10 padding
+    content:AdvanceY(ledgerCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- SETTINGS CARD: Net Worth Settings
+    -- NET WORTH SETTINGS CARD
     -- ============================================================
-    local networthHeader = UI:CreateSectionHeader(content, "Net Worth Settings")
-    networthHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
+    local networthCard = UI:CreateCard(content, {
+        title = "Net Worth Settings",
+        description = "Manage character tracking data.",
+    })
 
-    local networthCard = UI:CreateSettingsCard(content, yOffset, 110)
-
-    -- Character count (dynamic)
+    -- Dynamic labels
+    local charY = networthCard:AddContent(20)
     local charCountLabel = networthCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    charCountLabel:SetPoint("TOPLEFT", 10, -10)
-    charCountLabel:SetText("Characters tracked: |cffffd7000|r")
+    charCountLabel:SetPoint("TOPLEFT", networthCard, "TOPLEFT", networthCard._leftPadding, charY)
     _dynamicElements.charCountLabel = charCountLabel
 
-    -- Warband bank gold (dynamic)
+    local warbankY = networthCard:AddContent(18)
     local warbankLabel = networthCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    warbankLabel:SetPoint("TOPLEFT", 10, -28)
-    warbankLabel:SetText("Warband Bank Gold: |cffffd7000g|r")
+    warbankLabel:SetPoint("TOPLEFT", networthCard, "TOPLEFT", networthCard._leftPadding, warbankY)
     _dynamicElements.warbankLabel = warbankLabel
 
+    local warbankHintY = networthCard:AddContent(18)
     local warbankHint = networthCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    warbankHint:SetPoint("TOPLEFT", 10, -44)
-    warbankHint:SetText("|cff666666Open the bank to fetch current value|r")
+    warbankHint:SetPoint("TOPLEFT", networthCard, "TOPLEFT", networthCard._leftPadding, warbankHintY)
     _dynamicElements.warbankHint = warbankHint
 
-    -- Clear Net Worth button
+    -- Clear button
+    local clearNWY = networthCard:AddContent(32)
     local clearNetworthBtn = UI:CreateButton(networthCard, "Clear Character Data", 150, 22)
-    clearNetworthBtn:SetPoint("BOTTOMLEFT", 10, 10)
+    clearNetworthBtn:SetPoint("TOPLEFT", networthCard, "TOPLEFT", networthCard._leftPadding, clearNWY)
     clearNetworthBtn:SetScript("OnClick", function()
         StaticPopupDialogs["IM_CLEAR_NETWORTH"] = {
-            text = "Delete ALL character tracking data? This cannot be undone.",
-            button1 = "Yes",
-            button2 = "Cancel",
+            text = "Delete ALL character tracking data?",
+            button1 = "Yes", button2 = "Cancel",
             OnAccept = function()
                 IM.db.global.characters = {}
                 IM.db.global.warbandBankGold = 0
                 IM.db.global.warbandBankGoldUpdated = 0
                 IM:Print("All character tracking data cleared.")
-                if IM.UI.Dashboard and IM.UI.Dashboard.RefreshContent then
-                    IM.UI.Dashboard:RefreshContent()
-                end
+                if IM.UI.Dashboard and IM.UI.Dashboard.RefreshContent then IM.UI.Dashboard:RefreshContent() end
                 RefreshDynamicValues()
             end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
+            timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
         }
         StaticPopup_Show("IM_CLEAR_NETWORTH")
     end)
 
-    yOffset = yOffset - 120
+    content:AdvanceY(networthCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- SETTINGS CARD: Inventory Search Settings
+    -- INVENTORY SEARCH CARD
     -- ============================================================
-    local invHeader = UI:CreateSectionHeader(content, "Inventory Search Settings")
-    invHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
+    local invCard = UI:CreateCard(content, {
+        title = "Inventory Search Settings",
+        description = "Manage inventory snapshot data across characters.",
+    })
 
-    local invCard = UI:CreateSettingsCard(content, yOffset, 100)
-
-    -- Snapshot count (dynamic)
+    local snapY = invCard:AddContent(20)
     local snapshotLabel = invCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    snapshotLabel:SetPoint("TOPLEFT", 10, -10)
-    snapshotLabel:SetText("Characters with inventory data: |cffffd7000|r")
+    snapshotLabel:SetPoint("TOPLEFT", invCard, "TOPLEFT", invCard._leftPadding, snapY)
     _dynamicElements.snapshotLabel = snapshotLabel
 
-    -- Login hint
+    local hintY = invCard:AddContent(18)
     local invHint = invCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    invHint:SetPoint("TOPLEFT", 10, -28)
+    invHint:SetPoint("TOPLEFT", invCard, "TOPLEFT", invCard._leftPadding, hintY)
     invHint:SetText("|cffccaa00Note: Log into each character to scan their inventory.|r")
 
-    -- Rescan and Clear buttons
+    local invBtnY = invCard:AddContent(32)
     local rescanBtn = UI:CreateButton(invCard, "Rescan Current", 120, 22)
-    rescanBtn:SetPoint("BOTTOMLEFT", 10, 10)
+    rescanBtn:SetPoint("TOPLEFT", invCard, "TOPLEFT", invCard._leftPadding, invBtnY)
     rescanBtn:SetScript("OnClick", function()
         if IM.modules.InventorySnapshot then
             IM.modules.InventorySnapshot:RescanCurrentCharacter()
@@ -368,59 +317,39 @@ function DashboardPanel:Create(parent)
     clearInvBtn:SetPoint("LEFT", rescanBtn, "RIGHT", 6, 0)
     clearInvBtn:SetScript("OnClick", function()
         StaticPopupDialogs["IM_CLEAR_INVENTORY"] = {
-            text = "Delete ALL inventory snapshot data? This cannot be undone.",
-            button1 = "Yes",
-            button2 = "Cancel",
+            text = "Delete ALL inventory snapshot data?",
+            button1 = "Yes", button2 = "Cancel",
             OnAccept = function()
                 IM.db.global.inventorySnapshots = {}
                 IM.db.global.warbandBankInventory = { timestamp = 0, items = {} }
                 IM:Print("All inventory snapshot data cleared.")
-                if IM.UI.Dashboard and IM.UI.Dashboard.RefreshContent then
-                    IM.UI.Dashboard:RefreshContent()
-                end
+                if IM.UI.Dashboard and IM.UI.Dashboard.RefreshContent then IM.UI.Dashboard:RefreshContent() end
                 RefreshDynamicValues()
             end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
+            timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
         }
         StaticPopup_Show("IM_CLEAR_INVENTORY")
     end)
 
-    yOffset = yOffset - 110
+    content:AdvanceY(invCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- TIPS SECTION
+    -- TIPS CARD
     -- ============================================================
-    local tipsHeader = UI:CreateSectionHeader(content, "Tips")
-    tipsHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 22
+    local tipsCard = UI:CreateCard(content, {
+        title = "Tips",
+    })
 
-    local tipsText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    tipsText:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    tipsText:SetPoint("RIGHT", content, "RIGHT", -10, 0)
-    tipsText:SetJustifyH("LEFT")
-    tipsText:SetSpacing(2)
-    tipsText:SetText(
-        "|cffaaaaaa" ..
-        "- Bags scan automatically on login and when changed\n" ..
-        "- Bank/Warband bank update when you open them\n" ..
-        "- Ledger tracks gold only, not item transfers (yet)\n" ..
-        "- Use /im or the minimap button to open Dashboard\n" ..
-        "|r"
-    )
+    tipsCard:AddText("- Bags scan automatically on login and when changed")
+    tipsCard:AddText("- Bank/Warband bank update when you open them")
+    tipsCard:AddText("- Ledger tracks gold only, not item transfers (yet)")
+    tipsCard:AddText("- Use /im or the minimap button to open Dashboard")
 
-    yOffset = yOffset - 70
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
 
-    -- Set content height for scroll frame
-    content:SetHeight(math.abs(yOffset) + 20)
+    content:FinalizeHeight()
 
-    -- Refresh dynamic values on scroll frame show
-    scrollFrame:SetScript("OnShow", function()
-        RefreshDynamicValues()
-    end)
-
-    -- Initial refresh
+    -- Refresh on show
+    scrollFrame:SetScript("OnShow", RefreshDynamicValues)
     RefreshDynamicValues()
 end
