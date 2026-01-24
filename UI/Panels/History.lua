@@ -48,7 +48,7 @@ function HistoryPanel:Create(parent)
 
     -- Search bar (dynamic width)
     local searchBox = CreateFrame("EditBox", nil, content, "BackdropTemplate")
-    searchBox:SetHeight(22)
+    searchBox:SetHeight(UI.layout.buttonHeightSmall)
     searchBox:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
     searchBox:SetPoint("RIGHT", content, "RIGHT", -10, 0)
     searchBox:SetFontObject("GameFontNormalSmall")
@@ -57,7 +57,7 @@ function HistoryPanel:Create(parent)
     searchBox:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     searchBox:SetBackdropColor(0.1, 0.1, 0.1, 1)
     searchBox:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -72,7 +72,7 @@ function HistoryPanel:Create(parent)
 
     -- Search icon
     local searchIcon = searchBox:CreateTexture(nil, "OVERLAY")
-    searchIcon:SetSize(12, 12)
+    searchIcon:SetSize(UI.layout.iconSizeSmall - 4, UI.layout.iconSizeSmall - 4)
     searchIcon:SetPoint("RIGHT", -4, 0)
     searchIcon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
 
@@ -108,7 +108,7 @@ function HistoryPanel:Create(parent)
     local listContainer = CreateFrame("Frame", nil, content)
     listContainer:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOffset)
     listContainer:SetPoint("RIGHT", content, "RIGHT", 0, 0)
-    listContainer:SetHeight(10) -- Will be updated dynamically
+    listContainer:SetHeight(UI.layout.listInitialHeight) -- Will be updated dynamically
 
     -- Refresh function
     local function RefreshList()
@@ -143,7 +143,7 @@ function HistoryPanel:Create(parent)
                 local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(entry.itemID)
 
                 local row = CreateFrame("Frame", nil, listContainer, "BackdropTemplate")
-                row:SetHeight(36)
+                row:SetHeight(UI.layout.rowHeightLarge)
                 row:SetPoint("TOPLEFT", listContainer, "TOPLEFT", 10, listYOffset)
                 row:SetPoint("RIGHT", listContainer, "RIGHT", -10, 0)
 
@@ -169,7 +169,7 @@ function HistoryPanel:Create(parent)
 
                 -- Bottom row: Icon, Name, Value
                 local icon = row:CreateTexture(nil, "OVERLAY")
-                icon:SetSize(18, 18)
+                icon:SetSize(UI.layout.iconSize - 2, UI.layout.iconSize - 2)
                 icon:SetPoint("BOTTOMLEFT", 4, 4)
                 icon:SetTexture(itemTexture or "Interface\\Icons\\INV_Misc_QuestionMark")
 
@@ -234,7 +234,7 @@ function HistoryPanel:Create(parent)
             popup:SetBackdrop({
                 bgFile = "Interface\\Buttons\\WHITE8X8",
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
+                edgeSize = UI.layout.borderSize,
             })
             popup:SetBackdropColor(0.1, 0.1, 0.1, 0.95)
             popup:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
