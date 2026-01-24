@@ -16,6 +16,7 @@ local activeTab = nil
 -- Tab definitions
 local tabs = {
     { name = "General", module = "General" },
+    { name = "Bag UI", module = "BagUI" },
     { name = "UI", module = "UI" },
     { name = "Selling", module = "Selling" },
     { name = "Tracking", module = "Dashboard" },      -- Consolidated: Ledger, Net Worth, Inventory settings

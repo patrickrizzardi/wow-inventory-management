@@ -747,6 +747,7 @@ function UI:CreateScrollFrame(parent, width, height, fill)
     local scrollFrame = CreateFrame("ScrollFrame", nil, container)
     scrollFrame:SetPoint("TOPLEFT", 4, -4)
     scrollFrame:SetPoint("BOTTOMRIGHT", -18, 4)
+    scrollFrame:SetClipsChildren(true)  -- CRITICAL: Clip items outside visible area
 
     -- Content frame that gets scrolled
     local content = CreateFrame("Frame", nil, scrollFrame)

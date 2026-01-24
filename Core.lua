@@ -479,7 +479,18 @@ SlashCmdList["INVENTORYMANAGER"] = function(msg)
         else
             IM:Print("MinimapButton module not loaded")
         end
-    elseif cmd == "bags" or cmd == "bagdiag" then
+    elseif cmd == "bags" or cmd == "bag" then
+        -- Toggle custom bag UI
+        if IM.UI and IM.UI.BagUI then
+            local otherAddon = IM.UI.BagUI:GetDetectedBagAddon()
+            if otherAddon then
+                IM:Print("|cffffaa00Note: " .. otherAddon .. " is active - may conflict|r")
+            end
+            IM.UI.BagUI:Toggle()
+        else
+            IM:Print("BagUI module not loaded")
+        end
+    elseif cmd == "bagdiag" then
         -- Run bag integration diagnostics
         if IM.UI and IM.UI.BagIntegration then
             IM.UI.BagIntegration:RunDiagnostics()
@@ -495,6 +506,7 @@ SlashCmdList["INVENTORYMANAGER"] = function(msg)
         IM:Print("  /im - Open settings panel")
         IM:Print("  /im d or /im dashboard - Open dashboard")
         IM:Print("  /im inv or /im inventory - Search inventory")
+        IM:Print("  /im bags - Toggle custom bag UI")
         IM:Print("  /im sell - Trigger auto-sell (at vendor)")
         IM:Print("  /im repair - Trigger repair (at vendor)")
         IM:Print("  /im lock - Lock/unlock hovered item")
@@ -502,7 +514,7 @@ SlashCmdList["INVENTORYMANAGER"] = function(msg)
         IM:Print("  /im status - Show addon status")
         IM:Print("  /im reset [section] - Reset settings")
         IM:Print("  /im minimap - Toggle minimap button")
-        IM:Print("  /im bags - Run bag addon diagnostics")
+        IM:Print("  /im bagdiag - Run bag addon diagnostics")
         IM:Print("  /im refresh - Force refresh bag overlays")
         IM:Print("  /im debug - Toggle debug mode")
         IM:Print("  /im test [type] - Test logging system")
