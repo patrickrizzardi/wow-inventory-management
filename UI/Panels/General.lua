@@ -1,12 +1,7 @@
 --[[
     InventoryManager - UI/Panels/General.lua
-    General settings panel - main feature toggles and UI options.
-
-    Design Standard:
-    - Feature card (amber) at top with description
-    - Settings cards (dark) for grouped options
-    - Tips section at bottom
-    - All elements use dynamic width (TOPLEFT + RIGHT anchoring)
+    General settings panel - main feature toggles and repair options.
+    Uses DRY components: CreateSettingsContainer, CreateCard
 ]]
 
 local addonName, IM = ...
@@ -18,91 +13,78 @@ UI.Panels.General = {}
 local General = UI.Panels.General
 
 function General:Create(parent)
-    -- Create scroll frame for all content (fill mode - resizes with panel)
-    local scrollFrame, content = UI:CreateScrollPanel(parent)
-    local yOffset = 0
+    local scrollFrame, content = UI:CreateSettingsContainer(parent)
 
     -- ============================================================
-    -- FEATURE CARD: Overview
+    -- MAIN FEATURES CARD
     -- ============================================================
-    local featureCard = UI:CreateFeatureCard(content, yOffset, 70)
+    local mainCard = UI:CreateCard(content, {
+        title = "Main Features",
+        description = "Configure auto-sell, auto-repair, and core addon features.",
+    })
 
-    local featureTitle = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    featureTitle:SetPoint("TOPLEFT", 10, -8)
-    featureTitle:SetText(UI:ColorText("InventoryManager Settings", "accent"))
-
-    local featureDesc = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    featureDesc:SetPoint("TOPLEFT", 10, -26)
-    featureDesc:SetPoint("RIGHT", featureCard, "RIGHT", -10, 0)
-    featureDesc:SetJustifyH("LEFT")
-    featureDesc:SetText("Configure auto-sell, auto-repair, UI options, and bag overlays.")
-    featureDesc:SetTextColor(0.9, 0.9, 0.9)
-
-    yOffset = yOffset - 80
-
-    -- ============================================================
-    -- SETTINGS CARD: Main Features
-    -- ============================================================
-    local mainHeader = UI:CreateSectionHeader(content, "Main Features")
-    mainHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
-
-    local mainCard = UI:CreateSettingsCard(content, yOffset, 45)
-
-    local autoRepairCheck = UI:CreateCheckbox(mainCard, "Enable Auto-Repair", IM.db.global.autoRepairEnabled)
-    autoRepairCheck:SetPoint("TOPLEFT", mainCard, "TOPLEFT", 10, -10)
+    local autoRepairCheck = mainCard:AddCheckbox(
+        "Enable Auto-Repair",
+        IM.db.global.autoRepairEnabled,
+        "|cff666666Automatically repair gear when visiting a vendor|r"
+    )
     autoRepairCheck.checkbox.OnValueChanged = function(self, value)
         IM.db.global.autoRepairEnabled = value
         IM:Print("Auto-Repair: " .. (value and "|cff00ff00ENABLED|r" or "|cffff0000DISABLED|r"))
     end
 
-    yOffset = yOffset - 55
+    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- SETTINGS CARD: Repair Options
+    -- REPAIR OPTIONS CARD
     -- ============================================================
-    local repairHeader = UI:CreateSectionHeader(content, "Repair Options")
-    repairHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
+    local repairCard = UI:CreateCard(content, {
+        title = "Repair Options",
+        description = "Configure how auto-repair handles guild and personal funds.",
+    })
 
-    local repairCard = UI:CreateSettingsCard(content, yOffset, 70)
-
-    local guildFundsCheck = UI:CreateCheckbox(repairCard, "Use guild funds first", IM.db.global.repair.useGuildFunds)
-    guildFundsCheck:SetPoint("TOPLEFT", repairCard, "TOPLEFT", 10, -10)
+    local guildFundsCheck = repairCard:AddCheckbox(
+        "Use guild funds first",
+        IM.db.global.repair.useGuildFunds,
+        "|cff666666Try to use guild bank funds before personal gold|r"
+    )
     guildFundsCheck.checkbox.OnValueChanged = function(self, value)
         IM.db.global.repair.useGuildFunds = value
     end
 
-    local fallbackCheck = UI:CreateCheckbox(repairCard, "Fallback to personal gold", IM.db.global.repair.fallbackToPersonal)
-    fallbackCheck:SetPoint("TOPLEFT", repairCard, "TOPLEFT", 10, -35)
+    local fallbackCheck = repairCard:AddCheckbox(
+        "Fallback to personal gold",
+        IM.db.global.repair.fallbackToPersonal,
+        "|cff666666Use personal gold if guild funds unavailable|r"
+    )
     fallbackCheck.checkbox.OnValueChanged = function(self, value)
         IM.db.global.repair.fallbackToPersonal = value
     end
 
-    yOffset = yOffset - 80
+    content:AdvanceY(repairCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- SETTINGS CARD: Developer
+    -- DEVELOPER CARD
     -- ============================================================
-    local devHeader = UI:CreateSectionHeader(content, "Developer")
-    devHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
+    local devCard = UI:CreateCard(content, {
+        title = "Developer",
+        description = "Debug and troubleshooting options.",
+    })
 
-    local devCard = UI:CreateSettingsCard(content, yOffset, 100)
-
-    local debugCheck = UI:CreateCheckbox(devCard, "Enable debug logging", IM.db.global.debug)
-    debugCheck:SetPoint("TOPLEFT", devCard, "TOPLEFT", 10, -10)
+    local debugCheck = devCard:AddCheckbox(
+        "Enable debug logging",
+        IM.db.global.debug,
+        "|cff666666Shows detailed logging in chat for troubleshooting|r"
+    )
     debugCheck.checkbox.OnValueChanged = function(self, value)
         IM.db.global.debug = value
         IM:Print("Debug mode " .. (value and "enabled" or "disabled"))
     end
 
-    local debugHint = devCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    debugHint:SetPoint("TOPLEFT", devCard, "TOPLEFT", 30, -32)
-    debugHint:SetText("|cff666666Shows detailed logging in chat for troubleshooting|r")
-
+    -- Add copy debug log button
+    local btnY = devCard:AddContent(32)
     local copyDebugBtn = UI:CreateButton(devCard, "Copy Debug Log", 120, 24)
-    copyDebugBtn:SetPoint("TOPLEFT", devCard, "TOPLEFT", 10, -58)
+    copyDebugBtn:SetPoint("TOPLEFT", devCard, "TOPLEFT", devCard._leftPadding, btnY)
     copyDebugBtn:SetScript("OnClick", function()
         local text = IM:GetDebugLogString()
         local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
@@ -111,15 +93,15 @@ function General:Create(parent)
         popup:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8X8",
             edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
+            edgeSize = UI.layout.borderSize,
         })
         popup:SetBackdropColor(0.1, 0.1, 0.1, 0.95)
         popup:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
         popup:SetFrameStrata("DIALOG")
 
         local scrollFrame = CreateFrame("ScrollFrame", nil, popup, "UIPanelScrollFrameTemplate")
-        scrollFrame:SetPoint("TOPLEFT", 10, -10)
-        scrollFrame:SetPoint("BOTTOMRIGHT", -30, 35)
+        scrollFrame:SetPoint("TOPLEFT", UI.layout.cardSpacing, -UI.layout.cardSpacing)
+        scrollFrame:SetPoint("BOTTOMRIGHT", -UI.layout.bottomBarHeight, UI.layout.rowHeight + UI.layout.cardSpacing)
 
         local editBox = CreateFrame("EditBox", nil, scrollFrame)
         editBox:SetMultiLine(true)
@@ -130,32 +112,28 @@ function General:Create(parent)
         editBox:HighlightText()
         editBox:SetScript("OnEscapePressed", function() popup:Hide() end)
         editBox:SetScript("OnTextChanged", function(self)
-            -- Calculate height based on line count
             local numLines = select(2, self:GetText():gsub("\n", "\n")) + 1
             local lineHeight = select(2, self:GetFont()) or 12
-            local height = math.max(100, (numLines * lineHeight) + 20)
+            local height = math.max(100, (numLines * lineHeight) + UI.layout.iconSize)
             self:SetHeight(height)
             scrollFrame:SetVerticalScroll(0)
         end)
 
         scrollFrame:SetScrollChild(editBox)
 
+        local closeBtnSize = UI.layout.iconSize - 2
         local closeX = CreateFrame("Button", nil, popup)
-        closeX:SetSize(18, 18)
-        closeX:SetPoint("TOPRIGHT", -6, -6)
+        closeX:SetSize(closeBtnSize, closeBtnSize)
+        closeX:SetPoint("TOPRIGHT", -UI.layout.elementSpacing, -UI.layout.elementSpacing)
         closeX.text = closeX:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         closeX.text:SetPoint("CENTER")
         closeX.text:SetText("|cffff6666X|r")
         closeX:SetScript("OnClick", function() popup:Hide() end)
-        closeX:SetScript("OnEnter", function(self)
-            self.text:SetText("|cffff0000X|r")
-        end)
-        closeX:SetScript("OnLeave", function(self)
-            self.text:SetText("|cffff6666X|r")
-        end)
+        closeX:SetScript("OnEnter", function(self) self.text:SetText("|cffff0000X|r") end)
+        closeX:SetScript("OnLeave", function(self) self.text:SetText("|cffff6666X|r") end)
 
-        local closeBtn = UI:CreateButton(popup, "Close", 60, 22)
-        closeBtn:SetPoint("BOTTOM", 0, 5)
+        local closeBtn = UI:CreateButton(popup, "Close", 60, UI.layout.buttonHeightSmall)
+        closeBtn:SetPoint("BOTTOM", 0, UI.layout.paddingSmall)
         closeBtn:SetScript("OnClick", function() popup:Hide() end)
 
         popup:SetScript("OnKeyDown", function(self, key)
@@ -163,30 +141,20 @@ function General:Create(parent)
         end)
     end)
 
-    yOffset = yOffset - 110
+    content:AdvanceY(devCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- TIPS SECTION
+    -- TIPS CARD
     -- ============================================================
-    local tipsHeader = UI:CreateSectionHeader(content, "Tips")
-    tipsHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 22
+    local tipsCard = UI:CreateCard(content, {
+        title = "Tips",
+    })
 
-    local tipsText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    tipsText:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    tipsText:SetPoint("RIGHT", content, "RIGHT", -10, 0)
-    tipsText:SetJustifyH("LEFT")
-    tipsText:SetSpacing(2)
-    tipsText:SetText(
-        "|cffaaaaaa" ..
-        "- Use /im to open the settings panel\n" ..
-        "- Use /im dashboard to open the Dashboard directly\n" ..
-        "- Overlays update immediately when toggled\n" ..
-        "|r"
-    )
+    tipsCard:AddText("- Use /im to open the settings panel")
+    tipsCard:AddText("- Use /im dashboard to open the Dashboard directly")
+    tipsCard:AddText("- Overlays update immediately when toggled")
 
-    yOffset = yOffset - 60
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
 
-    -- Set content height for scroll frame
-    content:SetHeight(math.abs(yOffset) + 20)
+    content:FinalizeHeight()
 end
