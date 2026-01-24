@@ -531,10 +531,14 @@ See commit history for detailed changes."
     fi
     
     # Create release with zip file
-    if gh release create "$tag" "$zip_file" \
+    local create_output
+    create_output=$(gh release create "$tag" "$zip_file" \
         --title "Release ${version}" \
         --notes "$release_notes" \
-        --verify-tag; then
+        --verify-tag 2>&1)
+    local create_status=$?
+    
+    if [ $create_status -eq 0 ]; then
         echo -e "${GREEN}✓ Created GitHub release ${tag}${NC}"
         echo -e "${GREEN}✓ Uploaded ${zip_file}${NC}"
         
@@ -554,9 +558,35 @@ See commit history for detailed changes."
             fi
         fi
     else
-        echo -e "${YELLOW}Note: Failed to create GitHub release${NC}"
-        echo -e "${YELLOW}You can manually create it at: https://github.com/YOUR_USERNAME/${ADDON_NAME}/releases/new${NC}"
-        return 1
+        # Command failed, but let's check if release actually exists
+        echo -e "${YELLOW}Release command returned error, checking if release exists...${NC}"
+        
+        if gh release view "$tag" &>/dev/null; then
+            echo -e "${GREEN}✓ Release ${tag} exists on GitHub!${NC}"
+            echo -e "${YELLOW}Note: Command reported error but release was created successfully${NC}"
+            
+            # Get release URL
+            local repo_url=$(git remote get-url origin 2>/dev/null)
+            if [ -n "$repo_url" ]; then
+                repo_url=$(echo "$repo_url" | sed 's/git@github.com:/https:\/\/github.com\//' | sed 's/\.git$//')
+                echo ""
+                echo -e "${BLUE}Release URL: ${GREEN}${repo_url}/releases/tag/${tag}${NC}"
+            fi
+        else
+            echo -e "${RED}✗ Failed to create GitHub release${NC}"
+            echo ""
+            echo -e "${YELLOW}Error output:${NC}"
+            echo "$create_output"
+            echo ""
+            echo -e "${YELLOW}Possible issues:${NC}"
+            echo "  - GITHUB_TOKEN may be expired or invalid"
+            echo "  - Token needs 'repo' scope for releases"
+            echo "  - Token may not have access to this repository"
+            echo ""
+            echo -e "${BLUE}Check your token at: https://github.com/settings/tokens${NC}"
+            show_manual_release_instructions "$tag" "$zip_file"
+            return 1
+        fi
     fi
     
     return 0
