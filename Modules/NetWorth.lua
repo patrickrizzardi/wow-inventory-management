@@ -99,6 +99,7 @@ function NetWorth:OnEnable()
     -- Track warband bank gold changes (deposit/withdraw)
     if C_Bank and C_Bank.FetchDepositedMoney then
         -- ACCOUNT_MONEY fires when warband bank gold changes
+        -- Note: WarbandBankTracking module handles the gold updates
         IM:RegisterEvent("ACCOUNT_MONEY", function()
             C_Timer.After(0.2, function()
                 self:UpdateWarbandBankGold()
