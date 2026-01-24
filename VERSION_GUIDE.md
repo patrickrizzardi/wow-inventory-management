@@ -3,10 +3,12 @@
 ## Overview
 This project uses semantic versioning (X.Y.Z) with strict increment rules and full git integration to ensure version consistency and automated releases.
 
+**Important:** Releases must be created from the `main` branch.
+
 ## Current Version
 Check the current version:
 ```bash
-./compress.sh --version
+./publish.sh --version
 # or
 cat VERSION
 ```
@@ -16,12 +18,13 @@ cat VERSION
 ### Interactive Mode
 Simply run:
 ```bash
-./compress.sh
+./publish.sh
 ```
 
 The script will:
-1. **Check git status** - Ensures everything is committed and pushed
-2. Show your current version
+1. **Check you're on the main branch** - Releases should come from main
+2. **Check git status** - Ensures everything is committed and pushed
+3. Show your current version
 3. Suggest valid version increments
 4. Ask you to enter a new version
 5. Validate the version follows the rules
@@ -83,6 +86,7 @@ Summary:
 
 ### Required
 - Git repository with remote configured
+- Must be on `main` branch (or you'll be warned)
 - All changes committed and pushed before running
 
 ### Optional (for GitHub releases)
@@ -96,6 +100,8 @@ Summary:
 Before creating a release, the script enforces:
 
 ### ✅ Must Pass
+- **On main branch** - Releases should come from main (can override with confirmation)
+
 - **No uncommitted changes** - All changes must be committed
   ```bash
   Error: You have uncommitted changes
@@ -119,6 +125,7 @@ Before creating a release, the script enforces:
   ```
 
 ### ⚠️ Warnings (can continue)
+- **Not on main branch** - You can continue but it's recommended to release from main
 - **Untracked files** - You can choose to continue or cancel
 - **No upstream branch** - For new branches without remote tracking
 
@@ -167,6 +174,15 @@ Before creating a release, the script enforces:
 
 ## Troubleshooting
 
+### Wrong Branch Error
+```bash
+# Switch to main branch
+git checkout main
+
+# Then run the script
+./publish.sh
+```
+
 ### Uncommitted Changes Error
 ```bash
 # View what's uncommitted
@@ -177,7 +193,7 @@ git add .
 git commit -m "Description of changes"
 
 # Then run the script again
-./compress.sh
+./publish.sh
 ```
 
 ### Unpushed Commits Error
@@ -186,7 +202,7 @@ git commit -m "Description of changes"
 git push
 
 # Then run the script again
-./compress.sh
+./publish.sh
 ```
 
 ### Tag Already Exists
@@ -199,7 +215,7 @@ git tag -d v1.0.1
 git push origin --delete v1.0.1
 
 # Then run the script again
-./compress.sh
+./publish.sh
 ```
 
 ### GitHub CLI Not Installed
@@ -218,7 +234,7 @@ gh auth login
 ## Help
 View help and examples:
 ```bash
-./compress.sh --help
+./publish.sh --help
 ```
 
 ## Files Managed
