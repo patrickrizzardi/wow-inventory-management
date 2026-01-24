@@ -333,7 +333,11 @@ function MinimapButton:RegisterWithLibDBIcon()
 
                 -- Set our own OnMouseUp handler (fires before OnClick)
                 ldbiButton:SetScript("OnMouseUp", function(self, btn)
-                    if btn == "RightButton" then
+                    if btn == "LeftButton" then
+                        if IM.UI and IM.UI.Config and IM.UI.Config.Toggle then
+                            IM.UI.Config:Toggle()
+                        end
+                    elseif btn == "RightButton" then
                         MinimapButton:ShowMenu(self)
                         return -- Don't propagate
                     end
@@ -342,14 +346,18 @@ function MinimapButton:RegisterWithLibDBIcon()
                     end
                 end)
 
-                -- Also hook OnClick as fallback
+                -- Also hook OnClick as fallback for both buttons
                 ldbiButton:HookScript("OnClick", function(self, btn)
-                    if btn == "RightButton" then
+                    if btn == "LeftButton" then
+                        if IM.UI and IM.UI.Config and IM.UI.Config.Toggle then
+                            IM.UI.Config:Toggle()
+                        end
+                    elseif btn == "RightButton" then
                         MinimapButton:ShowMenu(self)
                     end
                 end)
 
-                IM:Debug("LibDBIcon button hooked for right-click")
+                IM:Debug("LibDBIcon button hooked for left and right-click")
             end
             return true
         end
