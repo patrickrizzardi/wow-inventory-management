@@ -41,6 +41,7 @@ end
 
 --[[
     Calculates optimal layout for categories in a masonry grid.
+    Categories can share rows horizontally (max 2 per row) if they fit within itemsPerRow limit.
     
     @param categories: Array of {name, items} tables
     @param containerWidth: Available width for layout
@@ -72,11 +73,8 @@ function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRo
         rowPadding = rowPadding or 6
     end
     
-    -- Get dynamic sizing
-    local itemSize = self:GetItemSize()
-    local categoryPadding = self:GetCategoryPadding()
-    local rowPadding = self:GetRowPadding()
     local columnGap = categoryPadding * 2  -- Gap between columns (20px)
+    local categoryGapHorizontal = categoryPadding  -- Gap between categories sharing a row
     
     -- Calculate column width
     local totalPadding = categoryPadding * 2  -- Left and right padding
@@ -86,33 +84,62 @@ function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRo
     -- Safety check: ensure positive column width
     if columnWidth <= 0 then
         IM:Debug("[MasonryLayout] WARNING: Invalid column width!")
-        IM:Debug("  containerWidth: " .. tostring(containerWidth))
-        IM:Debug("  columns: " .. tostring(columns))
-        IM:Debug("  categoryPadding: " .. tostring(categoryPadding))
-        IM:Debug("  totalPadding: " .. tostring(totalPadding))
-        IM:Debug("  columnWidth: " .. tostring(columnWidth))
-        
-        -- Emergency fallback: single column with full width
         columns = 1
         columnWidth = containerWidth - (categoryPadding * 2)
     end
     
-    IM:Debug(string.format("[MasonryLayout] Layout: width=%d, cols=%d, colWidth=%d, padding=%d", 
-        containerWidth, columns, columnWidth, categoryPadding))
+    IM:Debug(string.format("[MasonryLayout] Layout: width=%d, cols=%d, colWidth=%d, padding=%d, itemsPerRow=%d", 
+        containerWidth, columns, columnWidth, categoryPadding, itemsPerRow))
     
-    -- Initialize columns (track Y position in each)
-    local columnHeights = {}
+    -- Initialize columns
     local columnData = {}
     for i = 1, columns do
-        columnHeights[i] = 0
         columnData[i] = {}
     end
     
-    -- Place each category in the shortest column
+    -- Group categories that can share rows (max 2 per row, total items <= itemsPerRow)
+    local groups = {}
+    local currentGroup = {}
+    local currentGroupItemCount = 0
+    
     for _, category in ipairs(categories) do
+        local itemCount = #category.items
+        
+        -- Can we add this category to current group?
+        local canAddToGroup = #currentGroup < 2 and 
+                              (currentGroupItemCount + itemCount) <= itemsPerRow
+        
+        if canAddToGroup and #currentGroup > 0 then
+            -- Add to current group
+            table.insert(currentGroup, category)
+            currentGroupItemCount = currentGroupItemCount + itemCount
+        else
+            -- Start new group
+            if #currentGroup > 0 then
+                table.insert(groups, currentGroup)
+            end
+            currentGroup = {category}
+            currentGroupItemCount = itemCount
+        end
+    end
+    
+    -- Don't forget the last group
+    if #currentGroup > 0 then
+        table.insert(groups, currentGroup)
+    end
+    
+    IM:Debug(string.format("[MasonryLayout] Created %d groups from %d categories", #groups, #categories))
+    
+    -- Distribute groups across columns
+    local columnHeights = {}
+    for i = 1, columns do
+        columnHeights[i] = 0
+    end
+    
+    for _, group in ipairs(groups) do
+        -- Find shortest column
         local shortestCol = 1
         local shortestHeight = columnHeights[1]
-        
         for col = 2, columns do
             if columnHeights[col] < shortestHeight then
                 shortestCol = col
@@ -120,28 +147,55 @@ function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRo
             end
         end
         
-        -- Calculate category dimensions
-        local categoryHeight = self:CalculateCategoryHeight(category, columnWidth, itemsPerRow)
+        -- Calculate layout for this group
+        local groupHeight = 0
+        if #group == 1 then
+            -- Single category in group - full width
+            local category = group[1]
+            local categoryHeight = self:CalculateCategoryHeight(category, columnWidth, itemsPerRow)
+            local x = categoryPadding + (shortestCol - 1) * (columnWidth + columnGap)
+            
+            table.insert(columnData[shortestCol], {
+                category = category,
+                x = x,
+                y = -columnHeights[shortestCol],
+                width = columnWidth,
+                height = categoryHeight,
+            })
+            
+            groupHeight = categoryHeight
+        else
+            -- Multiple categories sharing row - split width
+            local numCatsInGroup = #group
+            local categoryWidth = math.floor((columnWidth - (categoryGapHorizontal * (numCatsInGroup - 1))) / numCatsInGroup)
+            
+            for i, category in ipairs(group) do
+                local x = categoryPadding + (shortestCol - 1) * (columnWidth + columnGap) + (i - 1) * (categoryWidth + categoryGapHorizontal)
+                local categoryHeight = self:CalculateCategoryHeight(category, categoryWidth, itemsPerRow)
+                
+                table.insert(columnData[shortestCol], {
+                    category = category,
+                    x = x,
+                    y = -columnHeights[shortestCol],
+                    width = categoryWidth,
+                    height = categoryHeight,
+                })
+                
+                -- Group height is the tallest category in the group
+                if categoryHeight > groupHeight then
+                    groupHeight = categoryHeight
+                end
+            end
+        end
         
-        -- Place category in shortest column
-        local x = categoryPadding + (shortestCol - 1) * (columnWidth + columnGap)
-        
-        IM:Debug(string.format("  Category '%s' -> col %d: x=%d, y=%d, w=%d, h=%d", 
-            category.name, shortestCol, x, -columnHeights[shortestCol], columnWidth, categoryHeight))
-        
-        table.insert(columnData[shortestCol], {
-            category = category,
-            x = x,
-            y = -columnHeights[shortestCol],
-            width = columnWidth,
-            height = categoryHeight,
-        })
+        IM:Debug(string.format("  Group (%d categories) -> col %d: y=%d, h=%d", 
+            #group, shortestCol, -columnHeights[shortestCol], groupHeight))
         
         -- Update column height
-        columnHeights[shortestCol] = columnHeights[shortestCol] + categoryHeight + rowPadding
+        columnHeights[shortestCol] = columnHeights[shortestCol] + groupHeight + rowPadding
     end
     
-    -- Calculate total content height (tallest column)
+    -- Calculate total content height
     local totalHeight = 0
     for _, height in ipairs(columnHeights) do
         if height > totalHeight then
