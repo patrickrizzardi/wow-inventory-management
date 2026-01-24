@@ -1,12 +1,7 @@
 --[[
     InventoryManager - UI/Panels/MailHelper.lua
     Mail helper configuration panel - simplified rule-based mail routing.
-
-    Design Standard:
-    - Feature card (amber) at top with description
-    - Settings cards (dark) for grouped options
-    - Tips section at bottom
-    - All elements use dynamic width (TOPLEFT + RIGHT anchoring)
+    Uses DRY components: CreateSettingsContainer, CreateCard
 ]]
 
 local addonName, IM = ...
@@ -17,105 +12,58 @@ UI.Panels.MailHelper = {}
 
 local MailHelperPanel = UI.Panels.MailHelper
 local _refreshFunc = nil
-
--- Padding constants
 local ROW_HEIGHT = 26
 
 function MailHelperPanel:Create(parent)
-    -- Create scroll frame for all content
-    local scrollFrame, content = UI:CreateScrollPanel(parent)
-    local yOffset = 0
+    local scrollFrame, content = UI:CreateSettingsContainer(parent)
 
     -- ============================================================
-    -- FEATURE CARD: Mail Helper Overview
+    -- CONFIGURATION CARD
     -- ============================================================
-    local featureCard = UI:CreateFeatureCard(content, yOffset, 85)
+    local configCard = UI:CreateCard(content, {
+        title = "Mail Helper",
+        description = "Auto-queue items for mailing to alts based on item class rules.",
+    })
 
-    local featureTitle = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    featureTitle:SetPoint("TOPLEFT", 10, -8)
-    featureTitle:SetText(UI:ColorText("Mail Helper", "accent"))
-
-    local featureDesc = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    featureDesc:SetPoint("TOPLEFT", 10, -28)
-    featureDesc:SetPoint("RIGHT", featureCard, "RIGHT", -10, 0)
-    featureDesc:SetJustifyH("LEFT")
-    featureDesc:SetSpacing(2)
-    featureDesc:SetText(
-        "Auto-queue items for mailing to alts based on item class rules.\n" ..
-        "Rules match items in your bags when you open a mailbox.\n" ..
-        "Items appear in a popup for quick sending."
+    local enableCheck = configCard:AddCheckbox(
+        "Enable Mail Helper",
+        IM.db.global.mailHelper.enabled,
+        "|cff666666Shows popup with matched items when you open a mailbox|r"
     )
-    featureDesc:SetTextColor(0.9, 0.9, 0.9)
-
-    yOffset = yOffset - 95
-
-    -- ============================================================
-    -- SETTINGS CARD: Enable/Disable
-    -- ============================================================
-    local enableHeader = UI:CreateSectionHeader(content, "Configuration")
-    enableHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
-
-    local enableCard = UI:CreateSettingsCard(content, yOffset, 45)
-
-    local enableCheck = UI:CreateCheckbox(enableCard, "Enable Mail Helper", IM.db.global.mailHelper.enabled)
-    enableCheck:SetPoint("TOPLEFT", enableCard, "TOPLEFT", 10, -10)
     enableCheck.checkbox.OnValueChanged = function(self, checked)
         IM.db.global.mailHelper.enabled = checked
-
-        -- Rebuild queue (will be empty if disabled)
         if IM.modules.MailHelper then
             IM.modules.MailHelper:AutoFillQueue()
         end
-
-        -- Hide popup if disabling
         if not checked and IM.UI and IM.UI.MailPopup then
             IM.UI.MailPopup:Hide()
         end
-
-        -- Refresh all UI elements
         IM:RefreshAllUI()
     end
 
-    yOffset = yOffset - 55
+    content:AdvanceY(configCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- SETTINGS CARD: Mail Rules
+    -- MAIL RULES CARD (with custom inputs and list)
     -- ============================================================
-    local rulesHeader = UI:CreateSectionHeader(content, "Mail Rules")
-    rulesHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
+    local rulesCard = UI:CreateCard(content, {
+        title = "Mail Rules",
+        description = "Format: classID (e.g., 7 = all tradeskill) or classID_subclassID (e.g., 7_8 = cooking)",
+    })
 
-    -- This card will be dynamically sized based on rules count
-    local rulesCard = UI:CreateSettingsCard(content, yOffset, 200)
-
-    -- Description
-    local rulesDesc = rulesCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    rulesDesc:SetPoint("TOPLEFT", rulesCard, "TOPLEFT", 10, -10)
-    rulesDesc:SetPoint("RIGHT", rulesCard, "RIGHT", -10, 0)
-    rulesDesc:SetJustifyH("LEFT")
-    rulesDesc:SetWordWrap(true)
-    rulesDesc:SetText("|cff888888Format: classID (e.g., 7 = all tradeskill) or classID_subclassID (e.g., 7_8 = cooking)|r")
-
-    local cardYOffset = -32
-
-    -- Input row container
-    local inputContainer = CreateFrame("Frame", nil, rulesCard)
-    inputContainer:SetHeight(56)
-    inputContainer:SetPoint("TOPLEFT", rulesCard, "TOPLEFT", 10, cardYOffset)
-    inputContainer:SetPoint("RIGHT", rulesCard, "RIGHT", -10, 0)
-
-    -- Row 1: Name and Filter inputs
-    local nameInput = CreateFrame("EditBox", nil, inputContainer, "BackdropTemplate")
-    nameInput:SetSize(120, 24)
-    nameInput:SetPoint("TOPLEFT", 0, 0)
+    -- Input row 1: Name and Filter
+    local inputY = rulesCard:AddContent(32)
+    
+    local nameInput = CreateFrame("EditBox", nil, rulesCard, "BackdropTemplate")
+    nameInput:SetSize(UI.layout.inputWidthMedium, UI.layout.rowHeightSmall)
+    nameInput:SetPoint("TOPLEFT", rulesCard, "TOPLEFT", rulesCard._leftPadding, inputY)
     nameInput:SetFontObject("GameFontNormalSmall")
     nameInput:SetAutoFocus(false)
     nameInput:SetMaxLetters(20)
     nameInput:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     nameInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
     nameInput:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -137,17 +85,17 @@ function MailHelperPanel:Create(parent)
     end)
     nameInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
-    -- Filter input
-    local filterInput = CreateFrame("EditBox", nil, inputContainer, "BackdropTemplate")
-    filterInput:SetSize(80, 24)
-    filterInput:SetPoint("LEFT", nameInput, "RIGHT", 6, 0)
+    -- Filter input (next to name)
+    local filterInput = CreateFrame("EditBox", nil, rulesCard, "BackdropTemplate")
+    filterInput:SetSize(UI.layout.inputWidthSmall, UI.layout.rowHeightSmall)
+    filterInput:SetPoint("LEFT", nameInput, "RIGHT", 8, 0)
     filterInput:SetFontObject("GameFontNormalSmall")
     filterInput:SetAutoFocus(false)
     filterInput:SetMaxLetters(10)
     filterInput:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     filterInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
     filterInput:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -169,21 +117,19 @@ function MailHelperPanel:Create(parent)
     end)
     filterInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
-    -- Row 2: Recipient with autocomplete dropdown
-    local recipientContainer = CreateFrame("Frame", nil, inputContainer)
-    recipientContainer:SetSize(180, 24)
-    recipientContainer:SetPoint("TOPLEFT", nameInput, "BOTTOMLEFT", 0, -4)
-
-    local recipientInput = CreateFrame("EditBox", nil, recipientContainer, "BackdropTemplate")
-    recipientInput:SetSize(150, 24)
-    recipientInput:SetPoint("LEFT", 0, 0)
+    -- Input row 2: Recipient with autocomplete
+    local recipY = rulesCard:AddContent(32)
+    
+    local recipientInput = CreateFrame("EditBox", nil, rulesCard, "BackdropTemplate")
+    recipientInput:SetSize(UI.layout.inputWidthLarge - 30, UI.layout.rowHeightSmall)
+    recipientInput:SetPoint("TOPLEFT", rulesCard, "TOPLEFT", rulesCard._leftPadding, recipY)
     recipientInput:SetFontObject("GameFontNormalSmall")
     recipientInput:SetAutoFocus(false)
     recipientInput:SetMaxLetters(30)
     recipientInput:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     recipientInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
     recipientInput:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -195,14 +141,14 @@ function MailHelperPanel:Create(parent)
     recipientPlaceholder:SetText("Recipient Alt Name")
     recipientPlaceholder:SetTextColor(0.4, 0.4, 0.4, 1)
 
-    -- Dropdown button for alt list
-    local dropdownBtn = CreateFrame("Button", nil, recipientContainer, "BackdropTemplate")
-    dropdownBtn:SetSize(24, 24)
+    -- Dropdown button
+    local dropdownBtn = CreateFrame("Button", nil, rulesCard, "BackdropTemplate")
+    dropdownBtn:SetSize(UI.layout.rowHeightSmall, UI.layout.rowHeightSmall)
     dropdownBtn:SetPoint("LEFT", recipientInput, "RIGHT", 2, 0)
     dropdownBtn:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     dropdownBtn:SetBackdropColor(0.15, 0.15, 0.15, 1)
     dropdownBtn:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -212,17 +158,16 @@ function MailHelperPanel:Create(parent)
     dropdownArrow:SetText("v")
     dropdownArrow:SetTextColor(unpack(UI.colors.textDim))
 
-    -- Dropdown menu (lazy created)
     local dropdownMenu = nil
 
     local function ShowAltDropdown(filterText)
         if not dropdownMenu then
-            dropdownMenu = CreateFrame("Frame", nil, recipientContainer, "BackdropTemplate")
+            dropdownMenu = CreateFrame("Frame", nil, rulesCard, "BackdropTemplate")
             dropdownMenu:SetFrameStrata("TOOLTIP")
             dropdownMenu:SetBackdrop({
                 bgFile = "Interface\\Buttons\\WHITE8X8",
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
+                edgeSize = UI.layout.borderSize,
             })
             dropdownMenu:SetBackdropColor(0.1, 0.1, 0.1, 0.98)
             dropdownMenu:SetBackdropBorderColor(unpack(UI.colors.accent))
@@ -230,29 +175,22 @@ function MailHelperPanel:Create(parent)
             dropdownMenu.buttons = {}
         end
 
-        -- Clear existing buttons
-        for _, btn in ipairs(dropdownMenu.buttons) do
-            btn:Hide()
-        end
+        for _, btn in ipairs(dropdownMenu.buttons) do btn:Hide() end
 
-        -- Get filtered alts
         local alts = IM.modules.MailHelper and IM.modules.MailHelper:GetAlts() or {}
         local filter = (filterText or ""):lower()
         local yOff = -2
         local count = 0
-        local maxVisible = 6
 
         for altKey, altData in pairs(alts) do
             local altName = altData.name or altKey:match("^(.+)-") or altKey
-
-            -- Filter by typed text
             if filter == "" or altName:lower():find(filter, 1, true) then
                 count = count + 1
-                if count <= maxVisible then
+                if count <= 6 then
                     local btn = dropdownMenu.buttons[count]
                     if not btn then
                         btn = CreateFrame("Button", nil, dropdownMenu)
-                        btn:SetHeight(20)
+                        btn:SetHeight(UI.layout.iconSize)
                         btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
                         btn.text:SetPoint("LEFT", 6, 0)
                         btn.highlight = btn:CreateTexture(nil, "HIGHLIGHT")
@@ -261,77 +199,54 @@ function MailHelperPanel:Create(parent)
                         btn.highlight:SetAlpha(0.3)
                         dropdownMenu.buttons[count] = btn
                     end
-
                     btn:SetPoint("TOPLEFT", dropdownMenu, "TOPLEFT", 2, yOff)
                     btn:SetPoint("RIGHT", dropdownMenu, "RIGHT", -2, 0)
-
-                    -- Display name with class color if available
                     local displayText = altName
                     if altData.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[altData.class] then
-                        local classColor = RAID_CLASS_COLORS[altData.class]
-                        displayText = classColor:WrapTextInColorCode(altName)
+                        displayText = RAID_CLASS_COLORS[altData.class]:WrapTextInColorCode(altName)
                     end
                     btn.text:SetText(displayText)
-                    btn.text:SetTextColor(unpack(UI.colors.text))
-
                     btn.altKey = altKey
                     btn:SetScript("OnClick", function(self)
                         recipientInput:SetText(self.altKey)
                         recipientPlaceholder:Hide()
                         dropdownMenu:Hide()
                     end)
-
                     btn:Show()
                     yOff = yOff - 20
                 end
             end
         end
 
-        if count == 0 then
-            dropdownMenu:Hide()
-            return
-        end
-
+        if count == 0 then dropdownMenu:Hide() return end
         dropdownMenu:SetSize(recipientInput:GetWidth(), math.abs(yOff) + 4)
         dropdownMenu:Show()
     end
 
-    -- Dropdown button shows all alts
     dropdownBtn:SetScript("OnClick", function()
-        if dropdownMenu and dropdownMenu:IsShown() then
-            dropdownMenu:Hide()
-        else
-            ShowAltDropdown("")
-        end
+        if dropdownMenu and dropdownMenu:IsShown() then dropdownMenu:Hide()
+        else ShowAltDropdown("") end
     end)
-
     dropdownBtn:SetScript("OnEnter", function(self)
         self:SetBackdropColor(0.25, 0.25, 0.25, 1)
         self:SetBackdropBorderColor(unpack(UI.colors.accent))
     end)
-
     dropdownBtn:SetScript("OnLeave", function(self)
         self:SetBackdropColor(0.15, 0.15, 0.15, 1)
         self:SetBackdropBorderColor(unpack(UI.colors.border))
     end)
 
-    -- EditBox scripts
     recipientInput:SetScript("OnEditFocusGained", function(self)
         recipientPlaceholder:Hide()
         self:SetBackdropBorderColor(unpack(UI.colors.accent))
     end)
-
     recipientInput:SetScript("OnEditFocusLost", function(self)
         if self:GetText() == "" then recipientPlaceholder:Show() end
         self:SetBackdropBorderColor(unpack(UI.colors.border))
-        -- Delay hiding dropdown so click can register
         C_Timer.After(0.15, function()
-            if dropdownMenu and not MouseIsOver(dropdownMenu) then
-                dropdownMenu:Hide()
-            end
+            if dropdownMenu and not MouseIsOver(dropdownMenu) then dropdownMenu:Hide() end
         end)
     end)
-
     recipientInput:SetScript("OnTextChanged", function(self, userInput)
         if userInput then
             local text = self:GetText()
@@ -340,37 +255,31 @@ function MailHelperPanel:Create(parent)
                 if dropdownMenu then dropdownMenu:Hide() end
             else
                 recipientPlaceholder:Hide()
-                -- Show filtered dropdown as user types
                 ShowAltDropdown(text)
             end
         end
     end)
-
     recipientInput:SetScript("OnEscapePressed", function(self)
         self:ClearFocus()
         if dropdownMenu then dropdownMenu:Hide() end
     end)
 
     -- Add button
-    local addBtn = UI:CreateButton(inputContainer, "Add Rule", 70, 24)
-    addBtn:SetPoint("LEFT", recipientContainer, "RIGHT", 6, 0)
+    local addBtn = UI:CreateButton(rulesCard, "Add Rule", 70, 24)
+    addBtn:SetPoint("LEFT", dropdownBtn, "RIGHT", 8, 0)
 
-    cardYOffset = cardYOffset - 64
-
-    -- Rules list container
+    -- Rules list container (inside card)
     local rulesContainer = CreateFrame("Frame", nil, rulesCard)
-    rulesContainer:SetHeight(10)
-    rulesContainer:SetPoint("TOPLEFT", rulesCard, "TOPLEFT", 10, cardYOffset)
-    rulesContainer:SetPoint("RIGHT", rulesCard, "RIGHT", -10, 0)
+    rulesContainer:SetPoint("TOPLEFT", rulesCard, "TOPLEFT", rulesCard._leftPadding, -rulesCard._contentHeight - 8)
+    rulesContainer:SetPoint("RIGHT", rulesCard, "RIGHT", -rulesCard._padding, 0)
+    rulesContainer:SetHeight(UI.layout.listInitialHeight)
 
-    -- "No rules" label
     local noRulesLabel = rulesContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     noRulesLabel:SetPoint("TOPLEFT", 0, 0)
     noRulesLabel:SetText("|cff888888No rules configured. Add one above.|r")
     noRulesLabel:Hide()
 
     local function RefreshRulesList()
-        -- Clear existing children
         for _, child in pairs({rulesContainer:GetChildren()}) do
             child:Hide()
             child:SetParent(nil)
@@ -382,7 +291,6 @@ function MailHelperPanel:Create(parent)
 
         for i, rule in ipairs(rules) do
             hasEntries = true
-
             local row = CreateFrame("Frame", nil, rulesContainer, "BackdropTemplate")
             row:SetHeight(ROW_HEIGHT)
             row:SetPoint("TOPLEFT", 0, listY)
@@ -390,24 +298,23 @@ function MailHelperPanel:Create(parent)
             row:SetBackdrop({
                 bgFile = "Interface\\Buttons\\WHITE8X8",
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
+                edgeSize = UI.layout.borderSize,
             })
             row:SetBackdropColor(0.12, 0.12, 0.12, 1)
             row:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
 
-            -- Enable checkbox (small, inline)
             local enableBox = CreateFrame("CheckButton", nil, row, "BackdropTemplate")
-            enableBox:SetSize(16, 16)
+            enableBox:SetSize(UI.layout.iconSizeSmall, UI.layout.iconSizeSmall)
             enableBox:SetPoint("LEFT", 4, 0)
             enableBox:SetBackdrop({
                 bgFile = "Interface\\Buttons\\WHITE8X8",
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
+                edgeSize = UI.layout.borderSize,
             })
             enableBox:SetBackdropColor(0.1, 0.1, 0.1, 1)
             enableBox:SetBackdropBorderColor(unpack(UI.colors.border))
             enableBox.check = enableBox:CreateTexture(nil, "OVERLAY")
-            enableBox.check:SetSize(12, 12)
+            enableBox.check:SetSize(UI.layout.iconSizeSmall - 4, UI.layout.iconSizeSmall - 4)
             enableBox.check:SetPoint("CENTER")
             enableBox.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
             enableBox.check:SetShown(rule.enabled)
@@ -415,13 +322,10 @@ function MailHelperPanel:Create(parent)
             enableBox:SetScript("OnClick", function(self)
                 rule.enabled = self:GetChecked()
                 self.check:SetShown(rule.enabled)
-                if IM.modules.MailHelper then
-                    IM.modules.MailHelper:UpdateRule(i, rule)
-                end
+                if IM.modules.MailHelper then IM.modules.MailHelper:UpdateRule(i, rule) end
                 IM:RefreshAllUI()
             end)
 
-            -- Build display text
             local filterText = rule.filterValue or "?"
             local classID, subclassID = (rule.filterValue or ""):match("^(%d+)_(%d+)$")
             if classID and subclassID then
@@ -429,46 +333,34 @@ function MailHelperPanel:Create(parent)
                 local subclassName = GetItemSubClassInfo(tonumber(classID), tonumber(subclassID))
                 if className then
                     filterText = rule.filterValue .. " (" .. className
-                    if subclassName and subclassName ~= "" then
-                        filterText = filterText .. ": " .. subclassName
-                    end
+                    if subclassName and subclassName ~= "" then filterText = filterText .. ": " .. subclassName end
                     filterText = filterText .. ")"
                 end
             else
                 local classIDNum = tonumber(rule.filterValue)
-                if classIDNum then
-                    local className = IM.ITEM_CLASS_NAMES and IM.ITEM_CLASS_NAMES[classIDNum]
-                    if className then
-                        filterText = rule.filterValue .. " (" .. className .. ")"
-                    end
+                if classIDNum and IM.ITEM_CLASS_NAMES and IM.ITEM_CLASS_NAMES[classIDNum] then
+                    filterText = rule.filterValue .. " (" .. IM.ITEM_CLASS_NAMES[classIDNum] .. ")"
                 end
             end
 
             local altName = rule.alt and (rule.alt:match("^(.+)-") or rule.alt) or "?"
-
             local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             label:SetPoint("LEFT", enableBox, "RIGHT", 6, 0)
             label:SetPoint("RIGHT", row, "RIGHT", -30, 0)
             label:SetJustifyH("LEFT")
             label:SetWordWrap(false)
             label:SetText((rule.name or "Unnamed") .. " |cff888888→ " .. altName .. " | " .. filterText .. "|r")
-            label:SetTextColor(unpack(UI.colors.text))
 
-            -- Remove button (red X)
             local removeBtn = CreateFrame("Button", nil, row, "BackdropTemplate")
-            removeBtn:SetSize(22, 22)
+            removeBtn:SetSize(UI.layout.buttonHeightSmall, UI.layout.buttonHeightSmall)
             removeBtn:SetPoint("RIGHT", -2, 0)
             removeBtn:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
             removeBtn:SetBackdropColor(0.3, 0.1, 0.1, 1)
-
             removeBtn.text = removeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             removeBtn.text:SetPoint("CENTER")
             removeBtn.text:SetText("|cffff6666X|r")
-
             removeBtn:SetScript("OnClick", function()
-                if IM.modules.MailHelper then
-                    IM.modules.MailHelper:RemoveRule(i)
-                end
+                if IM.modules.MailHelper then IM.modules.MailHelper:RemoveRule(i) end
                 IM:RefreshAllUI()
             end)
             removeBtn:SetScript("OnEnter", function(self)
@@ -490,126 +382,77 @@ function MailHelperPanel:Create(parent)
             noRulesLabel:Hide()
         end
 
-        rulesContainer:SetHeight(math.max(math.abs(listY), 24))
-
-        -- Update card height dynamically based on rules count
-        local baseHeight = 96 + 24  -- desc + inputs area + padding
-        local rulesHeight = math.max(math.abs(listY), 24)
-        rulesCard:SetHeight(baseHeight + rulesHeight + 10)
-
-        return math.abs(listY)
+        local listHeight = math.max(math.abs(listY), 24)
+        rulesContainer:SetHeight(listHeight)
+        return listHeight
     end
 
-    -- Add button logic
     addBtn:SetScript("OnClick", function()
         local name = nameInput:GetText()
         local filter = filterInput:GetText()
         local recipient = recipientInput:GetText()
 
-        -- Validate filter format
         if filter == "" or not (filter:match("^%d+$") or filter:match("^%d+_%d+$")) then
             IM:Print("Invalid filter. Use classID (e.g., 7) or classID_subclassID (e.g., 7_8)")
             return
         end
-
-        if recipient == "" then
-            IM:Print("Please enter a recipient name")
-            return
-        end
-
-        -- Add realm if not specified
-        if not recipient:find("-") then
-            recipient = recipient .. "-" .. GetRealmName()
-        end
-
+        if recipient == "" then IM:Print("Please enter a recipient name") return end
+        if not recipient:find("-") then recipient = recipient .. "-" .. GetRealmName() end
         if name == "" then name = "Rule " .. (#(IM.modules.MailHelper:GetRules() or {}) + 1) end
 
         if IM.modules.MailHelper then
             IM.modules.MailHelper:AddRule({
-                name = name,
-                alt = recipient,
-                filterType = "classID",
-                filterValue = filter,
-                enabled = true,
+                name = name, alt = recipient, filterType = "classID",
+                filterValue = filter, enabled = true,
             })
-
-            -- Clear inputs
-            nameInput:SetText("")
-            filterInput:SetText("")
-            recipientInput:SetText("")
-            nameInput:ClearFocus()
-            filterInput:ClearFocus()
-            recipientInput:ClearFocus()
-            namePlaceholder:Show()
-            filterPlaceholder:Show()
-            recipientPlaceholder:Show()
-
-            -- Refresh all UI elements
+            nameInput:SetText(""); filterInput:SetText(""); recipientInput:SetText("")
+            nameInput:ClearFocus(); filterInput:ClearFocus(); recipientInput:ClearFocus()
+            namePlaceholder:Show(); filterPlaceholder:Show(); recipientPlaceholder:Show()
             IM:RefreshAllUI()
         end
     end)
 
-    -- Enter key to add
     nameInput:SetScript("OnEnterPressed", function() addBtn:Click() end)
     filterInput:SetScript("OnEnterPressed", function() addBtn:Click() end)
     recipientInput:SetScript("OnEnterPressed", function() addBtn:Click() end)
 
-    -- Initial rules height calc
+    -- Initial list refresh
     local rulesHeight = RefreshRulesList()
-    local initialCardHeight = 96 + 24 + rulesHeight + 10
-    rulesCard:SetHeight(initialCardHeight)
-    yOffset = yOffset - initialCardHeight - 10
+    rulesCard._contentHeight = rulesCard._contentHeight + rulesHeight + 16  -- Add padding
+    rulesCard:SetHeight(rulesCard:GetContentHeight())
+
+    content:AdvanceY(rulesCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- TIPS SECTION
+    -- TIPS CARD
     -- ============================================================
-    local tipsHeader = UI:CreateSectionHeader(content, "Tips")
-    tipsHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 22
+    local tipsCard = UI:CreateCard(content, {
+        title = "Tips",
+    })
 
-    local tipsText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    tipsText:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    tipsText:SetPoint("RIGHT", content, "RIGHT", -10, 0)
-    tipsText:SetJustifyH("LEFT")
-    tipsText:SetSpacing(2)
-    tipsText:SetText(
-        "|cffaaaaaa" ..
-        "- Hover any item to see its Class ID in the tooltip\n" ..
-        "- Look for 'ID:' line (e.g., ID: 7_8 = classID=7, subclassID=8)\n" ..
-        "- Use just classID (e.g., 7) to match ALL items in that category\n" ..
-        "- The popup appears automatically when you open a mailbox\n" ..
-        "|r"
-    )
+    tipsCard:AddText("- Hover any item to see its Class ID in the tooltip")
+    tipsCard:AddText("- Look for 'ID:' line (e.g., ID: 7_8 = classID=7, subclassID=8)")
+    tipsCard:AddText("- Use just classID (e.g., 7) to match ALL items in that category")
+    tipsCard:AddText("- The popup appears automatically when you open a mailbox")
 
-    yOffset = yOffset - 75
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
 
-    -- Set content height
-    content:SetHeight(math.abs(yOffset) + 20)
+    content:FinalizeHeight()
 
     -- Full refresh function
     local function FullRefresh()
         local rulesHeight = RefreshRulesList()
-        local cardHeight = 96 + 24 + rulesHeight + 10
-        rulesCard:SetHeight(cardHeight)
-
-        -- Recalculate total content height
-        local totalHeight = 95 + 24 + 55 + 24 + cardHeight + 10 + 22 + 75 + 20
-        content:SetHeight(totalHeight)
+        -- Recalculate card height: title + desc + inputs (64px) + list + padding
+        rulesCard._contentHeight = 70 + 64 + rulesHeight + 16
+        rulesCard:SetHeight(rulesCard:GetContentHeight())
     end
 
     _refreshFunc = FullRefresh
-
-    -- Auto-refresh when shown
     parent:SetScript("OnShow", FullRefresh)
-
-    -- Initial refresh
     C_Timer.After(0.1, FullRefresh)
-
     MailHelperPanel.Refresh = FullRefresh
 end
 
 function MailHelperPanel:Refresh()
-    if _refreshFunc then
-        _refreshFunc()
-    end
+    if _refreshFunc then _refreshFunc() end
 end

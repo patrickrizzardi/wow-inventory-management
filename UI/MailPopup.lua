@@ -17,11 +17,11 @@ function MailPopup:Create()
 
     local popup = CreateFrame("Frame", "InventoryManagerMailPopup", UIParent, "BackdropTemplate")
     popup:SetSize(280, 200)
-    popup:SetPoint("TOPLEFT", MailFrame or UIParent, "TOPRIGHT", 10, 0)
+    popup:SetPoint("TOPLEFT", MailFrame or UIParent, "TOPRIGHT", UI.layout.cardSpacing, 0)
     popup:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
+        edgeSize = UI.layout.borderSize,
     })
     popup:SetBackdropColor(unpack(UI.colors.background))
     popup:SetBackdropBorderColor(unpack(UI.colors.border))
@@ -39,21 +39,22 @@ function MailPopup:Create()
 
     -- Title bar (inset by 1px for border)
     local titleBar = CreateFrame("Frame", nil, popup, "BackdropTemplate")
-    titleBar:SetHeight(20)
-    titleBar:SetPoint("TOPLEFT", 1, -1)
-    titleBar:SetPoint("TOPRIGHT", -1, -1)
+    titleBar:SetHeight(UI.layout.iconSize)
+    titleBar:SetPoint("TOPLEFT", UI.layout.borderSize, -UI.layout.borderSize)
+    titleBar:SetPoint("TOPRIGHT", -UI.layout.borderSize, -UI.layout.borderSize)
     titleBar:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
     })
-    titleBar:SetBackdropColor(0.15, 0.12, 0.05, 1) -- warm dark amber tint
+    titleBar:SetBackdropColor(unpack(UI.colors.headerBar))
 
     local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    title:SetPoint("LEFT", 6, 0)
+    title:SetPoint("LEFT", UI.layout.elementSpacing, 0)
     title:SetText(UI:ColorText("Mail Helper", "accent"))
 
     -- Close button
+    local closeBtnSize = UI.layout.iconSizeSmall
     local closeBtn = CreateFrame("Button", nil, titleBar)
-    closeBtn:SetSize(16, 16)
+    closeBtn:SetSize(closeBtnSize, closeBtnSize)
     closeBtn:SetPoint("RIGHT", -2, 0)
     closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     closeBtn.text:SetPoint("CENTER")
@@ -64,8 +65,8 @@ function MailPopup:Create()
 
     -- Content area
     local content = CreateFrame("Frame", nil, popup)
-    content:SetPoint("TOPLEFT", 6, -24)
-    content:SetPoint("BOTTOMRIGHT", -6, 30)
+    content:SetPoint("TOPLEFT", UI.layout.elementSpacing, -(UI.layout.iconSize + UI.layout.paddingSmall))
+    content:SetPoint("BOTTOMRIGHT", -UI.layout.elementSpacing, UI.layout.bottomBarHeight)
     popup.content = content
 
     -- Status text (shown when no items)
@@ -77,8 +78,8 @@ function MailPopup:Create()
 
     -- Scroll frame for content
     local scrollFrame = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 0, -18)
-    scrollFrame:SetPoint("BOTTOMRIGHT", -20, 0)
+    scrollFrame:SetPoint("TOPLEFT", 0, -UI.layout.iconSize - 2)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -UI.layout.iconSize, 0)
     popup.scrollFrame = scrollFrame
 
     local scrollContent = CreateFrame("Frame", nil, scrollFrame)
@@ -88,12 +89,12 @@ function MailPopup:Create()
 
     -- Bottom buttons
     local bottomBar = CreateFrame("Frame", nil, popup)
-    bottomBar:SetHeight(26)
-    bottomBar:SetPoint("BOTTOMLEFT", 6, 4)
-    bottomBar:SetPoint("BOTTOMRIGHT", -6, 4)
+    bottomBar:SetHeight(UI.layout.rowHeightSmall + 2)
+    bottomBar:SetPoint("BOTTOMLEFT", UI.layout.elementSpacing, UI.layout.paddingSmall)
+    bottomBar:SetPoint("BOTTOMRIGHT", -UI.layout.elementSpacing, UI.layout.paddingSmall)
 
     -- Add Rules button
-    local addRulesBtn = UI:CreateButton(bottomBar, "Add Rules", 70, 22)
+    local addRulesBtn = UI:CreateButton(bottomBar, "Add Rules", 70, UI.layout.buttonHeightSmall)
     addRulesBtn:SetPoint("LEFT", 0, 0)
     addRulesBtn:SetScript("OnClick", function()
         -- Open InventoryManager to Mail Helper tab
@@ -110,7 +111,7 @@ function MailPopup:Create()
     popup.addRulesBtn = addRulesBtn
 
     -- Send All button
-    local sendAllBtn = UI:CreateButton(bottomBar, "Send All", 65, 22)
+    local sendAllBtn = UI:CreateButton(bottomBar, "Send All", 65, UI.layout.buttonHeightSmall)
     sendAllBtn:SetPoint("RIGHT", 0, 0)
     sendAllBtn:Hide()
     popup.sendAllBtn = sendAllBtn
@@ -160,18 +161,18 @@ function MailPopup:Refresh()
 
             -- Alt header
             local altHeader = CreateFrame("Frame", nil, scrollContent, "BackdropTemplate")
-            altHeader:SetHeight(22)
+            altHeader:SetHeight(UI.layout.buttonHeightSmall)
             altHeader:SetPoint("TOPLEFT", 0, yOffset)
             altHeader:SetPoint("RIGHT", 0, 0)
             altHeader:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
             altHeader:SetBackdropColor(0.15, 0.12, 0.05, 1) -- warm amber tint
 
             local altLabel = altHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            altLabel:SetPoint("LEFT", 4, 0)
+            altLabel:SetPoint("LEFT", UI.layout.paddingSmall, 0)
             altLabel:SetText("|cffffff00" .. altName .. "|r |cff888888(" .. #queueData.items .. " items)|r")
 
             -- Send button for this alt
-            local sendBtn = UI:CreateButton(altHeader, "Send", 40, 18)
+            local sendBtn = UI:CreateButton(altHeader, "Send", 40, UI.layout.iconSize - 2)
             sendBtn:SetPoint("RIGHT", -2, 0)
             sendBtn:SetScript("OnClick", function()
                 if IM.modules.MailHelper then
@@ -183,18 +184,20 @@ function MailPopup:Refresh()
                 end
             end)
 
-            yOffset = yOffset - 24
+            yOffset = yOffset - UI.layout.rowHeightSmall
 
             -- Item rows (show all items)
+            local itemRowHeight = UI.layout.iconSize
+            local iconSize = UI.layout.iconSizeSmall
             for i, queueItem in ipairs(queueData.items) do
                 local itemRow = CreateFrame("Frame", nil, scrollContent)
-                itemRow:SetHeight(20)
-                itemRow:SetPoint("TOPLEFT", 8, yOffset)
-                itemRow:SetPoint("RIGHT", -4, 0)
+                itemRow:SetHeight(itemRowHeight)
+                itemRow:SetPoint("TOPLEFT", UI.layout.padding, yOffset)
+                itemRow:SetPoint("RIGHT", -UI.layout.paddingSmall, 0)
 
                 -- Item icon
                 local icon = itemRow:CreateTexture(nil, "OVERLAY")
-                icon:SetSize(16, 16)
+                icon:SetSize(iconSize, iconSize)
                 icon:SetPoint("LEFT", 0, 0)
                 if queueItem.itemInfo and queueItem.itemInfo.itemID then
                     local _, _, _, _, _, _, _, _, _, itemTexture = GetItemInfo(queueItem.itemInfo.itemID)
@@ -203,8 +206,8 @@ function MailPopup:Refresh()
 
                 -- Item name
                 local itemLabel = itemRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                itemLabel:SetPoint("LEFT", icon, "RIGHT", 4, 0)
-                itemLabel:SetPoint("RIGHT", -4, 0)
+                itemLabel:SetPoint("LEFT", icon, "RIGHT", UI.layout.paddingSmall, 0)
+                itemLabel:SetPoint("RIGHT", -UI.layout.paddingSmall, 0)
                 itemLabel:SetJustifyH("LEFT")
                 local itemText = queueItem.itemInfo and queueItem.itemInfo.itemLink or "Unknown"
                 if queueItem.itemInfo and queueItem.itemInfo.stackCount > 1 then
@@ -212,18 +215,18 @@ function MailPopup:Refresh()
                 end
                 itemLabel:SetText(itemText)
 
-                yOffset = yOffset - 20
+                yOffset = yOffset - itemRowHeight
             end
 
-            yOffset = yOffset - 6 -- Gap between alts
+            yOffset = yOffset - UI.layout.elementSpacing -- Gap between alts
         end
     end
 
     -- Update scroll content height
-    scrollContent:SetHeight(math.abs(yOffset) + 10)
+    scrollContent:SetHeight(math.abs(yOffset) + UI.layout.cardSpacing)
 
     -- Update popup height (max 350)
-    local totalHeight = 80 + math.abs(yOffset)
+    local totalHeight = UI.layout.buttonWidth + math.abs(yOffset)
     _popup:SetHeight(math.min(totalHeight, 350))
 
     -- Show send all button
