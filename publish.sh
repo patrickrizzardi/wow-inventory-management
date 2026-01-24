@@ -514,6 +514,13 @@ Download \`${zip_file}\` and extract it to your WoW AddOns folder.
 - [Changelog](https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/releases)"
     else
         # Fallback to basic release notes
+        if [ -z "$CLAUDE_API_KEY" ]; then
+            echo -e "${YELLOW}⚠ No AI changelog generated (CLAUDE_API_KEY not set)${NC}"
+            echo -e "${BLUE}Tip: Set CLAUDE_API_KEY for automatic AI-generated changelogs${NC}"
+        else
+            echo -e "${YELLOW}⚠ AI changelog generation failed (using basic notes)${NC}"
+        fi
+        
         release_notes="Release version ${version}
 
 ## 📦 Installation
