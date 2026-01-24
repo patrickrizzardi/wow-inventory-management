@@ -1,12 +1,7 @@
 --[[
     InventoryManager - UI/Panels/Currency.lua
-    Currency enhancement info panel - no settings, just describes the feature.
-
-    Design Standard:
-    - Feature card (amber) at top with description
-    - Settings cards (dark) for info sections
-    - Tips section at bottom
-    - All elements use dynamic width (TOPLEFT + RIGHT anchoring)
+    Currency enhancement info panel - describes the search feature.
+    Uses DRY components: CreateSettingsContainer, CreateCard
 ]]
 
 local addonName, IM = ...
@@ -18,75 +13,41 @@ UI.Panels.Currency = {}
 local CurrencyPanel = UI.Panels.Currency
 
 function CurrencyPanel:Create(parent)
-    -- Create scroll frame for all content
-    local scrollFrame, content = UI:CreateScrollPanel(parent)
-    local yOffset = 0
-
-    -- ============================================================
-    -- FEATURE CARD: Currency Search
-    -- ============================================================
-    local featureCard = UI:CreateFeatureCard(content, yOffset, 100)
-
-    local featureTitle = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    featureTitle:SetPoint("TOPLEFT", 10, -8)
-    featureTitle:SetText(UI:ColorText("Currency Search Enhancement", "accent"))
+    local scrollFrame, content = UI:CreateSettingsContainer(parent)
 
     -- Get the character info keybind dynamically
     local charKey = GetBindingKey("TOGGLECHARACTER0") or "C"
 
-    local featureDesc = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    featureDesc:SetPoint("TOPLEFT", 10, -28)
-    featureDesc:SetPoint("RIGHT", featureCard, "RIGHT", -10, 0)
-    featureDesc:SetJustifyH("LEFT")
-    featureDesc:SetSpacing(2)
-    featureDesc:SetText(
-        "Adds a search bar to Blizzard's Currency tab.\n" ..
-        "Open Character Info (|cffffff00" .. charKey .. "|r) > Currency tab to use it.\n" ..
-        "Matching currencies are highlighted, non-matches dimmed."
-    )
-    featureDesc:SetTextColor(0.9, 0.9, 0.9)
+    -- ============================================================
+    -- CURRENCY SEARCH CARD
+    -- ============================================================
+    local featureCard = UI:CreateCard(content, {
+        title = "Currency Search Enhancement",
+        description = "Adds a search bar to Blizzard's Currency tab.",
+    })
 
-    yOffset = yOffset - 110
+    featureCard:AddText("Open Character Info (|cffffff00" .. charKey .. "|r) > Currency tab to use it.")
+    featureCard:AddText("Matching currencies are highlighted, non-matches dimmed.")
+    featureCard:AddText(" ", 8)  -- Spacer (keep explicit height)
+    featureCard:AddText("|cff888888This feature has no configurable settings.|r")
+    featureCard:AddText("|cff888888It automatically enhances the default Currency UI.|r")
+
+    content:AdvanceY(featureCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- SETTINGS CARD: No Settings Notice
+    -- TIPS CARD
     -- ============================================================
-    local infoHeader = UI:CreateSectionHeader(content, "Configuration")
-    infoHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
+    local tipsCard = UI:CreateCard(content, {
+        title = "Currency Tips",
+    })
 
-    local infoCard = UI:CreateSettingsCard(content, yOffset, 50)
+    tipsCard:AddText("- Right-click a currency to link it in chat")
+    tipsCard:AddText("- Some currencies can be transferred between characters")
+    tipsCard:AddText("- Use the backpack checkbox to show currencies on your backpack bar")
 
-    local infoText = infoCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    infoText:SetPoint("CENTER")
-    infoText:SetText("|cff888888This feature has no configurable settings.\nIt automatically enhances the default Currency UI.|r")
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
 
-    yOffset = yOffset - 60
-
-    -- ============================================================
-    -- TIPS SECTION
-    -- ============================================================
-    local tipsHeader = UI:CreateSectionHeader(content, "Currency Tips")
-    tipsHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 22
-
-    local tipsText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    tipsText:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    tipsText:SetPoint("RIGHT", content, "RIGHT", -10, 0)
-    tipsText:SetJustifyH("LEFT")
-    tipsText:SetSpacing(2)
-    tipsText:SetText(
-        "|cffaaaaaa" ..
-        "- Right-click a currency to link it in chat\n" ..
-        "- Some currencies can be transferred between characters\n" ..
-        "- Use the backpack checkbox to show currencies on your backpack bar\n" ..
-        "|r"
-    )
-
-    yOffset = yOffset - 60
-
-    -- Set content height
-    content:SetHeight(math.abs(yOffset) + 20)
+    content:FinalizeHeight()
 end
 
 function CurrencyPanel:Refresh()
