@@ -54,6 +54,12 @@ UI\Config.lua
 UI\OverlayFactory.lua
 UI\BagIntegration.lua
 
+# Custom Bag UI
+UI\BagUI\ItemButton.lua
+UI\BagUI\MasonryLayout.lua
+UI\BagUI\CategoryView.lua
+UI\BagUI\Core.lua
+
 # UI Popups
 UI\MailPopup.lua
 UI\Dashboard.lua
@@ -63,6 +69,7 @@ UI\MinimapButton.lua
 # UI Panels
 UI\Panels\General.lua
 UI\Panels\UI.lua
+UI\Panels\BagUI.lua
 UI\Panels\AutoSell.lua
 UI\Panels\Categories.lua
 UI\Panels\Whitelist.lua
