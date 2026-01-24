@@ -1,12 +1,7 @@
 --[[
     InventoryManager - UI/Panels/Whitelist.lua
     Whitelist (locked items) management panel
-
-    Design Standard:
-    - Feature card (amber) at top with description
-    - Settings cards (dark) for grouped options
-    - Tips section at bottom
-    - All elements use dynamic width (TOPLEFT + RIGHT anchoring)
+    Uses DRY components: CreateSettingsContainer, CreateCard
 ]]
 
 local addonName, IM = ...
@@ -18,131 +13,202 @@ UI.Panels.Whitelist = {}
 local WhitelistPanel = UI.Panels.Whitelist
 
 function WhitelistPanel:Create(parent)
-    -- Create scroll frame for all content
-    local scrollFrame, content = UI:CreateScrollPanel(parent)
-    local yOffset = 0
+    local scrollFrame, content = UI:CreateSettingsContainer(parent)
 
     -- ============================================================
-    -- FEATURE CARD: Locked Items Overview
+    -- LOCKED ITEMS OVERVIEW CARD
     -- ============================================================
-    local featureCard = UI:CreateFeatureCard(content, yOffset, 85)
+    local mainCard = UI:CreateCard(content, {
+        title = "Locked Items (Whitelist)",
+        description = "Locked items will never be auto-sold or posted to the Auction House.",
+    })
 
-    local featureTitle = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    featureTitle:SetPoint("TOPLEFT", 10, -8)
-    featureTitle:SetText(UI:ColorText("Locked Items (Whitelist)", "accent"))
+    mainCard:AddText("Alt+Click on any item in your bags to lock/unlock it.")
 
-    local featureDesc = featureCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    featureDesc:SetPoint("TOPLEFT", 10, -28)
-    featureDesc:SetPoint("RIGHT", featureCard, "RIGHT", -10, 0)
-    featureDesc:SetJustifyH("LEFT")
-    featureDesc:SetSpacing(2)
-    featureDesc:SetText(
-        "Locked items will never be auto-sold or posted to the Auction House.\n" ..
-        "Alt+Click on any item in your bags to lock/unlock it."
-    )
-    featureDesc:SetTextColor(0.9, 0.9, 0.9)
-
-    yOffset = yOffset - 95
-
-    -- ============================================================
-    -- SETTINGS CARD: Stats
-    -- ============================================================
-    local statsHeader = UI:CreateSectionHeader(content, "Statistics")
-    statsHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
-
-    local statsCard = UI:CreateSettingsCard(content, yOffset, 40)
-
-    local countLabel = statsCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    countLabel:SetPoint("TOPLEFT", statsCard, "TOPLEFT", 10, -10)
+    -- Stats display
+    local statsY = mainCard:AddContent(24)
+    local countLabel = mainCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    countLabel:SetPoint("TOPLEFT", mainCard, "TOPLEFT", mainCard._leftPadding, statsY)
     countLabel:SetTextColor(unpack(UI.colors.text))
 
     local function UpdateCount()
         local count = IM:GetWhitelistCount()
-        countLabel:SetText("Locked items: " .. count)
+        countLabel:SetText("Locked items: |cffffd700" .. count .. "|r")
     end
     UpdateCount()
 
-    yOffset = yOffset - 50
+    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- SETTINGS CARD: Locked Items List
+    -- LOCKED ITEMS LIST CARD
     -- ============================================================
-    local listHeader = UI:CreateSectionHeader(content, "Locked Items")
-    listHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 24
+    local listCard = UI:CreateCard(content, {
+        title = "Locked Items",
+    })
 
-    -- This card will be dynamically sized based on item count
-    local listCard = UI:CreateSettingsCard(content, yOffset, 200)
+    -- List container (inside card)
+    local listContainer = CreateFrame("Frame", nil, listCard)
+    listContainer:SetPoint("TOPLEFT", listCard, "TOPLEFT", listCard._leftPadding, -listCard._contentHeight - 4)
+    listContainer:SetPoint("RIGHT", listCard, "RIGHT", -listCard._padding, 0)
+    listContainer:SetHeight(UI.layout.listInitialHeight)
 
-    -- Create item list using shared builder
-    local RefreshList, listContainer = UI:CreateItemListBuilder(
-        listCard,
-        IM.db.global.whitelist,
-        "No locked items. Alt+Click items in your bags to lock them.",
-        function(itemID)
-            IM:RemoveFromWhitelist(itemID)
-            local h = RefreshList()
-            listCard:SetHeight(h + 70)
-            UpdateCount()
-            IM:RefreshAllUI()
+    local noItemsLabel = listContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    noItemsLabel:SetPoint("TOPLEFT", 0, 0)
+    noItemsLabel:SetText("|cff888888No locked items. Alt+Click items in your bags to lock them.|r")
+    noItemsLabel:Hide()
+
+    local RefreshList
+
+    local function CreateItemRow(parentContainer, itemID, yOffset, onRemove)
+        local row = CreateFrame("Frame", nil, parentContainer, "BackdropTemplate")
+        row:SetHeight(UI.layout.rowHeight)
+        row:SetPoint("TOPLEFT", 0, yOffset)
+        row:SetPoint("RIGHT", parentContainer, "RIGHT", 0, 0)
+        row:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = UI.layout.borderSize,
+        })
+        row:SetBackdropColor(0.12, 0.12, 0.12, 1)
+        row:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
+
+        -- Item icon
+        local icon = row:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(UI.layout.buttonHeightSmall, UI.layout.buttonHeightSmall)
+        icon:SetPoint("LEFT", 4, 0)
+
+        -- Item name
+        local nameLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nameLabel:SetPoint("LEFT", icon, "RIGHT", 6, 0)
+        nameLabel:SetPoint("RIGHT", row, "RIGHT", -30, 0)
+        nameLabel:SetJustifyH("LEFT")
+        nameLabel:SetWordWrap(false)
+
+        -- Load item info
+        local item = Item:CreateFromItemID(itemID)
+        item:ContinueOnItemLoad(function()
+            local name = item:GetItemName()
+            local quality = item:GetItemQuality()
+            local iconTexture = item:GetItemIcon()
+            
+            icon:SetTexture(iconTexture)
+            if quality and ITEM_QUALITY_COLORS[quality] then
+                local color = ITEM_QUALITY_COLORS[quality]
+                nameLabel:SetText(color.hex .. name .. "|r")
+            else
+                nameLabel:SetText(name or "Loading...")
+            end
+        end)
+
+        -- Remove button
+        local removeBtn = CreateFrame("Button", nil, row, "BackdropTemplate")
+        removeBtn:SetSize(UI.layout.buttonHeightSmall, UI.layout.buttonHeightSmall)
+        removeBtn:SetPoint("RIGHT", -2, 0)
+        removeBtn:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
+        removeBtn:SetBackdropColor(0.3, 0.1, 0.1, 1)
+        removeBtn.text = removeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        removeBtn.text:SetPoint("CENTER")
+        removeBtn.text:SetText("|cffff6666X|r")
+        removeBtn:SetScript("OnClick", function()
+            onRemove(itemID)
+        end)
+        removeBtn:SetScript("OnEnter", function(self)
+            self:SetBackdropColor(0.5, 0.1, 0.1, 1)
+            self.text:SetText("|cffff0000X|r")
+        end)
+        removeBtn:SetScript("OnLeave", function(self)
+            self:SetBackdropColor(0.3, 0.1, 0.1, 1)
+            self.text:SetText("|cffff6666X|r")
+        end)
+
+        return row
+    end
+
+    RefreshList = function()
+        for _, child in pairs({listContainer:GetChildren()}) do
+            child:Hide()
+            child:SetParent(nil)
         end
-    )
 
-    -- Clear button at bottom of list card
+        local yOff = 0
+        local hasEntries = false
+
+        for itemID, _ in pairs(IM.db.global.whitelist or {}) do
+            hasEntries = true
+            CreateItemRow(listContainer, itemID, yOff, function(id)
+                IM:RemoveFromWhitelist(id)
+                RefreshList()
+                UpdateCount()
+                IM:RefreshAllUI()
+            end)
+            yOff = yOff - 30
+        end
+
+        if not hasEntries then
+            noItemsLabel:Show()
+            yOff = -24
+        else
+            noItemsLabel:Hide()
+        end
+
+        local listHeight = math.max(math.abs(yOff), 24)
+        listContainer:SetHeight(listHeight)
+        return listHeight
+    end
+
+    -- Initial list refresh - must happen before button positioning
+    local listHeight = RefreshList()
+    listCard._contentHeight = listCard._contentHeight + listHeight + 12
+
+    -- Clear button (positioned after list)
     local clearBtn = UI:CreateButton(listCard, "Clear All", 80, 24)
-    clearBtn:SetPoint("TOPLEFT", listContainer, "BOTTOMLEFT", 10, -10)
+    clearBtn:SetPoint("TOPLEFT", listContainer, "BOTTOMLEFT", 0, -8)
     clearBtn:SetScript("OnClick", function()
         StaticPopup_Show("INVENTORYMANAGER_CLEAR_WHITELIST")
     end)
 
-    -- Initial list refresh and card sizing
-    local listHeight = RefreshList()
-    local initialCardHeight = listHeight + 70
-    listCard:SetHeight(initialCardHeight)
-    yOffset = yOffset - initialCardHeight - 10
+    -- Add space for button
+    listCard._contentHeight = listCard._contentHeight + 36
+    listCard:SetHeight(listCard:GetContentHeight())
+
+    content:AdvanceY(listCard:GetContentHeight() + UI.layout.spacing)
 
     -- ============================================================
-    -- TIPS SECTION
+    -- TIPS CARD
     -- ============================================================
-    local tipsHeader = UI:CreateSectionHeader(content, "Tips")
-    tipsHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    yOffset = yOffset - 22
+    local tipsCard = UI:CreateCard(content, {
+        title = "Tips",
+    })
 
-    local tipsText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    tipsText:SetPoint("TOPLEFT", content, "TOPLEFT", 10, yOffset)
-    tipsText:SetPoint("RIGHT", content, "RIGHT", -10, 0)
-    tipsText:SetJustifyH("LEFT")
-    tipsText:SetSpacing(2)
-    tipsText:SetText(
-        "|cffaaaaaa" ..
-        "- Alt+Click on items in your bags to quickly lock/unlock them\n" ..
-        "- Locked items show a lock icon overlay in your bags\n" ..
-        "- Locking an item also protects it from AH posting\n" ..
-        "|r"
-    )
+    tipsCard:AddText("- Alt+Click on items in your bags to quickly lock/unlock them")
+    tipsCard:AddText("- Locked items show a red border overlay in your bags")
+    tipsCard:AddText("- Locking an item also protects it from AH posting")
 
-    yOffset = yOffset - 60
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
 
-    -- Set content height
-    content:SetHeight(math.abs(yOffset) + 20)
+    content:FinalizeHeight()
+
+    -- Full refresh function
+    local function FullRefresh()
+        local listHeight = RefreshList()
+        -- Recalculate: title (36) + list + button spacing (8) + button (24) + padding (16)
+        listCard._contentHeight = 36 + listHeight + 8 + 24 + 16
+        listCard:SetHeight(listCard:GetContentHeight())
+        UpdateCount()
+    end
 
     -- Auto-refresh when panel is shown
-    parent:SetScript("OnShow", function()
-        local h = RefreshList()
-        listCard:SetHeight(h + 70)
-    end)
+    parent:SetScript("OnShow", FullRefresh)
 
-    -- Auto-refresh when whitelist changes (Alt+Click in bags)
+    -- Auto-refresh when whitelist changes
     IM:RegisterWhitelistCallback(function(itemID, added)
         if parent:IsVisible() then
-            local h = RefreshList()
-            listCard:SetHeight(h + 70)
+            FullRefresh()
         end
     end)
 
     -- Initial refresh
-    C_Timer.After(0.1, RefreshList)
+    C_Timer.After(0.1, FullRefresh)
 
     -- Clear confirmation popup
     StaticPopupDialogs["INVENTORYMANAGER_CLEAR_WHITELIST"] = {
@@ -153,7 +219,7 @@ function WhitelistPanel:Create(parent)
             if IM.modules.ItemLock then
                 IM.modules.ItemLock:ClearAllLocks()
             end
-            RefreshList()
+            FullRefresh()
         end,
         timeout = 0,
         whileDead = true,
