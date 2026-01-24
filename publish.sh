@@ -7,6 +7,7 @@ ADDON_NAME="InventoryManager"
 VERSION_FILE="VERSION"
 TOC_FILE="${ADDON_NAME}.toc"
 RELEASE_BRANCH="main"  # Change this if your default branch is different (e.g., "master")
+CLAUDE_MODEL="${CLAUDE_MODEL:-claude-haiku-4-5-20251001}"  # Fast model for changelogs
 
 # Color codes for output
 RED='\033[0;31m'
@@ -324,6 +325,121 @@ install_github_cli() {
     fi
 }
 
+# Function to generate AI changelog using Claude
+generate_ai_changelog() {
+    local version=$1
+    local previous_tag=$2
+    
+    # Check if Claude API key is available
+    if [ -z "$CLAUDE_API_KEY" ]; then
+        echo ""
+        return 1
+    fi
+    
+    # Check if jq is available
+    if ! command -v jq &> /dev/null; then
+        echo ""
+        return 1
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Generating AI changelog...${NC}"
+    
+    # Get commit history since last tag
+    local commits
+    if [ -n "$previous_tag" ]; then
+        commits=$(git log "${previous_tag}..HEAD" --pretty=format:"%h - %s (%an)" 2>/dev/null)
+    else
+        # No previous tag - get all commits
+        commits=$(git log --pretty=format:"%h - %s (%an)" 2>/dev/null)
+    fi
+    
+    if [ -z "$commits" ]; then
+        echo -e "${YELLOW}No commits found for changelog${NC}"
+        return 1
+    fi
+    
+    # Get git diff stats
+    local diff_stats
+    if [ -n "$previous_tag" ]; then
+        diff_stats=$(git diff "${previous_tag}..HEAD" --stat 2>/dev/null)
+    else
+        diff_stats=$(git diff --stat 2>/dev/null)
+    fi
+    
+    # Create prompt for Claude
+    local system_msg="You are a changelog generator for a World of Warcraft addon. Create a concise, user-friendly changelog.
+
+Format:
+## What's New in ${version}
+
+### ✨ New Features
+- Feature descriptions (if any)
+
+### 🐛 Bug Fixes
+- Bug fix descriptions (if any)
+
+### ⚙️ Improvements
+- Improvement descriptions (if any)
+
+### 📝 Technical Changes
+- Technical/refactor details (if any, keep brief)
+
+Guidelines:
+- Write for addon users, not developers
+- Focus on user-visible changes
+- Be concise but clear
+- Group similar changes
+- Omit version bump commits and trivial changes
+- Use bullet points
+- If no significant changes in a category, omit that section"
+    
+    local prompt="Commits since ${previous_tag:-initial release}:
+${commits}
+
+Diff stats:
+${diff_stats}
+
+Generate a user-friendly changelog for version ${version}."
+    
+    # Create JSON payload
+    local temp_json=$(mktemp) || return 1
+    
+    jq -n \
+        --arg model "$CLAUDE_MODEL" \
+        --arg system "$system_msg" \
+        --arg prompt "$prompt" \
+        '{
+            "model": $model,
+            "max_tokens": 2000,
+            "system": $system,
+            "messages": [{"role": "user", "content": $prompt}]
+        }' > "$temp_json"
+    
+    # Call Claude API
+    local response
+    response=$(curl -s -X POST \
+        -H "x-api-key: $CLAUDE_API_KEY" \
+        -H "anthropic-version: 2023-06-01" \
+        -H "content-type: application/json" \
+        -d @"$temp_json" \
+        "https://api.anthropic.com/v1/messages")
+    
+    rm "$temp_json"
+    
+    # Extract changelog from response
+    local changelog=$(echo "$response" | jq -r '.content[] | select(.type == "text") | .text' 2>/dev/null)
+    
+    if [ -z "$changelog" ]; then
+        echo -e "${YELLOW}AI changelog generation failed${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓ AI changelog generated${NC}"
+    echo "$changelog"
+    return 0
+}
+
 # Function to create GitHub release (requires gh CLI)
 create_github_release() {
     local version=$1
@@ -362,44 +478,55 @@ create_github_release() {
     echo ""
     echo -e "${BLUE}Creating GitHub release...${NC}"
     
-    # Check if already authenticated
-    # Note: gh commands may still work with GITHUB_TOKEN env var even if auth status fails
-    if ! gh auth status &> /dev/null; then
-        # Check if GITHUB_TOKEN or GH_TOKEN is available
-        if [ -n "$GITHUB_TOKEN" ] || [ -n "$GH_TOKEN" ]; then
-            echo -e "${BLUE}Using GITHUB_TOKEN from environment...${NC}"
-            
-            # Try to authenticate gh CLI for better integration
-            local token="${GITHUB_TOKEN:-$GH_TOKEN}"
-            if echo "$token" | gh auth login --with-token 2>/dev/null; then
-                echo -e "${GREEN}✓ Authenticated gh CLI with token${NC}"
-            else
-                echo -e "${YELLOW}Note: gh auth login failed, but will try release with env token${NC}"
-                # Don't return - gh commands might still work with GITHUB_TOKEN
-            fi
+    # Check if GITHUB_TOKEN or GH_TOKEN is available
+    # gh commands work directly with these env vars without needing gh auth login
+    if [ -n "$GITHUB_TOKEN" ] || [ -n "$GH_TOKEN" ]; then
+        echo -e "${BLUE}Using GITHUB_TOKEN from environment${NC}"
+        # No need to run gh auth login - gh commands work with the env token directly
+    elif ! gh auth status &> /dev/null; then
+        # No token in env and not authenticated
+        echo -e "${YELLOW}GitHub CLI not authenticated and no GITHUB_TOKEN found${NC}"
+        echo ""
+        read -p "Run 'gh auth login' now? (y/N): " DO_LOGIN
+        if [[ "$DO_LOGIN" =~ ^[Yy]$ ]]; then
+            gh auth login
         else
-            echo -e "${YELLOW}GitHub CLI not formally authenticated${NC}"
-            echo ""
-            read -p "Run 'gh auth login' now? (y/N): " DO_LOGIN
-            if [[ "$DO_LOGIN" =~ ^[Yy]$ ]]; then
-                gh auth login
-                # Don't check status - just try the release command
-            else
-                echo -e "${YELLOW}Attempting release anyway (may work with env credentials)...${NC}"
-            fi
+            echo -e "${YELLOW}Attempting release anyway...${NC}"
         fi
+    fi
+    
+    # Generate AI changelog if Claude API key is available
+    local previous_tag=$(git describe --tags --abbrev=0 2>/dev/null)
+    local ai_changelog=$(generate_ai_changelog "$version" "$previous_tag")
+    local changelog_status=$?
+    
+    # Build release notes
+    local release_notes
+    if [ $changelog_status -eq 0 ] && [ -n "$ai_changelog" ]; then
+        # AI changelog succeeded
+        release_notes="$ai_changelog
+
+## 📦 Installation
+Download \`${zip_file}\` and extract it to your WoW AddOns folder.
+
+## 🔗 Links
+- [Issues](https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/issues)
+- [Changelog](https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/releases)"
+    else
+        # Fallback to basic release notes
+        release_notes="Release version ${version}
+
+## 📦 Installation
+Download \`${zip_file}\` and extract it to your WoW AddOns folder.
+
+## 📝 Changes
+See commit history for detailed changes."
     fi
     
     # Create release with zip file
     if gh release create "$tag" "$zip_file" \
         --title "Release ${version}" \
-        --notes "Release version ${version}
-
-## Installation
-Download \`${zip_file}\` and extract it to your WoW AddOns folder.
-
-## Changes
-See commit history for detailed changes." \
+        --notes "$release_notes" \
         --verify-tag; then
         echo -e "${GREEN}✓ Created GitHub release ${tag}${NC}"
         echo -e "${GREEN}✓ Uploaded ${zip_file}${NC}"
@@ -409,6 +536,15 @@ See commit history for detailed changes." \
         if [ -n "$release_url" ]; then
             echo ""
             echo -e "${BLUE}Release URL: ${GREEN}${release_url}${NC}"
+        else
+            # Fallback: construct URL from git remote
+            local repo_url=$(git remote get-url origin 2>/dev/null)
+            if [ -n "$repo_url" ]; then
+                # Convert SSH URL to HTTPS
+                repo_url=$(echo "$repo_url" | sed 's/git@github.com:/https:\/\/github.com\//' | sed 's/\.git$//')
+                echo ""
+                echo -e "${BLUE}Release URL: ${GREEN}${repo_url}/releases/tag/${tag}${NC}"
+            fi
         fi
     else
         echo -e "${YELLOW}Note: Failed to create GitHub release${NC}"

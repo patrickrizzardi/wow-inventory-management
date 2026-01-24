@@ -98,6 +98,13 @@ Summary:
   - Or install manually: https://cli.github.com/
   - Without `gh`, you can manually create releases on GitHub
 
+### Optional (for AI-generated changelogs)
+- Claude API Key in your environment
+  - Set `CLAUDE_API_KEY` in your bashrc/zshrc
+  - If available, creates beautiful AI-generated changelogs automatically
+  - Falls back to basic release notes if not available
+  - Uses Claude Haiku (fast and cost-effective)
+
 ## Git Status Requirements
 
 Before creating a release, the script enforces:
