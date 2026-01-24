@@ -97,13 +97,27 @@ function WarbandBankTracking:OnAccountMoneyChanged()
     -- Calculate delta
     local previousGold = _lastWarbandGold or 0
     local delta = currentGold - previousGold
+    
+    -- DEBUG: Log character gold BEFORE
+    local charGoldBefore = GetMoney()
+    IM:Debug("[WarbandBankTracking] === START TRANSACTION ===")
+    IM:Debug("[WarbandBankTracking] Warband: " .. previousGold .. " -> " .. currentGold .. " (delta: " .. delta .. ")")
+    IM:Debug("[WarbandBankTracking] Char gold BEFORE: " .. charGoldBefore)
 
     -- Update reference and save to database
     _lastWarbandGold = currentGold
     IM:SetWarbandBankGold(currentGold)
     
     -- CRITICAL: Update character gold since PLAYER_MONEY might not fire for warband transactions
-    IM:UpdateCharacterGold()
+    -- Use a small delay to ensure GetMoney() returns the updated value
+    C_Timer.After(0.1, function()
+        local charGoldAfter = GetMoney()
+        IM:Debug("[WarbandBankTracking] Char gold AFTER (0.1s delay): " .. charGoldAfter)
+        IM:Debug("[WarbandBankTracking] Char gold changed: " .. (charGoldAfter - charGoldBefore))
+        -- Bypass validation because we KNOW this is a legitimate warband bank transaction
+        IM:UpdateCharacterGold(true)
+        IM:Debug("[WarbandBankTracking] UpdateCharacterGold(bypassValidation=true) called")
+    end)
 
     -- Skip if no meaningful change
     if math.abs(delta) < 1 then
@@ -111,6 +125,9 @@ function WarbandBankTracking:OnAccountMoneyChanged()
     end
 
     IM:Debug("[WarbandBankTracking] Gold changed: " .. previousGold .. " -> " .. currentGold .. " (delta: " .. delta .. ")")
+
+    -- Claim this gold change so UnclaimedGoldTracking doesn't create a duplicate "OTHER OUT" transaction
+    IM:ClaimGoldChange()
 
     if delta > 0 then
         -- Deposit (player put gold INTO warband bank)
@@ -129,6 +146,8 @@ function WarbandBankTracking:OnAccountMoneyChanged()
         })
         IM:Debug("[WarbandBankTracking] Withdrew: " .. IM:FormatMoney(math.abs(delta)))
     end
+    
+    IM:Debug("[WarbandBankTracking] === END TRANSACTION ===")
 end
 
 -- Get last known warband gold
