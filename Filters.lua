@@ -114,6 +114,7 @@ local MISC_SUBCLASS = {
 
 -- Cache for equipment set item IDs
 local equipmentSetItems = {}
+local equipmentSetItemToSets = {}  -- Maps itemID -> array of set names
 local equipmentSetCacheDirty = true
 local equipmentSetLastRefresh = 0
 local EQUIPMENT_SET_THROTTLE = 0.5 -- seconds
@@ -128,15 +129,24 @@ local function _RefreshEquipmentSetCache()
     equipmentSetLastRefresh = now
 
     wipe(equipmentSetItems)
+    wipe(equipmentSetItemToSets)
 
     local setIDs = C_EquipmentSet.GetEquipmentSetIDs()
     local totalItems = 0
     for _, setID in ipairs(setIDs) do
+        local setName = C_EquipmentSet.GetEquipmentSetInfo(setID)
         local itemIDs = C_EquipmentSet.GetItemIDs(setID)
-        if itemIDs then
+        if itemIDs and setName then
             for _, itemID in pairs(itemIDs) do
                 if itemID and itemID > 0 then
                     equipmentSetItems[itemID] = true
+                    
+                    -- Track which sets this item belongs to
+                    if not equipmentSetItemToSets[itemID] then
+                        equipmentSetItemToSets[itemID] = {}
+                    end
+                    table.insert(equipmentSetItemToSets[itemID], setName)
+                    
                     totalItems = totalItems + 1
                 end
             end
@@ -158,6 +168,16 @@ function Filters:IsInEquipmentSet(itemID)
         _RefreshEquipmentSetCache()
     end
     return equipmentSetItems[itemID] == true
+end
+
+-- Get which equipment set(s) an item belongs to
+-- @param itemID number - The item ID to check
+-- @return table|nil - Array of set names, or nil if not in any set
+function Filters:GetEquipmentSets(itemID)
+    if equipmentSetCacheDirty then
+        _RefreshEquipmentSetCache()
+    end
+    return equipmentSetItemToSets[itemID]
 end
 
 -- Check if item is protected by quality (heirloom, legendary, artifact)

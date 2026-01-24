@@ -80,11 +80,16 @@ function ItemButton:CreateButton(index)
     button:SetSize(UI.layout.iconSize + 17, UI.layout.iconSize + 17)  -- Standard item button size (37x37)
     button:Hide()
     
+    -- Hide the blue Battlepay glow texture
+    if button.BattlepayItemTexture then
+        button.BattlepayItemTexture:Hide()
+        button.BattlepayItemTexture:SetAlpha(0)
+    end
+    
     -- Store reference to our bag/slot (for overlay system)
     button._imBagID = nil
     button._imSlotID = nil
     button._imIndex = index
-    button._imTooltipSuppressed = false
     
     -- Hook into Blizzard's secure click handling (no taint)
     -- ContainerFrameItemButtonTemplate handles:
@@ -114,25 +119,6 @@ function ItemButton:CreateButton(index)
         end
         
         -- All other clicks (including right-click) are handled by Blizzard's secure code
-    end)
-    
-    -- Suppress tooltip briefly after button is shown to prevent auto-tooltips on bag open
-    -- Use C_Timer to hide tooltip AFTER Blizzard's OnEnter runs
-    button:HookScript("OnEnter", function(self)
-        if self._imTooltipSuppressed then
-            C_Timer.After(0.01, function()
-                if GameTooltip:IsOwned(self) then
-                    GameTooltip:Hide()
-                    IM:Debug("[ItemButton] Suppressed tooltip for button " .. (self._imIndex or "?"))
-                end
-            end)
-        end
-    end)
-    
-    -- Clear highlight on leave
-    button:HookScript("OnLeave", function(self)
-        self._imTooltipSuppressed = false  -- Allow tooltips on next enter
-        GameTooltip:Hide()
     end)
     
     -- Create overlay frame for our indicators (lock, sell, mail, etc.)
@@ -211,51 +197,37 @@ function ItemButton:SetItem(button, bagID, slotID)
     -- The button's ID must be the slotID
     -- This allows ContainerFrameItemButtonTemplate to work properly
     
-    -- Set button slot ID
-    button:SetID(slotID)
+    -- Get or create virtual bag frame for this bagID
+    -- ContainerFrameItemButtonTemplate requires parent:GetID() == bagID
+    local scrollContent = _parentFrame  -- This is the scrollContent from Initialize
+    scrollContent._imBagFrames = scrollContent._imBagFrames or {}
     
-    -- Create or update parent bag frame
-    -- ContainerFrameItemButtonTemplate expects parent:GetID() to return bagID
-    local parent = button:GetParent()
+    local bagFrame = scrollContent._imBagFrames[bagID]
+    if not bagFrame then
+        -- Create virtual bag frame (tiny, just for ID lookup)
+        bagFrame = CreateFrame("Frame", nil, scrollContent)
+        bagFrame:SetID(bagID)
+        bagFrame:SetSize(1, 1)
+        bagFrame:SetPoint("TOPLEFT")
+        bagFrame:Show()
+        scrollContent._imBagFrames[bagID] = bagFrame
+        IM:Debug("[ItemButton] Created virtual bagFrame for bagID " .. bagID)
+    end
     
-    -- Check if parent is already a virtual bag frame
-    if parent._imBagFrame and parent:GetID() == bagID then
-        -- Already correctly parented to the right bag frame, nothing to do
-    elseif parent._imBagFrame and parent:GetID() ~= bagID then
-        -- Parent is a bag frame but wrong bagID, need to find/create correct one
-        local scrollContent = parent:GetParent()
-        if scrollContent and scrollContent._imBagFrames then
-            local bagFrame = scrollContent._imBagFrames[bagID]
-            if bagFrame then
-                button:SetParent(bagFrame)
-            end
-        end
-    else
-        -- Parent is not a bag frame, need to create bag frame structure
-        local scrollContent = parent
-        scrollContent._imBagFrames = scrollContent._imBagFrames or {}
-        
-        local bagFrame = scrollContent._imBagFrames[bagID]
-        if not bagFrame then
-            -- Create tiny virtual frame just for Blizzard security (bagID lookup)
-            bagFrame = CreateFrame("Frame", "InventoryManagerBag" .. bagID, scrollContent)
-            bagFrame:SetID(bagID)
-            bagFrame._imBagFrame = true
-            bagFrame:SetSize(1, 1)
-            bagFrame:SetPoint("TOPLEFT")
-            
-            scrollContent._imBagFrames[bagID] = bagFrame
-        end
-        
-        -- Reparent button
+    -- Reparent button to correct bag frame
+    if button:GetParent() ~= bagFrame then
         button:SetParent(bagFrame)
+        IM:Debug(string.format("[ItemButton] Reparented button to bagFrame %d (from %s)", 
+            bagID, button:GetParent() and button:GetParent():GetID() or "nil"))
     end
     
-    -- Update Blizzard's button display
-    -- This calls into ContainerFrameItemButtonTemplate's secure code
-    if button.UpdateItemContextMatching then
-        button:UpdateItemContextMatching()
-    end
+    -- CRITICAL: Set the IDs AFTER reparenting
+    -- This ensures ContainerFrameItemButtonTemplate can find the right bag/slot
+    button:SetID(slotID)
+    bagFrame:SetID(bagID)  -- Re-set to make sure it's current
+    
+    IM:Debug(string.format("[ItemButton:SetItem] bag=%d slot=%d, parent:GetID()=%d, button:GetID()=%d", 
+        bagID, slotID, button:GetParent():GetID(), button:GetID()))
     
     -- CRITICAL: Actually set the item texture and info
     -- ContainerFrameItemButtonTemplate needs this data to display properly
@@ -299,14 +271,6 @@ function ItemButton:SetItem(button, bagID, slotID)
         
         -- Show button
         button:Show()
-        
-        -- Brief tooltip suppression to prevent auto-tooltip on bag open (0.1s)
-        button._imTooltipSuppressed = true
-        C_Timer.After(0.1, function()
-            if button then
-                button._imTooltipSuppressed = false
-            end
-        end)
     else
         -- Empty slot
         button:Hide()
@@ -337,10 +301,10 @@ function ItemButton:SetPosition(button, x, y)
     if not button then return end
     
     button:ClearAllPoints()
-    -- Position relative to the actual scrollContent (buttons are parented to virtual bag frames which are children of scrollContent)
-    local scrollContent = _parentFrame and _parentFrame.scrollContent
-    if scrollContent then
-        button:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", x, y)
+    -- Position relative to the scrollContent (buttons are parented to virtual bag frames which are children of scrollContent)
+    -- _parentFrame IS the scrollContent
+    if _parentFrame then
+        button:SetPoint("TOPLEFT", _parentFrame, "TOPLEFT", x, y)
     else
         button:SetPoint("TOPLEFT", x, y)
     end

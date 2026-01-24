@@ -214,9 +214,6 @@ function BagUI:Show()
         self:Create()
     end
 
-    -- Clear any existing tooltips
-    GameTooltip:Hide()
-    
     _bagFrame:Show()
     _isVisible = true
     self:Refresh()
@@ -253,9 +250,6 @@ end
 
 function BagUI:Refresh()
     if not _bagFrame or not _isVisible then return end
-
-    -- Clear any tooltips before refresh
-    GameTooltip:Hide()
 
     self:UpdateGoldDisplay()
     self:UpdateBagSpace()

@@ -159,39 +159,79 @@ function CategoryView:OrganizeByCategory(items)
     local settings = BagUI:GetSettings()
     
     -- Separate equipment set items if enabled
-    local equipmentSetItems = {}
+    local equipmentSetsByName = {}  -- Maps set name -> items
     if settings.showItemSets then
+        IM:Debug("[CategoryView] showItemSets is enabled, checking " .. #items .. " items")
         for _, item in ipairs(items) do
-            if IM.Filters and IM.Filters.IsInEquipmentSet and IM.Filters:IsInEquipmentSet(item.itemID) then
-                table.insert(equipmentSetItems, item)
+            if IM.Filters and IM.Filters.GetEquipmentSets then
+                local sets = IM.Filters:GetEquipmentSets(item.itemID)
+                if sets then
+                    -- Item can be in multiple sets, add to each
+                    for _, setName in ipairs(sets) do
+                        if not equipmentSetsByName[setName] then
+                            equipmentSetsByName[setName] = {}
+                        end
+                        table.insert(equipmentSetsByName[setName], item)
+                        IM:Debug("[CategoryView] Found equipment set item: " .. (item.itemID or "unknown") .. " in set '" .. setName .. "'")
+                    end
+                end
             end
         end
+        
+        local totalSets = 0
+        local totalItems = 0
+        for setName, setItems in pairs(equipmentSetsByName) do
+            totalSets = totalSets + 1
+            totalItems = totalItems + #setItems
+        end
+        IM:Debug("[CategoryView] Found " .. totalItems .. " equipment set items across " .. totalSets .. " sets")
+    else
+        IM:Debug("[CategoryView] showItemSets is DISABLED")
     end
     
-    -- Create "Equipment Sets" category first if we have items
-    if #equipmentSetItems > 0 then
-        local setCategory = {
-            name = "Equipment Sets",
-            items = equipmentSetItems,
-            order = 0,  -- Always first
+    -- Create separate categories for each equipment set
+    -- Sort items within each set by equipment slot
+    local setIndex = 0
+    for setName, setItems in pairs(equipmentSetsByName) do
+        -- Sort items by equipment slot order
+        table.sort(setItems, function(a, b)
+            local _, _, _, equipLocA = C_Item.GetItemInfoInstant(a.itemID)
+            local _, _, _, equipLocB = C_Item.GetItemInfoInstant(b.itemID)
+            local orderA = (equipLocA and SLOT_ORDER_MAP[equipLocA]) or 999
+            local orderB = (equipLocB and SLOT_ORDER_MAP[equipLocB]) or 999
+            return orderA < orderB
+        end)
+        
+        local category = {
+            name = "Set: " .. setName,
+            items = setItems,
+            order = setIndex,  -- Sets always first, ordered by discovery
         }
-        table.insert(categories, setCategory)
-        categoryMap["Equipment Sets"] = setCategory
+        table.insert(categories, category)
+        categoryMap["Set: " .. setName] = category
+        setIndex = setIndex + 1
+        IM:Debug("[CategoryView] Created equipment set category '" .. setName .. "' with " .. #setItems .. " items")
     end
     
     -- Categorize remaining items
     for _, item in ipairs(items) do
         -- Skip if already in equipment set category
-        if settings.showItemSets and IM.Filters and IM.Filters.IsInEquipmentSet and IM.Filters:IsInEquipmentSet(item.itemID) then
-            -- Already in equipment sets category
-        else
+        local skipItem = false
+        if settings.showItemSets and IM.Filters and IM.Filters.GetEquipmentSets then
+            local sets = IM.Filters:GetEquipmentSets(item.itemID)
+            if sets and #sets > 0 then
+                skipItem = true
+            end
+        end
+        
+        if not skipItem then
             local categoryName = self:GetItemCategory(item)
             
             if not categoryMap[categoryName] then
                 local category = {
                     name = categoryName,
                     items = {},
-                    order = self:GetCategoryOrder(categoryName),
+                    order = self:GetCategoryOrder(categoryName) + 100,  -- Regular categories after sets
                 }
                 table.insert(categories, category)
                 categoryMap[categoryName] = category
@@ -212,21 +252,89 @@ end
 function CategoryView:OrganizeBySubcategory(items)
     local categories = {}
     local categoryMap = {}
+    local settings = BagUI:GetSettings()
     
-    for _, item in ipairs(items) do
-        local categoryName = self:GetItemSubcategory(item)
-        
-        if not categoryMap[categoryName] then
-            local category = {
-                name = categoryName,
-                items = {},
-                order = self:GetSubcategoryOrder(categoryName, item),
-            }
-            table.insert(categories, category)
-            categoryMap[categoryName] = category
+    -- Separate equipment set items if enabled
+    local equipmentSetsByName = {}  -- Maps set name -> items
+    if settings.showItemSets then
+        IM:Debug("[CategoryView:Subcategory] showItemSets is enabled, checking " .. #items .. " items")
+        for _, item in ipairs(items) do
+            if IM.Filters and IM.Filters.GetEquipmentSets then
+                local sets = IM.Filters:GetEquipmentSets(item.itemID)
+                if sets then
+                    -- Item can be in multiple sets, add to each
+                    for _, setName in ipairs(sets) do
+                        if not equipmentSetsByName[setName] then
+                            equipmentSetsByName[setName] = {}
+                        end
+                        table.insert(equipmentSetsByName[setName], item)
+                        IM:Debug("[CategoryView:Subcategory] Found equipment set item: " .. (item.itemID or "unknown") .. " in set '" .. setName .. "'")
+                    end
+                end
+            end
         end
         
-        table.insert(categoryMap[categoryName].items, item)
+        local totalSets = 0
+        local totalItems = 0
+        for setName, setItems in pairs(equipmentSetsByName) do
+            totalSets = totalSets + 1
+            totalItems = totalItems + #setItems
+        end
+        IM:Debug("[CategoryView:Subcategory] Found " .. totalItems .. " equipment set items across " .. totalSets .. " sets")
+    else
+        IM:Debug("[CategoryView:Subcategory] showItemSets is DISABLED")
+    end
+    
+    -- Create separate categories for each equipment set
+    -- Sort items within each set by equipment slot
+    local setIndex = 0
+    for setName, setItems in pairs(equipmentSetsByName) do
+        -- Sort items by equipment slot order
+        table.sort(setItems, function(a, b)
+            local _, _, _, equipLocA = C_Item.GetItemInfoInstant(a.itemID)
+            local _, _, _, equipLocB = C_Item.GetItemInfoInstant(b.itemID)
+            local orderA = (equipLocA and SLOT_ORDER_MAP[equipLocA]) or 999
+            local orderB = (equipLocB and SLOT_ORDER_MAP[equipLocB]) or 999
+            return orderA < orderB
+        end)
+        
+        local category = {
+            name = "Set: " .. setName,
+            items = setItems,
+            order = setIndex,  -- Sets always first, ordered by discovery
+        }
+        table.insert(categories, category)
+        categoryMap["Set: " .. setName] = category
+        setIndex = setIndex + 1
+        IM:Debug("[CategoryView:Subcategory] Created equipment set category '" .. setName .. "' with " .. #setItems .. " items")
+    end
+    
+    -- Categorize remaining items
+    for _, item in ipairs(items) do
+        -- Skip if already in equipment set category
+        local skipItem = false
+        if settings.showItemSets and IM.Filters and IM.Filters.GetEquipmentSets then
+            local sets = IM.Filters:GetEquipmentSets(item.itemID)
+            if sets and #sets > 0 then
+                skipItem = true
+            end
+        end
+        
+        if not skipItem then
+            local categoryName = self:GetItemSubcategory(item)
+            
+            if not categoryMap[categoryName] then
+                local category = {
+                    name = categoryName,
+                    items = {},
+                    order = self:GetSubcategoryOrder(categoryName, item) + 100,  -- Regular categories after sets
+                }
+                table.insert(categories, category)
+                categoryMap[categoryName] = category
+            end
+            
+            table.insert(categoryMap[categoryName].items, item)
+        end
     end
     
     -- Sort categories by order
