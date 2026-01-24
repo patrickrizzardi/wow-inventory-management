@@ -577,7 +577,8 @@ function IM:GetCharacterData(charKey)
 end
 
 -- Update character gold snapshot (with validation)
-function IM:UpdateCharacterGold()
+-- @param bypassValidation (optional) Set to true to force update even if value seems suspicious
+function IM:UpdateCharacterGold(bypassValidation)
     local charData = self:GetCharacterData()
 
     -- Guard against early load
@@ -591,7 +592,8 @@ function IM:UpdateCharacterGold()
 
     -- Validation: don't persist if new value is 0 but we had significant gold
     -- This prevents garbage values from early login from being saved
-    if newGold == 0 and oldGold > 10000 then -- More than 1g
+    -- Can be bypassed when we KNOW the value is correct (e.g., warband bank transactions)
+    if not bypassValidation and newGold == 0 and oldGold > 10000 then -- More than 1g
         self:Debug("[NetWorth] Skipping suspicious gold update: 0 (had " .. oldGold .. ")")
         return
     end
@@ -599,6 +601,7 @@ function IM:UpdateCharacterGold()
     charData.gold = newGold
     charData.lastSeen = time()
     charData.level = UnitLevel("player")
+    self:Debug("[NetWorth] Gold updated: " .. newGold .. (bypassValidation and " (validation bypassed)" or ""))
 end
 
 -- Add a transaction to the new ledger system

@@ -5,7 +5,7 @@
 ## Version: 1.1.2
 ## SavedVariables: InventoryManagerDB
 ## IconTexture: Interface\Icons\INV_Misc_Bag_07
-## X-Curse-Project-ID: 
+## X-Curse-Project-ID: 1422035
 
 # Core files
 Core.lua
