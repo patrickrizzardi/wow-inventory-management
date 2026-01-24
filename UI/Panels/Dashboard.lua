@@ -63,20 +63,15 @@ function DashboardPanel:Create(parent)
     -- DASHBOARD OVERVIEW CARD
     -- ============================================================
     local mainCard = UI:CreateCard(content, {
-        title = "Dashboard & Tracking",
+        title = "Tracking",
         description = "Track gold, transactions, and inventory across all characters.",
     })
 
     -- Quick access buttons
     local btnY = mainCard:AddContent(30)
-    local dashboardBtn = UI:CreateButton(mainCard, "Dashboard", 90, 22)
-    dashboardBtn:SetPoint("TOPLEFT", mainCard, "TOPLEFT", mainCard._leftPadding, btnY)
-    dashboardBtn:SetScript("OnClick", function()
-        if IM.UI and IM.UI.Dashboard then IM.UI.Dashboard:Show() end
-    end)
 
     local networthBtn = UI:CreateButton(mainCard, "Net Worth", 80, 22)
-    networthBtn:SetPoint("LEFT", dashboardBtn, "RIGHT", 4, 0)
+    networthBtn:SetPoint("TOPLEFT", mainCard, "TOPLEFT", mainCard._leftPadding, btnY)
     networthBtn:SetScript("OnClick", function()
         if IM.UI and IM.UI.Dashboard then
             IM.UI.Dashboard:Show()
@@ -114,7 +109,7 @@ function DashboardPanel:Create(parent)
         end
     end)
 
-    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- LEDGER SETTINGS CARD
@@ -235,7 +230,7 @@ function DashboardPanel:Create(parent)
         StaticPopup_Show("IM_CLEAR_LEDGER")
     end)
 
-    content:AdvanceY(ledgerCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(ledgerCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- NET WORTH SETTINGS CARD
@@ -282,7 +277,7 @@ function DashboardPanel:Create(parent)
         StaticPopup_Show("IM_CLEAR_NETWORTH")
     end)
 
-    content:AdvanceY(networthCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(networthCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- INVENTORY SEARCH CARD
@@ -331,7 +326,7 @@ function DashboardPanel:Create(parent)
         StaticPopup_Show("IM_CLEAR_INVENTORY")
     end)
 
-    content:AdvanceY(invCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(invCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- TIPS CARD
@@ -345,7 +340,7 @@ function DashboardPanel:Create(parent)
     tipsCard:AddText("- Ledger tracks gold only, not item transfers (yet)")
     tipsCard:AddText("- Use /im or the minimap button to open Dashboard")
 
-    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
     content:FinalizeHeight()
 

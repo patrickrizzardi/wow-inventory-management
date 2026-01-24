@@ -37,7 +37,7 @@ function JunkListPanel:Create(parent)
     end
     UpdateCount()
 
-    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- JUNK ITEMS LIST CARD
@@ -171,7 +171,7 @@ function JunkListPanel:Create(parent)
     listCard._contentHeight = listCard._contentHeight + 36
     listCard:SetHeight(listCard:GetContentHeight())
 
-    content:AdvanceY(listCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(listCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- TIPS CARD
@@ -184,7 +184,7 @@ function JunkListPanel:Create(parent)
     tipsCard:AddText("- Junk items will be auto-sold regardless of quality or value")
     tipsCard:AddText("- Use this for items you never want to keep")
 
-    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
     content:FinalizeHeight()
 

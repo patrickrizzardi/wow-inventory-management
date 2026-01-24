@@ -91,7 +91,7 @@ function CategoriesPanel:Create(parent)
         IM:RefreshAllUI()
     end
 
-    content:AdvanceY(stateCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(stateCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- CUSTOM CATEGORY EXCLUSIONS CARD
@@ -253,7 +253,7 @@ function CategoriesPanel:Create(parent)
     customCard._contentHeight = customCard._contentHeight + listHeight + 16  -- Add bottom padding
     customCard:SetHeight(customCard:GetContentHeight())
 
-    content:AdvanceY(customCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(customCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- TIPS CARD
@@ -266,7 +266,7 @@ function CategoriesPanel:Create(parent)
     tipsCard:AddText("- Use classID alone (e.g., 7) for all items in that category")
     tipsCard:AddText("- Use classID_subclassID (e.g., 7_8) for specific subclasses")
 
-    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
     content:FinalizeHeight()
 

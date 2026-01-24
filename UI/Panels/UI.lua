@@ -52,7 +52,7 @@ function UIPanel:Create(parent)
         IM.db.global.ui.showTooltipInfo = value
     end
 
-    content:AdvanceY(uiCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(uiCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- BAG OVERLAYS CARD
@@ -106,7 +106,7 @@ function UIPanel:Create(parent)
         IM:RefreshBagOverlays()
     end
 
-    content:AdvanceY(overlayCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(overlayCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- TIPS CARD
@@ -120,7 +120,7 @@ function UIPanel:Create(parent)
     tipsCard:AddText("- Tooltip info shows classID_subclassID and lock status")
     tipsCard:AddText("- Minimap button can be hidden if you use /im")
 
-    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
     content:FinalizeHeight()
 end

@@ -33,7 +33,7 @@ function General:Create(parent)
         IM:Print("Auto-Repair: " .. (value and "|cff00ff00ENABLED|r" or "|cffff0000DISABLED|r"))
     end
 
-    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- REPAIR OPTIONS CARD
@@ -61,7 +61,7 @@ function General:Create(parent)
         IM.db.global.repair.fallbackToPersonal = value
     end
 
-    content:AdvanceY(repairCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(repairCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- DEVELOPER CARD
@@ -141,7 +141,7 @@ function General:Create(parent)
         end)
     end)
 
-    content:AdvanceY(devCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(devCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- TIPS CARD
@@ -154,7 +154,7 @@ function General:Create(parent)
     tipsCard:AddText("- Use /im dashboard to open the Dashboard directly")
     tipsCard:AddText("- Overlays update immediately when toggled")
 
-    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
     content:FinalizeHeight()
 end

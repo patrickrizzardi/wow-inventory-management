@@ -32,7 +32,7 @@ function CurrencyPanel:Create(parent)
     featureCard:AddText("|cff888888This feature has no configurable settings.|r")
     featureCard:AddText("|cff888888It automatically enhances the default Currency UI.|r")
 
-    content:AdvanceY(featureCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(featureCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- TIPS CARD
@@ -45,7 +45,7 @@ function CurrencyPanel:Create(parent)
     tipsCard:AddText("- Some currencies can be transferred between characters")
     tipsCard:AddText("- Use the backpack checkbox to show currencies on your backpack bar")
 
-    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
     content:FinalizeHeight()
 end

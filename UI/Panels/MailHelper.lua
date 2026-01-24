@@ -41,7 +41,7 @@ function MailHelperPanel:Create(parent)
         IM:RefreshAllUI()
     end
 
-    content:AdvanceY(configCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(configCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- MAIL RULES CARD (with custom inputs and list)
@@ -55,7 +55,7 @@ function MailHelperPanel:Create(parent)
     local inputY = rulesCard:AddContent(32)
     
     local nameInput = CreateFrame("EditBox", nil, rulesCard, "BackdropTemplate")
-    nameInput:SetSize(UI.layout.inputWidthMedium, UI.layout.rowHeightSmall)
+    nameInput:SetSize(UI.layout.inputWidth, UI.layout.rowHeightSmall)
     nameInput:SetPoint("TOPLEFT", rulesCard, "TOPLEFT", rulesCard._leftPadding, inputY)
     nameInput:SetFontObject("GameFontNormalSmall")
     nameInput:SetAutoFocus(false)
@@ -421,7 +421,7 @@ function MailHelperPanel:Create(parent)
     rulesCard._contentHeight = rulesCard._contentHeight + rulesHeight + 16  -- Add padding
     rulesCard:SetHeight(rulesCard:GetContentHeight())
 
-    content:AdvanceY(rulesCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(rulesCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- TIPS CARD
@@ -435,7 +435,7 @@ function MailHelperPanel:Create(parent)
     tipsCard:AddText("- Use just classID (e.g., 7) to match ALL items in that category")
     tipsCard:AddText("- The popup appears automatically when you open a mailbox")
 
-    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
     content:FinalizeHeight()
 

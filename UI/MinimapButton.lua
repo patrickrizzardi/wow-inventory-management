@@ -76,12 +76,14 @@ function MinimapButton:Create()
 
         if btn == "LeftButton" then
             -- Toggle Settings
-            if IM.UI and IM.UI.Config and IM.UI.Config.Toggle then
-                IM.UI.Config:Toggle()
+            if IM.UI and IM.UI.ToggleConfig then
+                IM.UI:ToggleConfig()
             end
         elseif btn == "RightButton" then
-            -- Show dropdown menu
-            MinimapButton:ShowMenu(self)
+            -- Open Dashboard
+            if IM.UI and IM.UI.Dashboard and IM.UI.Dashboard.Show then
+                IM.UI.Dashboard:Show()
+            end
         end
     end)
 
@@ -110,8 +112,21 @@ function MinimapButton:Create()
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("InventoryManager", 1, 0.84, 0)
         GameTooltip:AddLine(" ")
+        
+        -- Show current net worth if available
+        if IM.modules and IM.modules.NetWorth then
+            local breakdown = IM.modules.NetWorth:GetAccountBreakdown()
+            if breakdown and breakdown.total and breakdown.total.netWorth > 0 then
+                local gold = math.floor(breakdown.total.netWorth / 10000)
+                local silver = math.floor((breakdown.total.netWorth % 10000) / 100)
+                GameTooltip:AddLine(string.format("Net Worth: |cffffd700%s|cffddddddg |cffc0c0c0%02ds|r", 
+                    IM:FormatNumber(gold), silver), 1, 1, 1)
+                GameTooltip:AddLine(" ")
+            end
+        end
+        
         GameTooltip:AddLine("|cffffffffLeft-click:|r Open Settings", 0.8, 0.8, 0.8)
-        GameTooltip:AddLine("|cffffffffRight-click:|r Quick Menu", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("|cffffffffRight-click:|r Open Tracker", 0.8, 0.8, 0.8)
         GameTooltip:AddLine("|cffffffffDrag:|r Move Button", 0.8, 0.8, 0.8)
         GameTooltip:Show()
     end)
@@ -138,89 +153,21 @@ function MinimapButton:Create()
     return button
 end
 
--- Show the dropdown menu
-function MinimapButton:ShowMenu(anchor)
-    local menuFrame = CreateFrame("Frame", "InventoryManagerMinimapMenu", UIParent, "UIDropDownMenuTemplate")
-
-    local function InitMenu(frame, level)
-        level = level or 1
-
-        local info = UIDropDownMenu_CreateInfo()
-
-        -- Settings
-        info.text = "Open Settings"
-        info.notCheckable = true
-        info.func = function()
-            if IM.UI and IM.UI.Config and IM.UI.Config.Show then
-                IM.UI.Config:Show()
-            end
+-- Update the button text with live stats (for LibDataBroker displays)
+function MinimapButton:UpdateText()
+    if not self.dataObj then return end
+    
+    if IM.modules and IM.modules.NetWorth then
+        local breakdown = IM.modules.NetWorth:GetAccountBreakdown()
+        if breakdown and breakdown.total and breakdown.total.netWorth > 0 then
+            local gold = math.floor(breakdown.total.netWorth / 10000)
+            self.dataObj.text = string.format("IM: %s|cffddddddg|r", IM:FormatNumber(gold))
+        else
+            self.dataObj.text = "IM: --"
         end
-        UIDropDownMenu_AddButton(info, level)
-
-        -- Separator
-        info = UIDropDownMenu_CreateInfo()
-        info.text = ""
-        info.notCheckable = true
-        info.disabled = true
-        UIDropDownMenu_AddButton(info, level)
-
-        -- Dashboard - Net Worth
-        info = UIDropDownMenu_CreateInfo()
-        info.text = "Dashboard - Net Worth"
-        info.notCheckable = true
-        info.func = function()
-            if IM.UI and IM.UI.Dashboard then
-                IM.UI.Dashboard:Show()
-                C_Timer.After(0.1, function()
-                    if _G["InventoryManagerDashboard"] and _G["InventoryManagerDashboard"].SelectTab then
-                        _G["InventoryManagerDashboard"].SelectTab("networth")
-                    end
-                end)
-            end
-        end
-        UIDropDownMenu_AddButton(info, level)
-
-        -- Dashboard - Ledger
-        info = UIDropDownMenu_CreateInfo()
-        info.text = "Dashboard - Ledger"
-        info.notCheckable = true
-        info.func = function()
-            if IM.UI and IM.UI.Dashboard then
-                IM.UI.Dashboard:Show()
-                C_Timer.After(0.1, function()
-                    if _G["InventoryManagerDashboard"] and _G["InventoryManagerDashboard"].SelectTab then
-                        _G["InventoryManagerDashboard"].SelectTab("ledger")
-                    end
-                end)
-            end
-        end
-        UIDropDownMenu_AddButton(info, level)
-
-        -- Dashboard - Inventory
-        info = UIDropDownMenu_CreateInfo()
-        info.text = "Dashboard - Inventory"
-        info.notCheckable = true
-        info.func = function()
-            if IM.UI and IM.UI.Dashboard then
-                IM.UI.Dashboard:Show()
-                C_Timer.After(0.1, function()
-                    if _G["InventoryManagerDashboard"] and _G["InventoryManagerDashboard"].SelectTab then
-                        _G["InventoryManagerDashboard"].SelectTab("inventory")
-                    end
-                end)
-            end
-        end
-        UIDropDownMenu_AddButton(info, level)
-
-        -- Close
-        info = UIDropDownMenu_CreateInfo()
-        info.text = "Close"
-        info.notCheckable = true
-        UIDropDownMenu_AddButton(info, level)
+    else
+        self.dataObj.text = "IM"
     end
-
-    UIDropDownMenu_Initialize(menuFrame, InitMenu, "MENU")
-    ToggleDropDownMenu(1, nil, menuFrame, anchor, 0, 0)
 end
 
 -- Show the button
@@ -276,24 +223,43 @@ function MinimapButton:RegisterWithLibDBIcon()
     if LDB and LDBI then
         -- Create a data broker object
         local dataObj = LDB:NewDataObject("InventoryManager", {
-            type = "launcher",
+            type = "data source",  -- Supports both launcher and data display
             icon = 237381,  -- Gold coins icon
+            text = "IM: --",  -- Initial text
             OnClick = function(self, button)
                 if button == "LeftButton" then
-                    if IM.UI and IM.UI.Config and IM.UI.Config.Toggle then
-                        IM.UI.Config:Toggle()
+                    if IM.UI and IM.UI.ToggleConfig then
+                        IM.UI:ToggleConfig()
                     end
                 elseif button == "RightButton" then
-                    MinimapButton:ShowMenu(self)
+                    if IM.UI and IM.UI.Dashboard and IM.UI.Dashboard.Show then
+                        IM.UI.Dashboard:Show()
+                    end
                 end
             end,
             OnTooltipShow = function(tooltip)
                 tooltip:AddLine("InventoryManager", 1, 0.84, 0)
                 tooltip:AddLine(" ")
+                
+                -- Show current net worth if available
+                if IM.modules and IM.modules.NetWorth then
+                    local breakdown = IM.modules.NetWorth:GetAccountBreakdown()
+                    if breakdown and breakdown.total and breakdown.total.netWorth > 0 then
+                        local gold = math.floor(breakdown.total.netWorth / 10000)
+                        local silver = math.floor((breakdown.total.netWorth % 10000) / 100)
+                        tooltip:AddLine(string.format("Net Worth: |cffffd700%s|cffddddddg |cffc0c0c0%02ds|r", 
+                            IM:FormatNumber(gold), silver), 1, 1, 1)
+                        tooltip:AddLine(" ")
+                    end
+                end
+                
                 tooltip:AddLine("|cffffffffLeft-click:|r Open Settings", 0.8, 0.8, 0.8)
-                tooltip:AddLine("|cffffffffRight-click:|r Quick Menu", 0.8, 0.8, 0.8)
+                tooltip:AddLine("|cffffffffRight-click:|r Open Tracker", 0.8, 0.8, 0.8)
             end,
         })
+        
+        -- Store reference for text updates
+        MinimapButton.dataObj = dataObj
 
         -- Register with LibDBIcon
         -- showInCompartment adds button to the Addon Compartment (consolidated button popup)
@@ -334,11 +300,13 @@ function MinimapButton:RegisterWithLibDBIcon()
                 -- Set our own OnMouseUp handler (fires before OnClick)
                 ldbiButton:SetScript("OnMouseUp", function(self, btn)
                     if btn == "LeftButton" then
-                        if IM.UI and IM.UI.Config and IM.UI.Config.Toggle then
-                            IM.UI.Config:Toggle()
+                        if IM.UI and IM.UI.ToggleConfig then
+                            IM.UI:ToggleConfig()
                         end
                     elseif btn == "RightButton" then
-                        MinimapButton:ShowMenu(self)
+                        if IM.UI and IM.UI.Dashboard and IM.UI.Dashboard.Show then
+                            IM.UI.Dashboard:Show()
+                        end
                         return -- Don't propagate
                     end
                     if origOnMouseUp then
@@ -349,11 +317,13 @@ function MinimapButton:RegisterWithLibDBIcon()
                 -- Also hook OnClick as fallback for both buttons
                 ldbiButton:HookScript("OnClick", function(self, btn)
                     if btn == "LeftButton" then
-                        if IM.UI and IM.UI.Config and IM.UI.Config.Toggle then
-                            IM.UI.Config:Toggle()
+                        if IM.UI and IM.UI.ToggleConfig then
+                            IM.UI:ToggleConfig()
                         end
                     elseif btn == "RightButton" then
-                        MinimapButton:ShowMenu(self)
+                        if IM.UI and IM.UI.Dashboard and IM.UI.Dashboard.Show then
+                            IM.UI.Dashboard:Show()
+                        end
                     end
                 end)
 
@@ -381,4 +351,14 @@ IM:RegisterEvent("PLAYER_LOGIN", function()
         -- Fall back to our custom button
         MinimapButton:Create()
     end
+    
+    -- Update text every 5 seconds for LDB displays
+    C_Timer.NewTicker(5, function()
+        MinimapButton:UpdateText()
+    end)
+    
+    -- Initial update after a delay (let NetWorth module initialize)
+    C_Timer.After(2, function()
+        MinimapButton:UpdateText()
+    end)
 end)

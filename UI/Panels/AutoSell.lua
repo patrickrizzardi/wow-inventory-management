@@ -48,7 +48,7 @@ function AutoSellPanel:Create(parent)
         IM:Print("Auto-Sell: " .. (value and "|cff00ff00ENABLED|r" or "|cffff0000DISABLED|r"))
     end
 
-    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- FILTER SETTINGS CARD
@@ -107,7 +107,7 @@ function AutoSellPanel:Create(parent)
         IM:RefreshAllUI()
     end
 
-    content:AdvanceY(filterCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(filterCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- CURRENT STATUS CARD
@@ -134,7 +134,7 @@ function AutoSellPanel:Create(parent)
     UpdateStats()
     AutoSellPanel.UpdateStats = UpdateStats
 
-    content:AdvanceY(statusCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(statusCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- TIPS CARD
@@ -148,7 +148,7 @@ function AutoSellPanel:Create(parent)
     tipsCard:AddText("- Protected items (soulbound, transmog, etc.) are never sold")
     tipsCard:AddText("- Selling only triggers when you open a vendor window")
 
-    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
     content:FinalizeHeight()
 end

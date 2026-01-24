@@ -37,7 +37,7 @@ function WhitelistPanel:Create(parent)
     end
     UpdateCount()
 
-    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(mainCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- LOCKED ITEMS LIST CARD
@@ -171,7 +171,7 @@ function WhitelistPanel:Create(parent)
     listCard._contentHeight = listCard._contentHeight + 36
     listCard:SetHeight(listCard:GetContentHeight())
 
-    content:AdvanceY(listCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(listCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
     -- TIPS CARD
@@ -184,7 +184,7 @@ function WhitelistPanel:Create(parent)
     tipsCard:AddText("- Locked items show a red border overlay in your bags")
     tipsCard:AddText("- Locking an item also protects it from AH posting")
 
-    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.spacing)
+    content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
     content:FinalizeHeight()
 
