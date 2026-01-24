@@ -92,8 +92,10 @@ Summary:
 ### Optional (for GitHub releases)
 - GitHub CLI (`gh`) installed and authenticated
   - The script can install it for you automatically!
+  - **Authentication options:**
+    - Use `GITHUB_TOKEN` or `GH_TOKEN` in your environment (auto-detected)
+    - Interactive: `gh auth login`
   - Or install manually: https://cli.github.com/
-  - Authenticate: `gh auth login`
   - Without `gh`, you can manually create releases on GitHub
 
 ## Git Status Requirements
@@ -242,6 +244,40 @@ Would you like to install GitHub CLI now? (y/N): y
 Next step: Authenticate with GitHub
 Run 'gh auth login' now? (y/N): y
 ```
+
+### GitHub CLI Authentication
+
+The script automatically handles authentication in multiple ways:
+
+**1. Environment Token (Automatic & Preferred for CI/CD)**
+If you have `GITHUB_TOKEN` or `GH_TOKEN` in your environment:
+```bash
+# In your .bashrc or .zshrc
+export GITHUB_TOKEN="ghp_your_token_here"
+```
+
+**The script will automatically use it!** Even if `gh auth status` shows not authenticated, `gh` commands will work with the environment token. The script will:
+- Detect the token
+- Attempt to authenticate `gh` CLI formally (for better integration)
+- **Continue anyway if auth fails** (commands still work with env token)
+
+**2. Interactive Login (Prompted)**
+If no token is found, the script will offer to run `gh auth login`:
+```bash
+GitHub CLI not formally authenticated
+
+Run 'gh auth login' now? (y/N): y
+```
+
+**3. Manual Authentication**
+You can authenticate beforehand:
+```bash
+gh auth login
+# or with token
+echo $GITHUB_TOKEN | gh auth login --with-token
+```
+
+**Note:** The `gh` CLI can successfully create releases using `GITHUB_TOKEN` from your environment even when `gh auth status` shows as not authenticated. This is normal and expected behavior.
 
 **Manual Installation:**
 The script will still work without `gh` CLI - it will:

@@ -363,9 +363,31 @@ create_github_release() {
     echo -e "${BLUE}Creating GitHub release...${NC}"
     
     # Check if already authenticated
+    # Note: gh commands may still work with GITHUB_TOKEN env var even if auth status fails
     if ! gh auth status &> /dev/null; then
-        echo -e "${YELLOW}GitHub CLI not authenticated. Please run: gh auth login${NC}"
-        return 1
+        # Check if GITHUB_TOKEN or GH_TOKEN is available
+        if [ -n "$GITHUB_TOKEN" ] || [ -n "$GH_TOKEN" ]; then
+            echo -e "${BLUE}Using GITHUB_TOKEN from environment...${NC}"
+            
+            # Try to authenticate gh CLI for better integration
+            local token="${GITHUB_TOKEN:-$GH_TOKEN}"
+            if echo "$token" | gh auth login --with-token 2>/dev/null; then
+                echo -e "${GREEN}✓ Authenticated gh CLI with token${NC}"
+            else
+                echo -e "${YELLOW}Note: gh auth login failed, but will try release with env token${NC}"
+                # Don't return - gh commands might still work with GITHUB_TOKEN
+            fi
+        else
+            echo -e "${YELLOW}GitHub CLI not formally authenticated${NC}"
+            echo ""
+            read -p "Run 'gh auth login' now? (y/N): " DO_LOGIN
+            if [[ "$DO_LOGIN" =~ ^[Yy]$ ]]; then
+                gh auth login
+                # Don't check status - just try the release command
+            else
+                echo -e "${YELLOW}Attempting release anyway (may work with env credentials)...${NC}"
+            fi
+        fi
     fi
     
     # Create release with zip file
