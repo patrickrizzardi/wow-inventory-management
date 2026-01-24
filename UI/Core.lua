@@ -140,14 +140,17 @@ function UI:CreatePanel(name, parent, width, height)
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 
-    -- Close on Escape, but propagate all other keys (so movement works)
+    -- Enable keyboard and propagate all input (so WASD movement works)
+    frame:EnableKeyboard(true)
+    frame:SetPropagateKeyboardInput(true)
+    
+    -- Close on Escape only (don't block other keys)
     frame:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then
-            self:SetPropagateKeyboardInput(false)
             self:Hide()
-        else
-            self:SetPropagateKeyboardInput(true)
         end
+        -- Always propagate - movement keys go through to game
+        self:SetPropagateKeyboardInput(true)
     end)
 
     return frame
