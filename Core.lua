@@ -10,7 +10,10 @@ local addonName, IM = ...
 _G.InventoryManager = IM
 
 -- Addon version
-IM.version = "1.0.0"
+IM.version = "1.1.1"
+
+-- Show welcome message on first load
+IM.showWelcomeMessage = true
 
 -- Module registry
 IM.modules = {}
@@ -88,6 +91,18 @@ function IM:RegisterModule(name, module)
         module:OnInitialize()
     end
 end
+
+-- Show welcome message on first login (only once per session)
+local welcomeShown = false
+IM:RegisterEvent("PLAYER_ENTERING_WORLD", function()
+    if not welcomeShown and IM.showWelcomeMessage then
+        C_Timer.After(2, function()
+            IM:Print("|cffffb000Welcome!|r Type |cffffb000/im|r to open settings")
+            IM:Print("Version " .. IM.version .. " loaded successfully")
+        end)
+        welcomeShown = true
+    end
+end)
 
 -- Get a registered module
 function IM:GetModule(name)
