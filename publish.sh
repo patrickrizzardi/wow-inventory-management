@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# InventoryManager CurseForge Package Script with Version Management
-# Creates a clean zip file ready for CurseForge upload
+# InventoryManager Release Publisher
+# Handles version bumping, git tagging, and package creation
 
 ADDON_NAME="InventoryManager"
 VERSION_FILE="VERSION"
 TOC_FILE="${ADDON_NAME}.toc"
+RELEASE_BRANCH="main"  # Change this if your default branch is different (e.g., "master")
 
 # Color codes for output
 RED='\033[0;31m'
@@ -33,10 +34,36 @@ check_git_repo() {
     fi
 }
 
+# Function to check if on correct branch
+check_branch() {
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
+    
+    if [ "$current_branch" != "$RELEASE_BRANCH" ]; then
+        echo -e "${RED}Error: Not on ${RELEASE_BRANCH} branch${NC}"
+        echo -e "${YELLOW}Current branch: ${current_branch}${NC}"
+        echo ""
+        echo -e "${YELLOW}Releases should be created from the ${RELEASE_BRANCH} branch.${NC}"
+        echo -e "${YELLOW}Switch to ${RELEASE_BRANCH} branch first:${NC}"
+        echo "  git checkout ${RELEASE_BRANCH}"
+        echo ""
+        read -p "Continue anyway? (y/N): " CONTINUE
+        if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+            return 1
+        fi
+    fi
+    
+    return 0
+}
+
 # Function to check git status
 check_git_status() {
     echo ""
     echo -e "${BLUE}Checking git status...${NC}"
+    
+    # Check branch first
+    if ! check_branch; then
+        return 1
+    fi
     
     # Check for uncommitted changes
     if ! git diff-index --quiet HEAD --; then
@@ -371,13 +398,14 @@ case "${1:-}" in
         echo "  (no options)     Create package with version bump"
         echo ""
         echo "Process:"
-        echo "  1. Check git status (must be committed and pushed)"
-        echo "  2. Prompt for new version"
-        echo "  3. Update VERSION and .toc files"
-        echo "  4. Commit version changes"
-        echo "  5. Create and push git tag"
-        echo "  6. Create GitHub release (if gh CLI available)"
-        echo "  7. Create versioned zip package"
+        echo "  1. Check you're on ${RELEASE_BRANCH} branch"
+        echo "  2. Check git status (must be committed and pushed)"
+        echo "  3. Prompt for new version"
+        echo "  4. Update VERSION and .toc files"
+        echo "  5. Commit version changes"
+        echo "  6. Create and push git tag"
+        echo "  7. Create GitHub release (if gh CLI available)"
+        echo "  8. Create versioned zip package"
         echo ""
         echo "Version rules:"
         echo "  - Format: X.Y.Z (semantic versioning)"
