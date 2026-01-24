@@ -136,19 +136,20 @@ create_git_tag() {
     echo ""
     echo -e "${BLUE}Creating git tag...${NC}"
     
-    # Check if tag already exists locally
-    if git rev-parse "$tag" >/dev/null 2>&1; then
-        echo -e "${RED}Error: Tag ${tag} already exists locally${NC}"
-        return 1
-    fi
-    
     # Check if tag exists on remote
-    if git ls-remote --tags origin | grep -q "refs/tags/${tag}$"; then
+    if git ls-remote --tags origin 2>/dev/null | grep -q "refs/tags/${tag}$"; then
         echo -e "${RED}Error: Tag ${tag} already exists on remote${NC}"
+        echo -e "${YELLOW}Delete it first with: git push origin --delete ${tag}${NC}"
         return 1
     fi
     
-    # Create annotated tag
+    # Check if tag already exists locally - delete it to recreate at current HEAD
+    if git rev-parse "$tag" >/dev/null 2>&1; then
+        echo -e "${YELLOW}Tag ${tag} already exists locally, recreating at current HEAD...${NC}"
+        git tag -d "$tag" >/dev/null 2>&1
+    fi
+    
+    # Create annotated tag at current HEAD
     if git tag -a "$tag" -m "Release version ${version}"; then
         echo -e "${GREEN}✓ Created tag ${tag}${NC}"
     else
