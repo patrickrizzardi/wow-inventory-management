@@ -127,29 +127,35 @@ end
     @param anchorPoint string - Corner to anchor ("TOPLEFT" or "BOTTOMRIGHT")
     @returns table - { bg = texture, icon = texture }
 ]]
+-- Icon sizes (specific to overlay rendering)
+local ICON_BG_SIZE = 18
+local ICON_SIZE = 14
+local ICON_OFFSET = 1  -- offset from edge
+local ICON_INSET = 3   -- inset for icon within bg
+
 local function _createIcon(overlay, iconTexture, anchorPoint)
     local result = {}
 
     -- Background circle
     result.bg = overlay:CreateTexture(nil, "OVERLAY", nil, 2)
-    result.bg:SetSize(18, 18)
+    result.bg:SetSize(ICON_BG_SIZE, ICON_BG_SIZE)
     result.bg:SetTexture(ICON_BG)
     result.bg:SetVertexColor(unpack(COLORS.iconBg))
     result.bg:Hide()
 
     -- Icon
     result.icon = overlay:CreateTexture(nil, "OVERLAY", nil, 3)
-    result.icon:SetSize(14, 14)
+    result.icon:SetSize(ICON_SIZE, ICON_SIZE)
     result.icon:SetTexture(iconTexture)
     result.icon:Hide()
 
     -- Position based on anchor
     if anchorPoint == "TOPLEFT" then
-        result.bg:SetPoint("TOPLEFT", 1, -1)
-        result.icon:SetPoint("TOPLEFT", 3, -3)
+        result.bg:SetPoint("TOPLEFT", ICON_OFFSET, -ICON_OFFSET)
+        result.icon:SetPoint("TOPLEFT", ICON_INSET, -ICON_INSET)
     elseif anchorPoint == "BOTTOMRIGHT" then
-        result.bg:SetPoint("BOTTOMRIGHT", -1, 1)
-        result.icon:SetPoint("BOTTOMRIGHT", -3, 3)
+        result.bg:SetPoint("BOTTOMRIGHT", -ICON_OFFSET, ICON_OFFSET)
+        result.icon:SetPoint("BOTTOMRIGHT", -ICON_INSET, ICON_INSET)
     end
 
     return result
