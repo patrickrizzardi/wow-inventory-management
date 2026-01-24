@@ -388,6 +388,12 @@ generate_ai_changelog() {
     # Create prompt for Claude
     local system_msg="You are a changelog generator for a World of Warcraft addon. Create a concise, user-friendly changelog.
 
+CRITICAL: You are generating a changelog for the ADDON, not the development tools.
+- IGNORE commits about build scripts, release tools, CI/CD, versioning systems
+- IGNORE commits with: publish.sh, compress.sh, VERSION file, .gitignore, .github workflows
+- FOCUS ONLY on changes to the actual addon functionality (Lua files, TOC file)
+- If ALL commits are tooling/meta changes, return: NO_USER_CHANGES
+
 Format:
 ## What's New in ${version}
 
@@ -404,13 +410,14 @@ Format:
 - Technical/refactor details (if any, keep brief)
 
 Guidelines:
-- Write for addon users, not developers
-- Focus on user-visible changes
+- Write for addon USERS, not developers
+- Focus on user-visible changes IN THE ADDON
 - Be concise but clear
 - Group similar changes
-- Omit version bump commits and trivial changes
+- Omit version bump commits and build tool changes
 - Use bullet points
-- If no significant changes in a category, omit that section"
+- If no addon changes in a category, omit that section
+- If ONLY tooling changes, return: NO_USER_CHANGES"
     
     local prompt="Commits since ${previous_tag:-initial release}:
 ${commits}
@@ -450,6 +457,12 @@ Generate a user-friendly changelog for version ${version}."
     
     if [ -z "$changelog" ]; then
         echo -e "${YELLOW}AI changelog generation failed${NC}"
+        return 1
+    fi
+    
+    # Check if AI detected no user-facing changes
+    if echo "$changelog" | grep -q "NO_USER_CHANGES"; then
+        echo -e "${YELLOW}No user-facing addon changes detected${NC}"
         return 1
     fi
     
@@ -535,6 +548,9 @@ Download \`${zip_file}\` and extract it to your WoW AddOns folder.
         if [ -z "$CLAUDE_API_KEY" ]; then
             echo -e "${YELLOW}⚠ No AI changelog generated (CLAUDE_API_KEY not set)${NC}"
             echo -e "${BLUE}Tip: Set CLAUDE_API_KEY for automatic AI-generated changelogs${NC}"
+        elif [ $changelog_status -eq 1 ]; then
+            echo -e "${YELLOW}⚠ No user-facing addon changes detected (using basic notes)${NC}"
+            echo -e "${BLUE}Note: Only tooling/build script changes since last release${NC}"
         else
             echo -e "${YELLOW}⚠ AI changelog generation failed (using basic notes)${NC}"
         fi
