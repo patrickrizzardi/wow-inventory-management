@@ -559,7 +559,10 @@ create_github_release() {
     fi
     
     # Generate AI changelog if Claude API key is available
-    local previous_tag=$(git describe --tags --abbrev=0 2>/dev/null)
+    # Get PREVIOUS tag (not current one) - exclude the tag we just created
+    local current_tag="v${version}"
+    local previous_tag=$(git tag --sort=-version:refname | grep -v "^${current_tag}$" | head -1)
+    
     local ai_changelog=$(generate_ai_changelog "$version" "$previous_tag")
     local changelog_status=$?
     
