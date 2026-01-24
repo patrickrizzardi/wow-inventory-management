@@ -174,9 +174,18 @@ show_manual_release_instructions() {
     local tag=$1
     local zip_file=$2
     
+    # Get repo URL from git
+    local repo_url=$(git remote get-url origin 2>/dev/null)
+    local github_url="https://github.com/YOUR_USERNAME/${ADDON_NAME}"
+    
+    if [ -n "$repo_url" ]; then
+        # Convert SSH/HTTPS to web URL
+        github_url=$(echo "$repo_url" | sed 's/git@github.com:/https:\/\/github.com\//' | sed 's/\.git$//')
+    fi
+    
     echo ""
     echo -e "${BLUE}Manual release instructions:${NC}"
-    echo "  1. Go to: https://github.com/YOUR_USERNAME/${ADDON_NAME}/releases/new"
+    echo "  1. Go to: ${github_url}/releases/new"
     echo "  2. Tag: ${tag}"
     echo "  3. Title: Release ${tag#v}"
     echo "  4. Upload: ${zip_file}"
