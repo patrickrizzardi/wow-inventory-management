@@ -158,8 +158,17 @@ create_git_tag() {
     
     # Push tag to remote
     echo -e "${BLUE}Pushing tag to remote...${NC}"
-    if git push origin "$tag"; then
+    if git push origin "$tag" 2>&1; then
         echo -e "${GREEN}✓ Pushed tag ${tag} to remote${NC}"
+        
+        # Verify tag actually exists on remote
+        if git ls-remote --tags origin | grep -q "refs/tags/${tag}$"; then
+            echo -e "${GREEN}✓ Verified tag exists on GitHub${NC}"
+        else
+            echo -e "${YELLOW}Warning: Tag push succeeded but tag not found on remote${NC}"
+            echo -e "${YELLOW}Waiting 2 seconds for GitHub to sync...${NC}"
+            sleep 2
+        fi
     else
         echo -e "${RED}Error: Failed to push tag${NC}"
         echo -e "${YELLOW}You can manually push with: git push origin ${tag}${NC}"
@@ -543,8 +552,7 @@ See commit history for detailed changes."
     local create_output
     create_output=$(gh release create "$tag" "$zip_file" \
         --title "Release ${version}" \
-        --notes "$release_notes" \
-        --verify-tag 2>&1)
+        --notes "$release_notes" 2>&1)
     local create_status=$?
     
     if [ $create_status -eq 0 ]; then
