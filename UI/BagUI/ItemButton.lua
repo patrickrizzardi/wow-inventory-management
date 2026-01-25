@@ -244,6 +244,14 @@ function ItemButton:SetItem(button, bagID, slotID)
         local count = itemInfo.stackCount
         if button.Count then
             if count and count > 1 then
+                button.Count:ClearAllPoints()
+                button.Count:SetPoint(
+                    "TOPRIGHT",
+                    button,
+                    "TOPRIGHT",
+                    UI.layout.itemCountOffsetX,
+                    UI.layout.itemCountOffsetY
+                )
                 button.Count:SetText(count)
                 button.Count:Show()
             else
@@ -254,9 +262,15 @@ function ItemButton:SetItem(button, bagID, slotID)
         -- Set item level text (for equippable gear)
         if not button._imItemLevel then
             button._imItemLevel = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            button._imItemLevel:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
-            button._imItemLevel:SetTextColor(1, 1, 0, 1)  -- Yellow
-            button._imItemLevel:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+            button._imItemLevel:SetPoint(
+                "BOTTOMRIGHT",
+                button,
+                "BOTTOMRIGHT",
+                UI.layout.itemLevelOffsetX,
+                UI.layout.itemLevelOffsetY
+            )
+            button._imItemLevel:SetTextColor(unpack(UI.colors.itemLevel))
+            button._imItemLevel:SetFont(UI.fonts.default, UI.fontSizes.small, "OUTLINE")
         end
         
         -- Show ilvl for equippable items

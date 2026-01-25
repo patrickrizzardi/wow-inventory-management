@@ -362,7 +362,7 @@ function CategoryView:GetItemCategory(item)
     local _, _, _, _, _, classID, subclassID = C_Item.GetItemInfoInstant(item.itemID)
     
     if IsCurrencyToken(classID, subclassID) then
-        return "Currency Tokens"
+        return (IM.CATEGORY_EXCLUSION_NAMES and IM.CATEGORY_EXCLUSION_NAMES.currencyTokens) or "Currency Tokens"
     end
 
     if classID then
@@ -378,7 +378,7 @@ function CategoryView:GetItemSubcategory(item)
     local _, _, _, _, _, _, _, _, equipLoc, _, _, classID, subclassID = GetItemInfo(item.itemID)
     
     if IsCurrencyToken(classID, subclassID) then
-        return "Currency Tokens"
+        return (IM.CATEGORY_EXCLUSION_NAMES and IM.CATEGORY_EXCLUSION_NAMES.currencyTokens) or "Currency Tokens"
     end
 
     -- Step 1: Check if it's equippable - use equipment slot
@@ -422,7 +422,7 @@ function CategoryView:GetCategoryOrder(categoryName)
         ["Container"] = 6,
         ["Gem"] = 7,
         ["Recipe"] = 8,
-        ["Currency Tokens"] = 9,
+        [(IM.CATEGORY_EXCLUSION_NAMES and IM.CATEGORY_EXCLUSION_NAMES.currencyTokens) or "Currency Tokens"] = 9,
         ["Miscellaneous"] = 10,
         ["Other"] = 11,
     }

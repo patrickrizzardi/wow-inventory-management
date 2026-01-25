@@ -29,17 +29,18 @@ function CategoriesPanel:Create(parent)
     })
 
     -- Define category order and display info
+    local names = IM.CATEGORY_EXCLUSION_NAMES or {}
     local categoryOrder = {
-        {key = "consumables", label = "Consumables", tooltip = "Food, potions, flasks"},
-        {key = "questItems", label = "Quest Items", tooltip = "Items used for quests"},
-        {key = "craftingReagents", label = "Crafting Reagents", tooltip = "Profession materials"},
-        {key = "tradeGoods", label = "Trade Goods", tooltip = "Trade skill items"},
-        {key = "recipes", label = "Recipes", tooltip = "Patterns, schematics, formulas"},
-        {key = "toys", label = "Toys", tooltip = "Items in Toy Box"},
-        {key = "pets", label = "Battle Pets", tooltip = "Pet cages and items"},
-        {key = "mounts", label = "Mounts", tooltip = "Mount items"},
-        {key = "currencyTokens", label = "Currency Tokens", tooltip = "Event tokens, valor, etc."},
-        {key = "housingItems", label = "Housing Items", tooltip = "Player housing decorations"},
+        {key = "consumables", label = names.consumables or "Consumables", tooltip = "Food, potions, flasks"},
+        {key = "questItems", label = names.questItems or "Quest Items", tooltip = "Items used for quests"},
+        {key = "craftingReagents", label = names.craftingReagents or "Crafting Reagents", tooltip = "Profession materials"},
+        {key = "tradeGoods", label = names.tradeGoods or "Trade Goods", tooltip = "Trade skill items"},
+        {key = "recipes", label = names.recipes or "Recipes", tooltip = "Patterns, schematics, formulas"},
+        {key = "toys", label = names.toys or "Toys", tooltip = "Items in Toy Box"},
+        {key = "pets", label = names.pets or "Battle Pets", tooltip = "Pet cages and items"},
+        {key = "mounts", label = names.mounts or "Mounts", tooltip = "Mount items"},
+        {key = "currencyTokens", label = names.currencyTokens or "Currency Tokens", tooltip = "Event tokens, valor, etc."},
+        {key = "housingItems", label = names.housingItems or "Housing Items", tooltip = "Player housing decorations"},
     }
 
     -- Add checkboxes for each category

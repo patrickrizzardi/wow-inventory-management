@@ -102,6 +102,21 @@ local ITEM_CLASS_NAMES = {
 }
 IM.ITEM_CLASS_NAMES = ITEM_CLASS_NAMES
 
+-- Category exclusion display names (shared across UI)
+IM.CATEGORY_EXCLUSION_NAMES = {
+    consumables = "Consumables",
+    questItems = "Quest Items",
+    craftingReagents = "Crafting Reagents",
+    tradeGoods = "Trade Goods",
+    recipes = "Recipes",
+    toys = "Toys",
+    pets = "Battle Pets",
+    mounts = "Mounts",
+    currencyTokens = "Currency Tokens",
+    housingItems = "Housing Items",
+    equipmentSets = "Equipment Sets",
+}
+
 -- Miscellaneous subclasses for token detection
 local MISC_SUBCLASS = {
     JUNK = 0,       -- Gray junk, but also some tokens

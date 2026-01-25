@@ -21,19 +21,7 @@ local QUALITY_NAMES = {
 }
 
 -- Category exclusion names (matches database keys)
-local CATEGORY_NAMES = {
-    consumables = "Consumables",
-    questItems = "Quest Items",
-    craftingReagents = "Crafting Reagents",
-    tradeGoods = "Trade Goods",
-    recipes = "Recipes",
-    toys = "Toys",
-    pets = "Battle Pets",
-    mounts = "Mounts",
-    currencyTokens = "Currency Tokens",
-    housingItems = "Housing Items",
-    equipmentSets = "Equipment Sets",
-}
+local CATEGORY_NAMES = IM.CATEGORY_EXCLUSION_NAMES or {}
 
 function TooltipInfo:OnEnable()
     self:HookTooltips()

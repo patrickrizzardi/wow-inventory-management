@@ -32,6 +32,7 @@ UI.colors = {
     success = { 0.3, 0.75, 0.3, 1 },        -- green for positive
     warning = { 0.85, 0.60, 0.10, 1 },      -- match accent
     error = { 0.85, 0.30, 0.30, 1 },        -- red for errors
+    itemLevel = { 1, 1, 0, 1 },             -- bright yellow for ilvl text
 
     -- UI element colors (neutral, no brown tint)
     headerBar = { 0.12, 0.12, 0.12, 1 },        -- neutral dark gray
@@ -96,6 +97,12 @@ UI.layout = {
     -- Borders
     borderSize = 1,           -- standard border thickness
     borderSizeThick = 2,      -- emphasized border
+
+    -- Bag item text offsets
+    itemCountOffsetX = -2,
+    itemCountOffsetY = -2,
+    itemLevelOffsetX = -2,
+    itemLevelOffsetY = 2,
     
     -- List/container initial heights (dynamically updated)
     listInitialHeight = 10,   -- initial height before content loads
@@ -117,6 +124,11 @@ UI.fontSizes = {
     large = 14,
     header = 16,
     title = 18,
+}
+
+-- Font faces
+UI.fonts = {
+    default = "Fonts\\FRIZQT__.TTF",
 }
 
 -- Create a dark-themed panel frame
