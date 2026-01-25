@@ -182,9 +182,18 @@ function TooltipInfo:GetItemStateProtections(itemID, itemLink, bagID, slotID, bi
 
     -- Binding-based protections require bag context
     if bagID and slotID then
+        local isSoulbound = IM.Filters and IM.Filters.IsSoulbound and IM.Filters:IsSoulbound(bagID, slotID, itemID, bindType)
+
+        -- Only sell soulbound items (treat non-soulbound as protected)
+        if db.autoSell.onlySellSoulbound then
+            if not isSoulbound then
+                table.insert(protections, "Non-soulbound")
+            end
+        end
+
         -- Soulbound protection
         if db.autoSell.skipSoulbound then
-            if IM.Filters:IsSoulbound(bagID, slotID, itemID, bindType) then
+            if isSoulbound then
                 table.insert(protections, "Soulbound")
             end
         end
