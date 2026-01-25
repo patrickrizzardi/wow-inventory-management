@@ -349,9 +349,22 @@ end
 -- CATEGORY LOGIC
 -- ============================================================================
 
+local function IsCurrencyToken(classID, subclassID)
+    if not classID or not subclassID then
+        return false
+    end
+    return IM.ITEM_CLASS and IM.MISC_SUBCLASS
+        and classID == IM.ITEM_CLASS.MISCELLANEOUS
+        and subclassID == IM.MISC_SUBCLASS.OTHER
+end
+
 function CategoryView:GetItemCategory(item)
-    local _, _, _, _, _, classID = C_Item.GetItemInfoInstant(item.itemID)
+    local _, _, _, _, _, classID, subclassID = C_Item.GetItemInfoInstant(item.itemID)
     
+    if IsCurrencyToken(classID, subclassID) then
+        return "Currency Tokens"
+    end
+
     if classID then
         return IM.ITEM_CLASS_NAMES[classID] or "Other"
     end
@@ -364,6 +377,10 @@ function CategoryView:GetItemSubcategory(item)
     -- We must use GetItemInfo() to get equipLoc for equipment items
     local _, _, _, _, _, _, _, _, equipLoc, _, _, classID, subclassID = GetItemInfo(item.itemID)
     
+    if IsCurrencyToken(classID, subclassID) then
+        return "Currency Tokens"
+    end
+
     -- Step 1: Check if it's equippable - use equipment slot
     if equipLoc and equipLoc ~= "" and equipLoc ~= "nil" and equipLoc ~= "INVTYPE_NON_EQUIP" and equipLoc ~= "INVTYPE_BAG" then
         local slotName = _G[equipLoc]
@@ -405,8 +422,9 @@ function CategoryView:GetCategoryOrder(categoryName)
         ["Container"] = 6,
         ["Gem"] = 7,
         ["Recipe"] = 8,
-        ["Miscellaneous"] = 9,
-        ["Other"] = 10,
+        ["Currency Tokens"] = 9,
+        ["Miscellaneous"] = 10,
+        ["Other"] = 11,
     }
     
     return orderMap[categoryName] or 100

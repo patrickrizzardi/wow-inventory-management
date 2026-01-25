@@ -111,6 +111,7 @@ local MISC_SUBCLASS = {
     OTHER = 4,      -- Tokens, currency items
     MOUNT = 5,      -- Mount items
 }
+IM.MISC_SUBCLASS = MISC_SUBCLASS
 
 -- Cache for equipment set item IDs
 local equipmentSetItems = {}
