@@ -81,6 +81,35 @@ function BagUIPanel:Create(parent)
         description = "Customize how items are organized and displayed.",
     })
 
+    -- Debounced refresh to avoid heavy reflow on every slider tick
+    local layoutRefreshTimer = nil
+    local function ScheduleLayoutRefresh()
+        if layoutRefreshTimer then
+            layoutRefreshTimer:Cancel()
+        end
+        layoutRefreshTimer = C_Timer.NewTimer(0.12, function()
+            if IM.UI.BagUI then
+                IM.UI.BagUI:ResizeForSettings()
+                if IM.UI.BagUI.Refresh then
+                    IM.UI.BagUI:Refresh()
+                end
+            end
+        end)
+    end
+
+    local function ApplyLayoutNow()
+        if layoutRefreshTimer then
+            layoutRefreshTimer:Cancel()
+            layoutRefreshTimer = nil
+        end
+        if IM.UI.BagUI then
+            IM.UI.BagUI:ResizeForSettings()
+            if IM.UI.BagUI.Refresh then
+                IM.UI.BagUI:Refresh()
+            end
+        end
+    end
+
     -- Number of columns
     local columnsY = layoutCard:AddContent(50)
     local columnsSlider = UI:CreateSlider(layoutCard, "Number of columns", 1, 4, 1, IM.db.global.bagUI and IM.db.global.bagUI.columns or 2)
@@ -90,14 +119,14 @@ function BagUIPanel:Create(parent)
             IM.UI.BagUI:InitializeSettings()
         end
         IM.db.global.bagUI.columns = value
-        
-        -- Resize window and refresh
-        if IM.UI.BagUI then
-            IM.UI.BagUI:ResizeForSettings()
-            if IM.UI.BagUI.Refresh then
-                IM.UI.BagUI:Refresh()
-            end
-        end
+
+        -- Debounce expensive layout work while dragging
+        ScheduleLayoutRefresh()
+    end
+    if columnsSlider.slider then
+        columnsSlider.slider:HookScript("OnMouseUp", function()
+            ApplyLayoutNow()
+        end)
     end
 
     -- Items per row
@@ -109,14 +138,14 @@ function BagUIPanel:Create(parent)
             IM.UI.BagUI:InitializeSettings()
         end
         IM.db.global.bagUI.itemsPerRow = value
-        
-        -- Resize window and refresh
-        if IM.UI.BagUI then
-            IM.UI.BagUI:ResizeForSettings()
-            if IM.UI.BagUI.Refresh then
-                IM.UI.BagUI:Refresh()
-            end
-        end
+
+        -- Debounce expensive layout work while dragging
+        ScheduleLayoutRefresh()
+    end
+    if itemsSlider.slider then
+        itemsSlider.slider:HookScript("OnMouseUp", function()
+            ApplyLayoutNow()
+        end)
     end
 
     -- View mode dropdown

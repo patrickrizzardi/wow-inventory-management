@@ -70,7 +70,7 @@ function UIPanel:Create(parent)
     )
     lockCheck.checkbox.OnValueChanged = function(self, value)
         IM.db.global.ui.showLockOverlay = value
-        IM:RefreshBagOverlays()
+        IM:RefreshAllUI()
     end
 
     -- Sell overlay (green)
@@ -81,7 +81,7 @@ function UIPanel:Create(parent)
     )
     sellCheck.checkbox.OnValueChanged = function(self, value)
         IM.db.global.ui.showSellOverlay = value
-        IM:RefreshBagOverlays()
+        IM:RefreshAllUI()
     end
 
     -- Mail overlay (blue)
@@ -92,7 +92,7 @@ function UIPanel:Create(parent)
     )
     mailCheck.checkbox.OnValueChanged = function(self, value)
         IM.db.global.ui.showMailOverlay = value
-        IM:RefreshBagOverlays()
+        IM:RefreshAllUI()
     end
 
     -- Unsellable overlay (gray)
@@ -103,7 +103,7 @@ function UIPanel:Create(parent)
     )
     unsellableCheck.checkbox.OnValueChanged = function(self, value)
         IM.db.global.ui.showUnsellableIndicator = value
-        IM:RefreshBagOverlays()
+        IM:RefreshAllUI()
     end
 
     content:AdvanceY(overlayCard:GetContentHeight() + UI.layout.cardSpacing)

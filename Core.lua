@@ -637,6 +637,11 @@ function IM:RefreshAllUI()
         self:RefreshBagOverlays()
     end
 
+    -- IM Bag UI (if visible)
+    if self.UI and self.UI.BagUI and self.UI.BagUI.IsShown and self.UI.BagUI:IsShown() then
+        self.UI.BagUI:Refresh()
+    end
+
     -- AutoSell popup (if visible)
     if self.UI and self.UI.AutoSellPopup and self.UI.AutoSellPopup.IsShown and self.UI.AutoSellPopup:IsShown() then
         self.UI.AutoSellPopup:Refresh()
