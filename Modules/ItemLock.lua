@@ -521,4 +521,8 @@ function IM:RefreshBagOverlays()
     if self.modules.ItemLock then
         self.modules.ItemLock:RequestRefresh()
     end
+    -- Keep IM Bag UI overlays in sync if visible
+    if self.UI and self.UI.BagUI and self.UI.BagUI.IsShown and self.UI.BagUI:IsShown() then
+        self.UI.BagUI:Refresh()
+    end
 end
