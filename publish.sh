@@ -38,7 +38,7 @@ check_git_repo() {
 # Function to check if on correct branch
 check_branch() {
     local current_branch=$(git rev-parse --abbrev-ref HEAD)
-    
+
     if [ "$current_branch" != "$RELEASE_BRANCH" ]; then
         echo -e "${RED}Error: Not on ${RELEASE_BRANCH} branch${NC}"
         echo -e "${YELLOW}Current branch: ${current_branch}${NC}"
@@ -52,7 +52,7 @@ check_branch() {
             return 1
         fi
     fi
-    
+
     return 0
 }
 
@@ -60,12 +60,12 @@ check_branch() {
 check_git_status() {
     echo ""
     echo -e "${BLUE}Checking git status...${NC}"
-    
+
     # Check branch first
     if ! check_branch; then
         return 1
     fi
-    
+
     # Check for uncommitted changes
     if ! git diff-index --quiet HEAD --; then
         echo -e "${RED}Error: You have uncommitted changes${NC}"
@@ -78,7 +78,7 @@ check_git_status() {
         echo "  git commit -m \"Your commit message\""
         return 1
     fi
-    
+
     # Check for untracked files (excluding VERSION_GUIDE.md and zip files)
     local untracked=$(git ls-files --others --exclude-standard | grep -v "VERSION_GUIDE.md" | grep -v "\.zip$")
     if [ -n "$untracked" ]; then
@@ -90,7 +90,7 @@ check_git_status() {
             return 1
         fi
     fi
-    
+
     # Check if branch has upstream
     local branch=$(git rev-parse --abbrev-ref HEAD)
     if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} > /dev/null 2>&1; then
@@ -103,7 +103,7 @@ check_git_status() {
         fi
         return 0
     fi
-    
+
     # Check if local is ahead of remote
     local ahead=$(git rev-list @{u}..HEAD --count 2>/dev/null)
     if [ "$ahead" -gt 0 ]; then
@@ -113,7 +113,7 @@ check_git_status() {
         echo "  git push"
         return 1
     fi
-    
+
     # Check if local is behind remote
     local behind=$(git rev-list HEAD..@{u} --count 2>/dev/null)
     if [ "$behind" -gt 0 ]; then
@@ -123,7 +123,7 @@ check_git_status() {
         echo "  git pull"
         return 1
     fi
-    
+
     echo -e "${GREEN}✓ Git status is clean and synced${NC}"
     return 0
 }
@@ -132,23 +132,23 @@ check_git_status() {
 create_git_tag() {
     local version=$1
     local tag="v${version}"
-    
+
     echo ""
     echo -e "${BLUE}Creating git tag...${NC}"
-    
+
     # Check if tag exists on remote
     if git ls-remote --tags origin 2>/dev/null | grep -q "refs/tags/${tag}$"; then
         echo -e "${RED}Error: Tag ${tag} already exists on remote${NC}"
         echo -e "${YELLOW}Delete it first with: git push origin --delete ${tag}${NC}"
         return 1
     fi
-    
+
     # Check if tag already exists locally - delete it to recreate at current HEAD
     if git rev-parse "$tag" >/dev/null 2>&1; then
         echo -e "${YELLOW}Tag ${tag} already exists locally, recreating at current HEAD...${NC}"
         git tag -d "$tag" >/dev/null 2>&1
     fi
-    
+
     # Create annotated tag at current HEAD
     if git tag -a "$tag" -m "Release version ${version}"; then
         echo -e "${GREEN}✓ Created tag ${tag}${NC}"
@@ -156,20 +156,20 @@ create_git_tag() {
         echo -e "${RED}Error: Failed to create tag${NC}"
         return 1
     fi
-    
+
     # Push tag to remote
     echo -e "${BLUE}Pushing tag to remote...${NC}"
     if git push origin "$tag" 2>&1; then
         echo -e "${GREEN}✓ Pushed tag ${tag} to remote${NC}"
-        
+
         # GitHub can take 5-30 seconds to propagate tags
         echo -e "${BLUE}Waiting for GitHub to sync tag...${NC}"
-        
+
         local max_seconds=30
         local elapsed=0
         local spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         local spinner_idx=0
-        
+
         # Check immediately first (sometimes it's instant)
         if git ls-remote --tags origin 2>/dev/null | grep -q "refs/tags/${tag}$"; then
             echo -e "\r${GREEN}✓ Verified tag exists on GitHub (instant!)${NC}                    "
@@ -178,19 +178,19 @@ create_git_tag() {
             while [ $elapsed -lt $max_seconds ]; do
                 # Show spinner
                 printf "\r${YELLOW}${spinner[$spinner_idx]}${NC} Checking GitHub... (${elapsed}s)"
-                
+
                 # Check if tag exists
                 if git ls-remote --tags origin 2>/dev/null | grep -q "refs/tags/${tag}$"; then
                     echo -e "\r${GREEN}✓ Verified tag exists on GitHub (after ${elapsed}s)${NC}                    "
                     break
                 fi
-                
+
                 # Update spinner and wait
                 spinner_idx=$(( (spinner_idx + 1) % ${#spinner[@]} ))
                 sleep 1
                 elapsed=$((elapsed + 1))
             done
-            
+
             # Final check if we timed out
             if [ $elapsed -ge $max_seconds ]; then
                 echo -e "\r${RED}✗ Tag not found after ${max_seconds} seconds${NC}                              "
@@ -208,7 +208,7 @@ create_git_tag() {
         echo -e "${YELLOW}You can manually push with: git push origin ${tag}${NC}"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -216,16 +216,16 @@ create_git_tag() {
 show_manual_release_instructions() {
     local tag=$1
     local zip_file=$2
-    
+
     # Get repo URL from git
     local repo_url=$(git remote get-url origin 2>/dev/null)
     local github_url="https://github.com/YOUR_USERNAME/${ADDON_NAME}"
-    
+
     if [ -n "$repo_url" ]; then
         # Convert SSH/HTTPS to web URL
         github_url=$(echo "$repo_url" | sed 's/git@github.com:/https:\/\/github.com\//' | sed 's/\.git$//')
     fi
-    
+
     echo ""
     echo -e "${BLUE}Manual release instructions:${NC}"
     echo "  1. Go to: ${github_url}/releases/new"
@@ -240,7 +240,7 @@ install_github_cli() {
     echo ""
     echo -e "${BLUE}GitHub CLI Installation${NC}"
     echo ""
-    
+
     # Detect OS and package manager
     if command -v apt-get &> /dev/null; then
         # Debian/Ubuntu
@@ -248,11 +248,11 @@ install_github_cli() {
         echo ""
         echo "GitHub CLI will be installed using apt. This requires sudo."
         read -p "Install GitHub CLI now? (y/N): " INSTALL
-        
+
         if [[ "$INSTALL" =~ ^[Yy]$ ]]; then
             echo ""
             echo -e "${BLUE}Installing GitHub CLI...${NC}"
-            
+
             # Official installation method for Debian/Ubuntu
             if type -p curl >/dev/null 2>&1; then
                 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -265,14 +265,14 @@ install_github_cli() {
                 echo "  sudo apt install curl"
                 return 1
             fi
-            
+
             if command -v gh &> /dev/null; then
                 echo ""
                 echo -e "${GREEN}✓ GitHub CLI installed successfully!${NC}"
                 echo ""
                 echo -e "${BLUE}Next step: Authenticate with GitHub${NC}"
                 read -p "Run 'gh auth login' now? (y/N): " AUTH
-                
+
                 if [[ "$AUTH" =~ ^[Yy]$ ]]; then
                     gh auth login
                     return 0
@@ -288,28 +288,28 @@ install_github_cli() {
             echo -e "${YELLOW}Skipped. Install manually later: https://cli.github.com/${NC}"
             return 1
         fi
-        
+
     elif command -v yum &> /dev/null; then
         # RHEL/CentOS/Fedora
         echo -e "${YELLOW}Detected RHEL/CentOS/Fedora system${NC}"
         echo ""
         echo "GitHub CLI will be installed using yum/dnf. This requires sudo."
         read -p "Install GitHub CLI now? (y/N): " INSTALL
-        
+
         if [[ "$INSTALL" =~ ^[Yy]$ ]]; then
             echo ""
             echo -e "${BLUE}Installing GitHub CLI...${NC}"
             sudo yum install -y 'dnf-command(config-manager)' \
             && sudo yum config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo \
             && sudo yum install -y gh
-            
+
             if command -v gh &> /dev/null; then
                 echo ""
                 echo -e "${GREEN}✓ GitHub CLI installed successfully!${NC}"
                 echo ""
                 echo -e "${BLUE}Next step: Authenticate with GitHub${NC}"
                 read -p "Run 'gh auth login' now? (y/N): " AUTH
-                
+
                 if [[ "$AUTH" =~ ^[Yy]$ ]]; then
                     gh auth login
                     return 0
@@ -325,26 +325,26 @@ install_github_cli() {
             echo -e "${YELLOW}Skipped. Install manually later: https://cli.github.com/${NC}"
             return 1
         fi
-        
+
     elif command -v brew &> /dev/null; then
         # macOS with Homebrew
         echo -e "${YELLOW}Detected Homebrew (macOS)${NC}"
         echo ""
         echo "GitHub CLI will be installed using Homebrew."
         read -p "Install GitHub CLI now? (y/N): " INSTALL
-        
+
         if [[ "$INSTALL" =~ ^[Yy]$ ]]; then
             echo ""
             echo -e "${BLUE}Installing GitHub CLI...${NC}"
             brew install gh
-            
+
             if command -v gh &> /dev/null; then
                 echo ""
                 echo -e "${GREEN}✓ GitHub CLI installed successfully!${NC}"
                 echo ""
                 echo -e "${BLUE}Next step: Authenticate with GitHub${NC}"
                 read -p "Run 'gh auth login' now? (y/N): " AUTH
-                
+
                 if [[ "$AUTH" =~ ^[Yy]$ ]]; then
                     gh auth login
                     return 0
@@ -360,7 +360,7 @@ install_github_cli() {
             echo -e "${YELLOW}Skipped. Install manually later: https://cli.github.com/${NC}"
             return 1
         fi
-        
+
     else
         # Unknown system
         echo -e "${YELLOW}Could not detect package manager${NC}"
@@ -381,20 +381,20 @@ install_github_cli() {
 generate_ai_changelog() {
     local version=$1
     local previous_tag=$2
-    
+
     # Check if Claude API key is available
     if [ -z "$CLAUDE_API_KEY" ]; then
         echo ""
         return 1
     fi
-    
+
     # Check if jq is available
     if ! command -v jq &> /dev/null; then
         return 1
     fi
-    
+
     echo -e "${BLUE}Generating AI changelog...${NC}" >&2
-    
+
     # Get commit history since last tag
     local commits
     if [ -n "$previous_tag" ]; then
@@ -403,12 +403,12 @@ generate_ai_changelog() {
         # No previous tag - get all commits
         commits=$(git log --pretty=format:"%h - %s (%an)" 2>/dev/null)
     fi
-    
+
     if [ -z "$commits" ]; then
         echo -e "${YELLOW}No commits found for changelog${NC}" >&2
         return 1
     fi
-    
+
     # Get git diff stats
     local diff_stats
     if [ -n "$previous_tag" ]; then
@@ -416,7 +416,7 @@ generate_ai_changelog() {
     else
         diff_stats=$(git diff --stat 2>/dev/null)
     fi
-    
+
     # Create prompt for Claude
     local system_msg="You are a changelog generator for a World of Warcraft addon. Create a concise, user-friendly changelog.
 
@@ -450,7 +450,7 @@ Guidelines:
 - Use bullet points
 - If no addon changes in a category, omit that section
 - If ONLY tooling changes, return: NO_USER_CHANGES"
-    
+
     local prompt="Commits since ${previous_tag:-initial release}:
 ${commits}
 
@@ -458,10 +458,10 @@ Diff stats:
 ${diff_stats}
 
 Generate a user-friendly changelog for version ${version}."
-    
+
     # Create JSON payload
     local temp_json=$(mktemp) || return 1
-    
+
     jq -n \
         --arg model "$CLAUDE_MODEL" \
         --arg system "$system_msg" \
@@ -472,7 +472,7 @@ Generate a user-friendly changelog for version ${version}."
             "system": $system,
             "messages": [{"role": "user", "content": $prompt}]
         }' > "$temp_json"
-    
+
     # Call Claude API
     local response
     response=$(curl -s -X POST \
@@ -481,23 +481,23 @@ Generate a user-friendly changelog for version ${version}."
         -H "content-type: application/json" \
         -d @"$temp_json" \
         "https://api.anthropic.com/v1/messages")
-    
+
     rm "$temp_json"
-    
+
     # Extract changelog from response
     local changelog=$(echo "$response" | jq -r '.content[] | select(.type == "text") | .text' 2>/dev/null)
-    
+
     if [ -z "$changelog" ]; then
         echo -e "${YELLOW}AI changelog generation failed${NC}" >&2
         return 1
     fi
-    
+
     # Check if AI detected no user-facing changes
     if echo "$changelog" | grep -q "NO_USER_CHANGES"; then
         echo -e "${YELLOW}No user-facing addon changes detected${NC}" >&2
         return 1
     fi
-    
+
     echo -e "${GREEN}✓ AI changelog generated${NC}" >&2
     echo "$changelog"
     return 0
@@ -508,14 +508,14 @@ create_github_release() {
     local version=$1
     local tag="v${version}"
     local zip_file="${ADDON_NAME}-${version}.zip"
-    
+
     # Check if gh CLI is available
     if ! command -v gh &> /dev/null; then
         echo ""
         echo -e "${YELLOW}GitHub CLI (gh) not found${NC}"
         echo ""
         read -p "Would you like to install GitHub CLI now? (y/N): " INSTALL_GH
-        
+
         if [[ "$INSTALL_GH" =~ ^[Yy]$ ]]; then
             if install_github_cli; then
                 # Try to create release after installation
@@ -537,10 +537,10 @@ create_github_release() {
             return 0
         fi
     fi
-    
+
     echo ""
     echo -e "${BLUE}Creating GitHub release...${NC}"
-    
+
     # Check if GITHUB_TOKEN or GH_TOKEN is available
     # gh commands work directly with these env vars without needing gh auth login
     if [ -n "$GITHUB_TOKEN" ] || [ -n "$GH_TOKEN" ]; then
@@ -557,15 +557,15 @@ create_github_release() {
             echo -e "${YELLOW}Attempting release anyway...${NC}"
         fi
     fi
-    
+
     # Generate AI changelog if Claude API key is available
     # Get PREVIOUS tag (not current one) - exclude the tag we just created
     local current_tag="v${version}"
     local previous_tag=$(git tag --sort=-version:refname | grep -v "^${current_tag}$" | head -1)
-    
+
     local ai_changelog=$(generate_ai_changelog "$version" "$previous_tag")
     local changelog_status=$?
-    
+
     # Build release notes
     local release_notes
     if [ $changelog_status -eq 0 ] && [ -n "$ai_changelog" ]; then
@@ -595,7 +595,7 @@ Download \`${zip_file}\` and extract it to your WoW AddOns folder
         else
             echo -e "${YELLOW}⚠ AI changelog generation failed (using basic notes)${NC}"
         fi
-        
+
         release_notes="Release version ${version}
 
 ## 📦 Installation
@@ -613,18 +613,18 @@ See commit history for detailed changes.
 - [CurseForge Page](https://www.curseforge.com/wow/addons/inventorymanager)
 - [Issues](https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/issues)"
     fi
-    
+
     # Create release with zip file
     local create_output
     create_output=$(gh release create "$tag" "$zip_file" \
         --title "Release ${version}" \
         --notes "$release_notes" 2>&1)
     local create_status=$?
-    
+
     if [ $create_status -eq 0 ]; then
         echo -e "${GREEN}✓ Created GitHub release ${tag}${NC}"
         echo -e "${GREEN}✓ Uploaded ${zip_file}${NC}"
-        
+
         # Get release URL
         local release_url=$(gh release view "$tag" --json url -q .url 2>/dev/null)
         if [ -n "$release_url" ]; then
@@ -643,11 +643,11 @@ See commit history for detailed changes.
     else
         # Command failed, but let's check if release actually exists
         echo -e "${YELLOW}Release command returned error, checking if release exists...${NC}"
-        
+
         if gh release view "$tag" &>/dev/null; then
             echo -e "${GREEN}✓ Release ${tag} exists on GitHub!${NC}"
             echo -e "${YELLOW}Note: Command reported error but release was created successfully${NC}"
-            
+
             # Get release URL
             local repo_url=$(git remote get-url origin 2>/dev/null)
             if [ -n "$repo_url" ]; then
@@ -671,7 +671,7 @@ See commit history for detailed changes.
             return 1
         fi
     fi
-    
+
     return 0
 }
 
@@ -696,41 +696,41 @@ parse_version() {
 validate_increment() {
     local old_version=$1
     local new_version=$2
-    
+
     # Parse versions
     local old_parts=($(parse_version "$old_version"))
     local new_parts=($(parse_version "$new_version"))
-    
+
     local old_major=${old_parts[0]}
     local old_minor=${old_parts[1]}
     local old_patch=${old_parts[2]}
-    
+
     local new_major=${new_parts[0]}
     local new_minor=${new_parts[1]}
     local new_patch=${new_parts[2]}
-    
+
     # Check if version is going down
     if [ "$new_major" -lt "$old_major" ]; then
         echo -e "${RED}Error: Cannot decrease major version (${old_major} -> ${new_major})${NC}"
         return 1
     fi
-    
+
     if [ "$new_major" -eq "$old_major" ] && [ "$new_minor" -lt "$old_minor" ]; then
         echo -e "${RED}Error: Cannot decrease minor version (${old_minor} -> ${new_minor})${NC}"
         return 1
     fi
-    
+
     if [ "$new_major" -eq "$old_major" ] && [ "$new_minor" -eq "$old_minor" ] && [ "$new_patch" -lt "$old_patch" ]; then
         echo -e "${RED}Error: Cannot decrease patch version (${old_patch} -> ${new_patch})${NC}"
         return 1
     fi
-    
+
     # Check if version is the same
     if [ "$new_major" -eq "$old_major" ] && [ "$new_minor" -eq "$old_minor" ] && [ "$new_patch" -eq "$old_patch" ]; then
         echo -e "${RED}Error: New version must be different from current version${NC}"
         return 1
     fi
-    
+
     # Validate increment size (only +1 allowed)
     if [ "$new_major" -gt "$old_major" ]; then
         # Major version change
@@ -761,22 +761,22 @@ validate_increment() {
             return 1
         fi
     fi
-    
+
     return 0
 }
 
 # Function to update TOC file with new version
 update_toc_version() {
     local new_version=$1
-    
+
     if [ ! -f "$TOC_FILE" ]; then
         echo -e "${RED}Error: TOC file not found: ${TOC_FILE}${NC}"
         return 1
     fi
-    
+
     # Update the version line in TOC file
     sed -i "s/^## Version: .*/## Version: ${new_version}/" "$TOC_FILE"
-    
+
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Updated ${TOC_FILE} to version ${new_version}${NC}"
         return 0
@@ -790,7 +790,7 @@ update_toc_version() {
 create_package() {
     local version=$1
     local output_file="${ADDON_NAME}-${version}.zip"
-    
+
     # Check if zip is installed
     if ! command -v zip &> /dev/null; then
         echo -e "${RED}zip command not found. Attempting to install...${NC}"
@@ -804,29 +804,37 @@ create_package() {
             exit 1
         fi
     fi
-    
+
     # Remove old zip files
     rm -f ${ADDON_NAME}*.zip
     echo -e "${YELLOW}Removed old zip files${NC}"
-    
-    # Create zip with only necessary files
-    zip -r "$output_file" . \
-        -x "*.git*" \
-        -x "*.sh" \
-        -x "README.md" \
-        -x "*.zip" \
-        -x "*.code-workspace" \
-        -x ".vscode/*" \
-        -x ".idea/*" \
-        -x "*.bak" \
-        -x "*~" \
-        -x "VERSION"
-    
+
+    # Get the addon directory name and parent path
+    local addon_dir=$(basename "$(pwd)")
+    local parent_dir=$(dirname "$(pwd)")
+
+    # Create zip from parent directory so the addon folder is the root
+    # This ensures extracting creates: InventoryManager/contents
+    # instead of just dumping files loose
+    (cd "$parent_dir" && zip -r "${addon_dir}/${output_file}" "$addon_dir" \
+        -x "${addon_dir}/.git/*" \
+        -x "${addon_dir}/.git*" \
+        -x "${addon_dir}/*.sh" \
+        -x "${addon_dir}/README.md" \
+        -x "${addon_dir}/*.zip" \
+        -x "${addon_dir}/*.code-workspace" \
+        -x "${addon_dir}/.vscode/*" \
+        -x "${addon_dir}/.idea/*" \
+        -x "${addon_dir}/.claude/*" \
+        -x "${addon_dir}/*.bak" \
+        -x "${addon_dir}/*~" \
+        -x "${addon_dir}/VERSION")
+
     echo ""
     echo -e "${GREEN}✓ Package created: ${output_file}${NC}"
     echo -e "${GREEN}✓ Ready to upload to CurseForge!${NC}"
     echo ""
-    
+
     # Show what's included
     echo -e "${BLUE}Contents:${NC}"
     unzip -l "$output_file"
