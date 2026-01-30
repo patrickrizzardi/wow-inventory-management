@@ -28,7 +28,6 @@ function AutoSell:OnEnable()
     local module = self  -- Capture for closures
 
     IM:Debug("[AutoSell] OnEnable called, registering events...")
-    IM:Print("AutoSell module enabled") -- Visible confirmation
 
     -- Register for merchant events
     IM:RegisterEvent("MERCHANT_SHOW", function()
