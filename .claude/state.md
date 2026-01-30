@@ -22,8 +22,9 @@
 **Immediate Task**: BagUI polish - icon resizer and header positioning
 
 **In Progress**:
-- BagUI category headers now anchor to items - waiting for user test
-- Testing converted hooks (vendor buy, repair, mail tracking)
+- AutoSell infinite loop fix - reworked ITEM_LOCK_CHANGED detection
+- BagUI scroll content sizing - dynamic based on rendered content
+- Settings panel blocking keybinds (user reports it used to work)
 
 **Recently Completed** (last 3-5 items):
 - FIXED BagUI category header positioning - headers now anchor to first item in category (CategoryView.lua) instead of absolute positions

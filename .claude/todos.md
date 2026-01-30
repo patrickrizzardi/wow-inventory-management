@@ -10,7 +10,9 @@ General maintenance and feature work
 - [x] Trigger dump on first SetItem call
 - [x] Clean up debug code (put behind `/im debug` flag)
 - [x] Fix category header positioning - headers now anchor to first item (CategoryView.lua)
-- [ ] Verify headers follow icon size changes (waiting for user test)
+- [x] Fix scroll content height cut off - dynamic bottom padding
+- [x] Make scroll content size fully dynamic - tracks actual rendered bounds (X and Y)
+- [ ] Verify scroll works at all icon sizes (waiting for user test)
 - [ ] Identify actual border element from debug output (if still needed)
 
 ### Item Upgrade Taint Fix
@@ -42,9 +44,15 @@ General maintenance and feature work
 - [x] Alt+click double-firing - REMOVED duplicate handler from ItemButton.lua (ItemLock.lua already handles it via ContainerFrameItemButtonMixin hook)
 - [x] Ctrl+Alt+click double-firing - REMOVED duplicate handler from ItemButton.lua (JunkList.lua already handles it)
 - [x] Infinite loop fix v2 - FinishSelling now only reschedules for valid items, not pending items
+- [x] Infinite loop fix v3 - reworked ITEM_LOCK_CHANGED to properly detect sold vs rejected vs buyback
 - [ ] Test vendor buy tracking after hooksecurefunc conversion
 - [ ] Test repair tracking after hooksecurefunc conversion
 - [ ] Test mail tracking after hooksecurefunc conversion
+
+### Misc Bug Fixes
+- [x] SellHistory nil message - added guard for nil CHAT_MSG_LOOT message
+- [ ] Settings panel blocking keybinds - user says it used to work, investigate
+- [ ] MoneyFrame tooltip error - happens on item hover, might be Blizzard bug
 
 ### Completed This Session
 - [x] Fix WSL symlink to WoW addon folder
