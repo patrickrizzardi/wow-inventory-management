@@ -2,7 +2,7 @@
 ## Title: InventoryManager
 ## Notes: Comprehensive inventory management - auto-sell, item locking, and auto-repair
 ## Author: Cheddarbound
-## Version: 1.3.0
+## Version: 1.3.1
 ## SavedVariables: InventoryManagerDB
 ## IconTexture: Interface\Icons\INV_Misc_Bag_07
 ## X-Curse-Project-ID: 1422035
