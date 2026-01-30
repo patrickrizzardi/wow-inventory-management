@@ -108,6 +108,8 @@ local defaults = {
         mailHelper = {
             enabled = true,            -- Enable mail helper features
             autoFillOnOpen = false,    -- Auto-fill mail when mailbox opens
+            autoLootOnOpen = false,    -- Auto-loot mail when mailbox opens
+            skipCOD = true,            -- Skip COD mail when auto-looting
             alts = {},                 -- ["CharName-RealmName"] = { faction, class, notes }
             rules = {},                -- Mail rules: { alt, filterType, filterValue, name, enabled }
         },

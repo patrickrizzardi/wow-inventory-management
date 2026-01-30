@@ -110,6 +110,27 @@ function MailPopup:Create()
     end)
     popup.addRulesBtn = addRulesBtn
 
+    -- Loot All button
+    local lootAllBtn = UI:CreateButton(bottomBar, "Loot All", 60, UI.layout.buttonHeightSmall)
+    lootAllBtn:SetPoint("LEFT", addRulesBtn, "RIGHT", 4, 0)
+    lootAllBtn:SetScript("OnClick", function()
+        if IM.modules.MailHelper then
+            if IM.modules.MailHelper:IsLooting() then
+                IM.modules.MailHelper:StopAutoLoot()
+            else
+                IM.modules.MailHelper:StartAutoLoot()
+            end
+        end
+    end)
+    popup.lootAllBtn = lootAllBtn
+
+    -- Loot status text (shows progress during looting)
+    local lootStatus = bottomBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    lootStatus:SetPoint("LEFT", lootAllBtn, "RIGHT", 6, 0)
+    lootStatus:SetTextColor(0.7, 0.7, 0.7, 1)
+    lootStatus:Hide()
+    popup.lootStatus = lootStatus
+
     -- Send All button
     local sendAllBtn = UI:CreateButton(bottomBar, "Send All", 65, UI.layout.buttonHeightSmall)
     sendAllBtn:SetPoint("RIGHT", 0, 0)
@@ -308,4 +329,55 @@ end
 -- Check if popup is shown
 function MailPopup:IsShown()
     return _popup and _popup:IsShown()
+end
+
+-- ============================================================================
+-- LOOTING STATE CALLBACKS
+-- ============================================================================
+
+-- Called when looting starts
+function MailPopup:OnLootingStarted(total)
+    if not _popup then return end
+
+    _popup.lootAllBtn.text:SetText("Stop")
+    _popup.lootStatus:SetText("0/" .. total)
+    _popup.lootStatus:Show()
+
+    -- Disable send buttons during looting
+    _popup.sendAllBtn:Disable()
+end
+
+-- Called during looting to update progress
+function MailPopup:OnLootingProgress(current, total)
+    if not _popup then return end
+
+    _popup.lootStatus:SetText(current .. "/" .. total)
+end
+
+-- Called when looting stops (cancelled or error)
+function MailPopup:OnLootingStopped()
+    if not _popup then return end
+
+    _popup.lootAllBtn.text:SetText("Loot All")
+    _popup.lootStatus:Hide()
+
+    -- Re-enable send buttons
+    _popup.sendAllBtn:Enable()
+
+    -- Refresh to update mail list
+    self:Refresh()
+end
+
+-- Called when looting completes successfully
+function MailPopup:OnLootingComplete(count)
+    if not _popup then return end
+
+    _popup.lootAllBtn.text:SetText("Loot All")
+    _popup.lootStatus:Hide()
+
+    -- Re-enable send buttons
+    _popup.sendAllBtn:Enable()
+
+    -- Refresh to update mail list
+    self:Refresh()
 end

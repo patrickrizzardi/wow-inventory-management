@@ -24,6 +24,13 @@ local _PersistQueue
 local _pendingScanAttempts = 0
 local _pendingScanTimer = nil
 
+-- Auto-loot state
+local _lootQueue = {}       -- { mailIndex, mailIndex, ... }
+local _isLooting = false
+local _lootTotal = 0
+local _lootProgress = 0
+local LOOT_DELAY = 0.5      -- Minimum delay between mail loot calls
+
 -- Filter types supported
 local FILTER_TYPES = {
     quality = {
@@ -191,21 +198,39 @@ function MailHelper:OnMailShow()
         return
     end
 
-    -- Auto-scan and show popup if we have rules
-    local rules = self:GetRules()
-    if #rules > 0 then
-        C_Timer.After(0.5, function()
-            self:AutoFillQueue()
-            if IM.UI and IM.UI.MailPopup then
-                IM.UI.MailPopup:Show()
-            end
-        end)
-    end
+    local module = self
+
+    -- Delay to let mailbox UI settle
+    C_Timer.After(0.5, function()
+        -- Auto-fill queue for sending rules
+        local rules = module:GetRules()
+        if #rules > 0 then
+            module:AutoFillQueue()
+        end
+
+        -- Show popup (always show when enabled, has loot button too)
+        if IM.UI and IM.UI.MailPopup then
+            IM.UI.MailPopup:Show()
+        end
+
+        -- Auto-loot if setting enabled
+        if IM.db.global.mailHelper.autoLootOnOpen then
+            IM:Debug("[MailHelper] Auto-loot on open enabled, starting...")
+            module:StartAutoLoot()
+        end
+    end)
 end
 
 function MailHelper:OnMailClosed()
     _atMailbox = false
     _currentRecipient = nil
+
+    -- Stop any in-progress looting
+    if _isLooting then
+        _isLooting = false
+        wipe(_lootQueue)
+        IM:Debug("[MailHelper] Looting stopped - mailbox closed")
+    end
 
     -- Hide popup
     if IM.UI and IM.UI.MailPopup then
@@ -657,4 +682,169 @@ function MailHelper:ItemMatchesAnyRule(itemID)
     end
 
     return false
+end
+
+-- ============================================================================
+-- AUTO-LOOT MAIL
+-- ============================================================================
+
+-- Get total free bag slots
+function MailHelper:GetFreeBagSlots()
+    local free = 0
+    for _, bagID in ipairs(IM:GetBagIDsToScan()) do
+        local freeSlots = C_Container.GetContainerNumFreeSlots(bagID)
+        free = free + (freeSlots or 0)
+    end
+    return free
+end
+
+-- Build queue of lootable mail indices
+-- Returns: lootableCount, skippedCODCount
+function MailHelper:BuildLootQueue()
+    wipe(_lootQueue)
+
+    local numItems = GetInboxNumItems()
+    if numItems == 0 then return 0, 0 end
+
+    local skipCOD = IM.db.global.mailHelper.skipCOD
+    local skippedCOD = 0
+
+    for i = 1, numItems do
+        local _, _, _, _, money, CODAmount, _, hasItem = GetInboxHeaderInfo(i)
+        local hasMoney = (money or 0) > 0
+        local isCOD = (CODAmount or 0) > 0
+
+        -- Skip COD mail if setting enabled
+        if isCOD and skipCOD then
+            skippedCOD = skippedCOD + 1
+            IM:Debug("[MailHelper] Skipping COD mail at index " .. i)
+        elseif hasMoney or hasItem then
+            table.insert(_lootQueue, i)
+        end
+    end
+
+    IM:Debug("[MailHelper] Built loot queue with " .. #_lootQueue .. " mails, skipped " .. skippedCOD .. " COD")
+    return #_lootQueue, skippedCOD
+end
+
+-- Start auto-looting mail
+function MailHelper:StartAutoLoot()
+    if not _atMailbox then
+        IM:Print("Must be at a mailbox to loot mail")
+        return false
+    end
+
+    if _isLooting then
+        IM:Debug("[MailHelper] Already looting")
+        return false
+    end
+
+    local lootable, skippedCOD = self:BuildLootQueue()
+
+    if lootable == 0 then
+        if skippedCOD > 0 then
+            IM:Print("No mail to loot (" .. skippedCOD .. " COD mail skipped)")
+        else
+            IM:Print("No mail to loot")
+        end
+        return false
+    end
+
+    _isLooting = true
+    _lootTotal = #_lootQueue
+    _lootProgress = 0
+
+    IM:Debug("[MailHelper] Starting auto-loot of " .. _lootTotal .. " mails")
+
+    -- Notify UI
+    if IM.UI and IM.UI.MailPopup and IM.UI.MailPopup.OnLootingStarted then
+        IM.UI.MailPopup:OnLootingStarted(_lootTotal)
+    end
+
+    self:ProcessLootQueue()
+    return true
+end
+
+-- Process next item in loot queue
+function MailHelper:ProcessLootQueue()
+    if not _isLooting then return end
+
+    -- Check if we have mail left
+    if #_lootQueue == 0 then
+        self:OnLootingComplete()
+        return
+    end
+
+    -- Check bag space
+    local freeSlots = self:GetFreeBagSlots()
+    if freeSlots == 0 then
+        self:StopAutoLoot("Bags full! " .. #_lootQueue .. " mail remaining.")
+        return
+    end
+
+    -- Get next mail index (loot from end to avoid index shifting)
+    local index = table.remove(_lootQueue)
+    _lootProgress = _lootProgress + 1
+
+    -- Notify UI of progress
+    if IM.UI and IM.UI.MailPopup and IM.UI.MailPopup.OnLootingProgress then
+        IM.UI.MailPopup:OnLootingProgress(_lootProgress, _lootTotal)
+    end
+
+    -- Loot the mail
+    IM:Debug("[MailHelper] Looting mail " .. _lootProgress .. "/" .. _lootTotal .. " (index " .. index .. ")")
+    AutoLootMailItem(index)
+
+    -- Continue after delay (throttle to avoid mail errors)
+    C_Timer.After(LOOT_DELAY, function()
+        if _isLooting then
+            self:ProcessLootQueue()
+        end
+    end)
+end
+
+-- Stop auto-looting (user cancel or error)
+function MailHelper:StopAutoLoot(reason)
+    if not _isLooting then return end
+
+    _isLooting = false
+    wipe(_lootQueue)
+
+    if reason then
+        IM:Print(reason)
+    end
+
+    IM:Debug("[MailHelper] Auto-loot stopped: " .. (reason or "user cancelled"))
+
+    -- Notify UI
+    if IM.UI and IM.UI.MailPopup and IM.UI.MailPopup.OnLootingStopped then
+        IM.UI.MailPopup:OnLootingStopped()
+    end
+end
+
+-- Called when looting completes successfully
+function MailHelper:OnLootingComplete()
+    local looted = _lootProgress
+    _isLooting = false
+    _lootProgress = 0
+    _lootTotal = 0
+    wipe(_lootQueue)
+
+    IM:Print("Looted " .. looted .. " mail" .. (looted == 1 and "" or "s"))
+    IM:Debug("[MailHelper] Auto-loot complete: " .. looted .. " mails")
+
+    -- Notify UI
+    if IM.UI and IM.UI.MailPopup and IM.UI.MailPopup.OnLootingComplete then
+        IM.UI.MailPopup:OnLootingComplete(looted)
+    end
+end
+
+-- Check if currently looting
+function MailHelper:IsLooting()
+    return _isLooting
+end
+
+-- Get looting progress for UI
+function MailHelper:GetLootProgress()
+    return _lootProgress, _lootTotal
 end

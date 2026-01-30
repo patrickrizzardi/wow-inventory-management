@@ -44,6 +44,34 @@ function MailHelperPanel:Create(parent)
     content:AdvanceY(configCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================
+    -- AUTO-LOOT SETTINGS CARD
+    -- ============================================================
+    local lootCard = UI:CreateCard(content, {
+        title = "Auto-Loot Settings",
+        description = "Automatically collect items and gold from your mailbox.",
+    })
+
+    local autoLootCheck = lootCard:AddCheckbox(
+        "Auto-loot mail when mailbox opens",
+        IM.db.global.mailHelper.autoLootOnOpen,
+        "|cff666666Starts looting all mail automatically when you open a mailbox|r"
+    )
+    autoLootCheck.checkbox.OnValueChanged = function(self, checked)
+        IM.db.global.mailHelper.autoLootOnOpen = checked
+    end
+
+    local skipCODCheck = lootCard:AddCheckbox(
+        "Skip COD mail when looting",
+        IM.db.global.mailHelper.skipCOD,
+        "|cff666666Prevents accidentally paying for Cash-On-Delivery mail|r"
+    )
+    skipCODCheck.checkbox.OnValueChanged = function(self, checked)
+        IM.db.global.mailHelper.skipCOD = checked
+    end
+
+    content:AdvanceY(lootCard:GetContentHeight() + UI.layout.cardSpacing)
+
+    -- ============================================================
     -- MAIL RULES CARD (with custom inputs and list)
     -- ============================================================
     local rulesCard = UI:CreateCard(content, {
