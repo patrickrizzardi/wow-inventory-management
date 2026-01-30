@@ -52,22 +52,52 @@ end
 
 function CategoryView:Refresh(scrollContent)
     if not scrollContent then return end
-    
+
     -- Release all item buttons
     if BagUI.ItemButton then
         BagUI.ItemButton:ReleaseAll()
     end
-    
-    -- Clear any existing category headers
+
+    -- Clear any existing category headers and empty state message
     for _, child in ipairs({scrollContent:GetChildren()}) do
-        if child._imCategoryHeader then
+        if child._imCategoryHeader or child._imEmptyState then
             child:Hide()
         end
     end
-    
-    -- Gather items from bags
+
+    -- Gather items from bags (filtered by search)
     local items = self:GatherItems()
-    
+
+    -- Handle empty state (no items or no search results)
+    if #items == 0 then
+        local searchFilter = BagUI:GetSearchFilter()
+        local emptyText = scrollContent._imEmptyText
+
+        if not emptyText then
+            emptyText = scrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            emptyText:SetPoint("CENTER", scrollContent, "CENTER", 0, 50)
+            emptyText._imEmptyState = true
+            scrollContent._imEmptyText = emptyText
+        end
+
+        if searchFilter and searchFilter ~= "" then
+            emptyText:SetText("|cff888888No items match \"" .. searchFilter .. "\"|r")
+        else
+            emptyText:SetText("|cff888888No items in bags|r")
+        end
+        emptyText:Show()
+
+        -- Set minimal scroll content height
+        local itemSize = BagUI.MasonryLayout:GetItemSize()
+        scrollContent:SetHeight(itemSize + 40)
+        return
+    end
+
+    -- Hide empty state if we have items
+    if scrollContent._imEmptyText then
+        scrollContent._imEmptyText:Hide()
+    end
+
     -- Organize into categories
     local settings = BagUI:GetSettings()
     local categories
@@ -76,24 +106,120 @@ function CategoryView:Refresh(scrollContent)
     else
         categories = self:OrganizeByCategory(items)
     end
-    
+
+    -- Filter out empty categories (shouldn't happen but safety check)
+    local nonEmptyCategories = {}
+    for _, cat in ipairs(categories) do
+        if #cat.items > 0 then
+            table.insert(nonEmptyCategories, cat)
+        end
+    end
+    categories = nonEmptyCategories
+
     -- Calculate layout
     local containerWidth = scrollContent:GetWidth()
     -- Dynamic fallback based on parent frame width
-    if containerWidth <= 0 then 
+    if containerWidth <= 0 then
         containerWidth = (scrollContent:GetParent() and scrollContent:GetParent():GetWidth() or 480) - 40
     end
-    
+
     local columnData, totalHeight = BagUI.MasonryLayout:CalculateFromSettings(categories, containerWidth)
-    
+
     -- Render categories
     self:RenderCategories(scrollContent, columnData)
-    
+
     -- Update scroll content height (dynamic minimum based on one row)
-    local settings = BagUI:GetSettings()
     local itemSize = BagUI.MasonryLayout:GetItemSize()
     local minHeight = itemSize + 40  -- One row + padding
     scrollContent:SetHeight(math.max(totalHeight + 20, minHeight))
+end
+
+-- ============================================================================
+-- SEARCH FILTER HELPERS
+-- ============================================================================
+
+-- Parse ilvl filter syntax: >400, >=400, <400, <=400, =400, 400
+local function _ParseIlvlFilter(filter)
+    -- Try to match comparison operators
+    local op, num = filter:match("^([<>=]+)(%d+)$")
+    if op and num then
+        return op, tonumber(num)
+    end
+
+    -- Try plain number (exact match)
+    local plainNum = filter:match("^(%d+)$")
+    if plainNum then
+        return "=", tonumber(plainNum)
+    end
+
+    return nil, nil
+end
+
+-- Check if item level matches filter
+local function _MatchesIlvlFilter(itemIlvl, op, targetIlvl)
+    if not itemIlvl or itemIlvl <= 0 then return false end
+
+    if op == "=" then return itemIlvl == targetIlvl end
+    if op == ">" then return itemIlvl > targetIlvl end
+    if op == ">=" then return itemIlvl >= targetIlvl end
+    if op == "<" then return itemIlvl < targetIlvl end
+    if op == "<=" then return itemIlvl <= targetIlvl end
+
+    return false
+end
+
+-- Get item level for an item
+local function _GetItemLevel(bagID, slotID, itemLink)
+    local effectiveILvl = nil
+
+    -- Prefer instance-based ilvl from bag/slot
+    if ItemLocation and C_Item and C_Item.GetCurrentItemLevel then
+        local itemLoc = ItemLocation:CreateFromBagAndSlot(bagID, slotID)
+        if itemLoc and itemLoc.IsValid and itemLoc:IsValid() then
+            effectiveILvl = C_Item.GetCurrentItemLevel(itemLoc)
+        end
+    end
+
+    -- Fallback to link-based
+    if (not effectiveILvl or effectiveILvl <= 0) and itemLink and GetDetailedItemLevelInfo then
+        effectiveILvl = GetDetailedItemLevelInfo(itemLink)
+    end
+
+    return effectiveILvl
+end
+
+-- Check if item matches search filter
+local function _ItemMatchesFilter(item, filter)
+    if not filter or filter == "" then return true end
+
+    local filterLower = filter:lower()
+
+    -- Check if it's an ilvl filter
+    local op, targetIlvl = _ParseIlvlFilter(filter)
+    if op and targetIlvl then
+        local itemIlvl = _GetItemLevel(item.bagID, item.slotID, item.hyperlink)
+        return _MatchesIlvlFilter(itemIlvl, op, targetIlvl)
+    end
+
+    -- Text filter - match item name, category, or subcategory
+    local itemName = GetItemInfo(item.itemID)
+    if itemName and itemName:lower():find(filterLower, 1, true) then
+        return true
+    end
+
+    -- Match category
+    local categoryName = CategoryView:GetItemCategory(item)
+    if categoryName and categoryName:lower():find(filterLower, 1, true) then
+        return true
+    end
+
+    -- Match subcategory
+    local subcategoryName = CategoryView:GetItemSubcategory(item)
+    if subcategoryName and subcategoryName:lower():find(filterLower, 1, true) then
+        return true
+    end
+
+    return false
 end
 
 -- ============================================================================
@@ -102,14 +228,15 @@ end
 
 function CategoryView:GatherItems()
     local items = {}
-    
+    local searchFilter = BagUI:GetSearchFilter()
+
     -- Scan regular bags (backpack + all equipped bags)
     for bagID = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
         local numSlots = C_Container.GetContainerNumSlots(bagID)
         for slotID = 1, numSlots do
             local itemInfo = C_Container.GetContainerItemInfo(bagID, slotID)
             if itemInfo then
-                table.insert(items, {
+                local item = {
                     bagID = bagID,
                     slotID = slotID,
                     itemID = itemInfo.itemID,
@@ -118,11 +245,15 @@ function CategoryView:GatherItems()
                     quality = itemInfo.quality,
                     isLocked = itemInfo.isLocked,
                     hyperlink = itemInfo.hyperlink,
-                })
+                }
+                -- Apply search filter
+                if _ItemMatchesFilter(item, searchFilter) then
+                    table.insert(items, item)
+                end
             end
         end
     end
-    
+
     -- Scan reagent bag (if available)
     if Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag then
         local reagentBagID = Enum.BagIndex.ReagentBag
@@ -131,7 +262,7 @@ function CategoryView:GatherItems()
             for slotID = 1, reagentSlots do
                 local itemInfo = C_Container.GetContainerItemInfo(reagentBagID, slotID)
                 if itemInfo then
-                    table.insert(items, {
+                    local item = {
                         bagID = reagentBagID,
                         slotID = slotID,
                         itemID = itemInfo.itemID,
@@ -140,12 +271,16 @@ function CategoryView:GatherItems()
                         quality = itemInfo.quality,
                         isLocked = itemInfo.isLocked,
                         hyperlink = itemInfo.hyperlink,
-                    })
+                    }
+                    -- Apply search filter
+                    if _ItemMatchesFilter(item, searchFilter) then
+                        table.insert(items, item)
+                    end
                 end
             end
         end
     end
-    
+
     return items
 end
 

@@ -189,11 +189,30 @@ function BagUIPanel:Create(parent)
             IM.UI.BagUI:InitializeSettings()
         end
         IM.db.global.bagUI.height = value
-        
+
         -- Resize window
         if IM.UI.BagUI then
             IM.UI.BagUI:ResizeForSettings()
         end
+    end
+
+    -- Icon size slider
+    local iconSizeY = layoutCard:AddContent(50)
+    local iconSizeSlider = UI:CreateSlider(layoutCard, "Icon size", 16, 32, 2, IM.db.global.bagUI and IM.db.global.bagUI.iconSize or 20)
+    iconSizeSlider:SetPoint("TOPLEFT", layoutCard, "TOPLEFT", layoutCard._leftPadding, iconSizeY)
+    iconSizeSlider.OnValueChanged = function(self, value)
+        if not IM.db.global.bagUI then
+            IM.UI.BagUI:InitializeSettings()
+        end
+        IM.db.global.bagUI.iconSize = value
+
+        -- Debounce expensive layout work while dragging
+        ScheduleLayoutRefresh()
+    end
+    if iconSizeSlider.slider then
+        iconSizeSlider.slider:HookScript("OnMouseUp", function()
+            ApplyLayoutNow()
+        end)
     end
 
     content:AdvanceY(layoutCard:GetContentHeight() + UI.layout.cardSpacing)

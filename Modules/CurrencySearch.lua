@@ -66,10 +66,16 @@ function CurrencySearch:TrySetup()
 
     local debounceTimer = nil
     searchBox:SetScript("OnTextChanged", function(self, userInput)
+        -- Hide/show placeholder based on text content
+        local text = self:GetText()
+        if self.Instructions then
+            self.Instructions:SetShown(text == "")
+        end
+
         if userInput then
             if debounceTimer then debounceTimer:Cancel() end
             debounceTimer = C_Timer.NewTimer(0.15, function()
-                _searchFilter = self:GetText():lower()
+                _searchFilter = text:lower()
                 CurrencySearch:ApplyFilter()
             end)
         end

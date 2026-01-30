@@ -18,10 +18,11 @@ local MasonryLayout = BagUI.MasonryLayout
 -- DYNAMIC LAYOUT HELPERS
 -- ============================================================================
 
--- Get item size dynamically from UI layout
+-- Get item size dynamically from bag settings
 function MasonryLayout:GetItemSize()
-    -- Access via IM.UI to ensure we get the live reference
-    local iconSize = (IM.UI and IM.UI.layout and IM.UI.layout.iconSize) or 20
+    -- Read from bag settings (user-configurable), fallback to UI constant
+    local settings = BagUI:GetSettings()
+    local iconSize = settings.iconSize or (IM.UI and IM.UI.layout and IM.UI.layout.iconSize) or 20
     return iconSize + 17  -- icon + border/padding (matches ItemButton size)
 end
 

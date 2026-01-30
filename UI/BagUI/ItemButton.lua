@@ -76,8 +76,10 @@ function ItemButton:CreateButton(index)
     -- CRITICAL: Use ContainerFrameItemButtonTemplate for secure handling
     -- This template provides built-in support for right-click, equip, use, etc.
     local button = CreateFrame("ItemButton", "InventoryManagerBagItem" .. index, _parentFrame, "ContainerFrameItemButtonTemplate")
-    
-    button:SetSize(UI.layout.iconSize + 17, UI.layout.iconSize + 17)  -- Standard item button size (37x37)
+
+    -- Use dynamic icon size from settings
+    local iconSize = BagUI:GetSettings().iconSize or UI.layout.iconSize or 20
+    button:SetSize(iconSize + 17, iconSize + 17)
     button:Hide()
     
     -- Hide the blue Battlepay glow texture
@@ -380,4 +382,25 @@ end
 
 function ItemButton:GetActiveCount()
     return #_activeButtons
+end
+
+-- ============================================================================
+-- DYNAMIC RESIZING
+-- ============================================================================
+
+function ItemButton:ResizeButton(button, newSize)
+    if not button then return end
+    button:SetSize(newSize, newSize)
+end
+
+function ItemButton:ResizeAll()
+    -- Resize all buttons in pool to match current icon size setting
+    local iconSize = BagUI:GetSettings().iconSize or UI.layout.iconSize or 20
+    local buttonSize = iconSize + 17
+
+    for _, button in ipairs(_buttonPool) do
+        button:SetSize(buttonSize, buttonSize)
+    end
+
+    IM:Debug("[BagUI.ItemButton] Resized " .. #_buttonPool .. " buttons to " .. buttonSize .. "px")
 end

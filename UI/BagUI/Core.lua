@@ -19,6 +19,43 @@ BagUI.CategoryView = BagUI.CategoryView or {}
 local _bagFrame = nil
 local _isVisible = false
 
+-- Search filter state
+local _searchFilter = ""
+local _searchRefreshTimer = nil
+
+-- ============================================================================
+-- SEARCH FILTER
+-- ============================================================================
+
+function BagUI:SetSearchFilter(text)
+    text = text or ""
+    if _searchFilter == text then return end
+
+    _searchFilter = text
+
+    -- Debounce refresh (0.15s delay)
+    if _searchRefreshTimer then
+        _searchRefreshTimer:Cancel()
+    end
+    _searchRefreshTimer = C_Timer.NewTimer(0.15, function()
+        _searchRefreshTimer = nil
+        if self:IsShown() then
+            self:Refresh()
+        end
+    end)
+end
+
+function BagUI:GetSearchFilter()
+    return _searchFilter
+end
+
+function BagUI:ClearSearchFilter()
+    _searchFilter = ""
+    if _bagFrame and _bagFrame.searchBox then
+        _bagFrame.searchBox:SetText("")
+    end
+end
+
 -- ============================================================================
 -- MAIN BAG FRAME
 -- ============================================================================
@@ -31,9 +68,10 @@ function BagUI:Create()
     local columns = settings.columns or 2
     local itemsPerRow = settings.itemsPerRow or 6
     local height = settings.height or 500
-    
+    local iconSize = settings.iconSize or 20
+
     -- Calculate required width
-    local itemSize = 37  -- iconSize (20) + border (17)
+    local itemSize = iconSize + 17  -- icon + border/padding
     local paddingSmall = IM.UI.layout.paddingSmall or 4
     local categoryPadding = IM.UI.layout.cardSpacing or 10
     local columnGap = categoryPadding * 2  -- 20px between columns
@@ -112,9 +150,91 @@ function BagUI:Create()
     gearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     header.gearButton = gearBtn
 
-    -- Content container (for categories and items)
+    -- Search bar below header
+    local searchBarHeight = 26
+    local searchBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    searchBar:SetHeight(searchBarHeight)
+    searchBar:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
+    searchBar:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, 0)
+    searchBar:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+    })
+    searchBar:SetBackdropColor(0.06, 0.06, 0.06, 1)
+    frame.searchBar = searchBar
+
+    -- Search icon
+    local searchIcon = searchBar:CreateTexture(nil, "ARTWORK")
+    searchIcon:SetSize(14, 14)
+    searchIcon:SetPoint("LEFT", UI.layout.padding, 0)
+    searchIcon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
+    searchIcon:SetVertexColor(0.6, 0.6, 0.6)
+
+    -- Search editbox
+    local searchBox = CreateFrame("EditBox", nil, searchBar, "InputBoxTemplate")
+    searchBox:SetPoint("LEFT", searchIcon, "RIGHT", 4, 0)
+    searchBox:SetPoint("RIGHT", searchBar, "RIGHT", -26, 0)
+    searchBox:SetHeight(18)
+    searchBox:SetAutoFocus(false)
+    searchBox:SetFontObject("GameFontHighlightSmall")
+    searchBox:SetTextInsets(0, 0, 0, 0)
+
+    -- Hide default InputBox textures
+    if searchBox.Left then searchBox.Left:Hide() end
+    if searchBox.Right then searchBox.Right:Hide() end
+    if searchBox.Middle then searchBox.Middle:Hide() end
+    if searchBox.Bg then searchBox.Bg:Hide() end
+
+    -- Placeholder text
+    local placeholder = searchBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    placeholder:SetPoint("LEFT", 2, 0)
+    placeholder:SetText("Search items... (name, ilvl, category)")
+    placeholder:SetTextColor(0.5, 0.5, 0.5)
+    searchBox.placeholder = placeholder
+
+    searchBox:SetScript("OnTextChanged", function(self)
+        local text = self:GetText()
+        placeholder:SetShown(text == "")
+        BagUI:SetSearchFilter(text)
+    end)
+
+    searchBox:SetScript("OnEscapePressed", function(self)
+        if self:GetText() ~= "" then
+            self:SetText("")
+            self:ClearFocus()
+        else
+            self:ClearFocus()
+            BagUI:Hide()
+        end
+    end)
+
+    searchBox:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+    end)
+
+    frame.searchBox = searchBox
+
+    -- Clear button
+    local clearBtn = CreateFrame("Button", nil, searchBar)
+    clearBtn:SetSize(16, 16)
+    clearBtn:SetPoint("RIGHT", -UI.layout.paddingSmall, 0)
+    clearBtn:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
+    clearBtn:GetNormalTexture():SetVertexColor(0.6, 0.6, 0.6)
+    clearBtn:SetHighlightTexture("Interface\\Buttons\\UI-StopButton")
+    clearBtn:GetHighlightTexture():SetVertexColor(1, 1, 1)
+    clearBtn:SetScript("OnClick", function()
+        searchBox:SetText("")
+        searchBox:ClearFocus()
+    end)
+    clearBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Clear search")
+        GameTooltip:Show()
+    end)
+    clearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Content container (for categories and items) - below search bar
     local contentContainer = CreateFrame("Frame", nil, frame)
-    contentContainer:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
+    contentContainer:SetPoint("TOPLEFT", searchBar, "BOTTOMLEFT", 0, 0)
     contentContainer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, UI.layout.bottomBarHeight + UI.layout.padding)
     frame.contentContainer = contentContainer
     
@@ -255,7 +375,10 @@ function BagUI:Hide()
     if _bagFrame then
         _bagFrame:Hide()
         _isVisible = false
-        
+
+        -- Clear search filter
+        self:ClearSearchFilter()
+
         -- Play sound
         PlaySound(SOUNDKIT.IG_BACKPACK_CLOSE)
     end
@@ -384,27 +507,33 @@ end
 
 function BagUI:ResizeForSettings()
     if not _bagFrame then return end
-    
+
     local settings = self:GetSettings()
     local columns = settings.columns or 2
     local itemsPerRow = settings.itemsPerRow or 6
     local height = settings.height or 500
-    
-    -- Calculate optimal width
-    local itemSize = 37
+    local iconSize = settings.iconSize or 20
+
+    -- Resize item buttons to match new icon size
+    if BagUI.ItemButton and BagUI.ItemButton.ResizeAll then
+        BagUI.ItemButton:ResizeAll()
+    end
+
+    -- Calculate optimal width with dynamic icon size
+    local itemSize = iconSize + 17
     local paddingSmall = IM.UI.layout.paddingSmall or 4
     local categoryPadding = IM.UI.layout.cardSpacing or 10
     local columnGap = categoryPadding * 2
-    
+
     local itemRowWidth = (itemSize * itemsPerRow) + (paddingSmall * (itemsPerRow - 1)) + (paddingSmall * 2)
     local totalWidth = (itemRowWidth * columns) + (columnGap * (columns - 1)) + (categoryPadding * 2) + 40
-    
+
     -- Clamp to reasonable bounds
     totalWidth = math.max(totalWidth, 480)
     totalWidth = math.min(totalWidth, 1200)
-    
-    IM:Debug(string.format("[BagUI] Resizing to width: %d, height: %d (cols=%d, items/row=%d)", totalWidth, height, columns, itemsPerRow))
-    
+
+    IM:Debug(string.format("[BagUI] Resizing to width: %d, height: %d (cols=%d, items/row=%d, iconSize=%d)", totalWidth, height, columns, itemsPerRow, iconSize))
+
     _bagFrame:SetWidth(totalWidth)
     _bagFrame:SetHeight(height)
 end
@@ -414,7 +543,10 @@ end
 -- ============================================================================
 
 function BagUI:GetSettings()
-    return IM.db.global.bagUI or {}
+    local settings = IM.db.global.bagUI or {}
+    -- Ensure defaults for any missing keys (handles upgrades from older versions)
+    if settings.iconSize == nil then settings.iconSize = 20 end
+    return settings
 end
 
 function BagUI:InitializeSettings()
@@ -443,6 +575,7 @@ function BagUI:InitializeSettings()
             viewMode = "category",  -- "category" or "subcategory"
             showItemSets = true,
             height = 500,  -- Default height
+            iconSize = 20,  -- Item icon size (16-32)
             position = {
                 point = "BOTTOMRIGHT",
                 relativePoint = "BOTTOMRIGHT",
@@ -457,6 +590,65 @@ end
 -- ============================================================================
 -- BAG TOGGLE INTEGRATION
 -- ============================================================================
+
+-- Hidden button for keybind overrides
+local _toggleButton = nil
+
+function BagUI:GetToggleButton()
+    if not _toggleButton then
+        _toggleButton = CreateFrame("Button", "InventoryManagerBagToggleButton", UIParent, "SecureActionButtonTemplate")
+        _toggleButton:SetScript("OnClick", function()
+            if BagUI:IsEnabled() then
+                BagUI:Toggle()
+            end
+        end)
+        _toggleButton:Hide()
+    end
+    return _toggleButton
+end
+
+function BagUI:SetupBindingOverrides()
+    if not self:IsEnabled() then return end
+
+    local toggleBtn = self:GetToggleButton()
+
+    -- All bag-related bindings we want to intercept
+    local bagBindings = {
+        "OPENALLBAGS",
+        "TOGGLEBACKPACK",
+        "TOGGLEBAG1",
+        "TOGGLEBAG2",
+        "TOGGLEBAG3",
+        "TOGGLEBAG4",
+    }
+
+    local boundKeys = {}
+
+    for _, binding in ipairs(bagBindings) do
+        -- GetBindingKey returns all keys bound to this action
+        local key1, key2 = GetBindingKey(binding)
+        if key1 then
+            SetOverrideBindingClick(toggleBtn, true, key1, "InventoryManagerBagToggleButton")
+            table.insert(boundKeys, key1 .. " (" .. binding .. ")")
+        end
+        if key2 then
+            SetOverrideBindingClick(toggleBtn, true, key2, "InventoryManagerBagToggleButton")
+            table.insert(boundKeys, key2 .. " (" .. binding .. ")")
+        end
+    end
+
+    if #boundKeys > 0 then
+        IM:Debug("[BagUI] Override bindings set: " .. table.concat(boundKeys, ", "))
+    else
+        IM:Debug("[BagUI] No bag keybinds found to override")
+    end
+end
+
+function BagUI:ClearBindingOverrides()
+    local toggleBtn = self:GetToggleButton()
+    ClearOverrideBindings(toggleBtn)
+    IM:Debug("[BagUI] Override bindings cleared")
+end
 
 function BagUI:HookBagToggle()
     local otherAddon = self:DetectOtherBagAddon()
@@ -775,13 +967,16 @@ end
 
 IM:RegisterEvent("PLAYER_LOGIN", function()
     BagUI:InitializeSettings()
-    
+
     -- Pre-create the frame but don't show it
     BagUI:Create()
-    
+
     -- Hook bag toggle if custom UI is enabled
     BagUI:HookBagToggle()
-    
+
+    -- Set up keybind overrides to intercept all bag-related keys
+    BagUI:SetupBindingOverrides()
+
     -- Show warning popup if conflict detected and user has it enabled
     C_Timer.After(2, function()
         local otherAddon = BagUI:GetDetectedBagAddon()
@@ -789,6 +984,14 @@ IM:RegisterEvent("PLAYER_LOGIN", function()
             BagUI:ShowConflictWarning(otherAddon)
         end
     end)
-    
+
     IM:Debug("[BagUI] Initialized")
+end)
+
+-- Re-apply overrides when user changes keybinds
+IM:RegisterEvent("UPDATE_BINDINGS", function()
+    if BagUI:IsEnabled() then
+        BagUI:ClearBindingOverrides()
+        BagUI:SetupBindingOverrides()
+    end
 end)
