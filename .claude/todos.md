@@ -5,12 +5,13 @@ General maintenance and feature work
 
 ## Active Phases
 
-### Icon Border Resize Bug
+### BagUI Icon Resizer Polish
 - [x] Add debug dump function to ItemButton.lua
 - [x] Trigger dump on first SetItem call
 - [x] Clean up debug code (put behind `/im debug` flag)
-- [ ] Identify actual border element from debug output (waiting for user test)
-- [ ] Apply correct resize method to border element
+- [x] Fix category header positioning - headers now anchor to first item (CategoryView.lua)
+- [ ] Verify headers follow icon size changes (waiting for user test)
+- [ ] Identify actual border element from debug output (if still needed)
 
 ### Item Upgrade Taint Fix
 - [x] Identify cause (SetOverrideBindingClick active during secure interactions)

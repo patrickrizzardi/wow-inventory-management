@@ -19,17 +19,17 @@
 ## Current Context (REPLACE each update)
 
 **Goal**: General maintenance / feature additions
-**Immediate Task**: User testing converted hooks (vendor buy, repair, mail tracking)
+**Immediate Task**: BagUI polish - icon resizer and header positioning
 
 **In Progress**:
-- Icon border resize bug - debug dump behind `/im debug` flag, waiting for user to test
+- BagUI category headers now anchor to items - waiting for user test
 - Testing converted hooks (vendor buy, repair, mail tracking)
 
 **Recently Completed** (last 3-5 items):
-- FIXED Alt+click/Ctrl+Alt+click double-firing - removed duplicate handlers from ItemButton.lua (ItemLock.lua & JunkList.lua already handle via ContainerFrameItemButtonMixin hook)
-- FIXED Infinite loop v2 - FinishSelling now only reschedules for valid items, not pending items
-- FIXED Merchant reject loop - items merchant won't buy now tracked in _rejectedItems list
-- FIXED Worth display - GetAutoSellItems now includes totalValue in returned items
+- FIXED BagUI category header positioning - headers now anchor to first item in category (CategoryView.lua) instead of absolute positions
+- Icon border resize bug - debug dump behind `/im debug` flag
+- FIXED Alt+click/Ctrl+Alt+click double-firing - removed duplicate handlers from ItemButton.lua
+- FIXED Infinite loop v2 - FinishSelling now only reschedules for valid items
 - FIXED Item Upgrade taint - root cause was StaticPopup_Show function replacement
 
 ---
