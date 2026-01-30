@@ -98,16 +98,11 @@ end
 
 -- Register for vendor purchase events
 function SellHistory:RegisterPurchaseTracking()
-    -- Track when buying from merchants via MERCHANT_UPDATE and comparing bag contents
-    -- This is tricky because there's no direct "item purchased" event
-    -- We'll hook into BuyMerchantItem instead
+    -- Track when buying from merchants via hooksecurefunc (prevents taint)
+    -- Hook runs AFTER the purchase, but merchant frame is still open so we can get item info
 
-    -- Store original function
-    local originalBuyMerchantItem = BuyMerchantItem
-
-    -- Replace with our wrapper
-    BuyMerchantItem = function(index, quantity)
-        -- Get item info before buying (use modern API with fallback)
+    hooksecurefunc("BuyMerchantItem", function(index, quantity)
+        -- Get item info (merchant frame still open after purchase)
         local itemLink = C_MerchantFrame and C_MerchantFrame.GetItemLink and C_MerchantFrame.GetItemLink(index) or (GetMerchantItemLink and GetMerchantItemLink(index))
         local price, stackCount
         if C_MerchantFrame and C_MerchantFrame.GetItemInfo then
@@ -121,19 +116,16 @@ function SellHistory:RegisterPurchaseTracking()
         end
         local buyQuantity = quantity or stackCount or 1
 
-        -- Call original
-        originalBuyMerchantItem(index, quantity)
-
         -- Log the purchase
         if itemLink and price then
             local itemID = GetItemInfoInstant(itemLink)
             if itemID then
                 local totalCost = price * math.ceil(buyQuantity / (stackCount or 1))
                 IM:AddPurchaseHistoryEntry(itemID, itemLink, buyQuantity, totalCost)
-                IM:Debug("Logged vendor purchase: " .. itemLink .. " x" .. buyQuantity)
+                IM:Debug("[SellHistory] Logged vendor purchase: " .. itemLink .. " x" .. buyQuantity)
             end
         end
-    end
+    end)
 end
 
 -- Register for auction house events
