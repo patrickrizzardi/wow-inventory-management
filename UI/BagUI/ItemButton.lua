@@ -53,20 +53,23 @@ end
 
 function ItemButton:Initialize(parentFrame)
     if #_buttonPool > 0 then return end  -- Already initialized
-    
+
     _parentFrame = parentFrame
-    
+
     -- Calculate pool size dynamically
     local poolSize = CalculatePoolSize()
-    
+
     -- Pre-create button pool
     for i = 1, poolSize do
         local button = self:CreateButton(i)
         table.insert(_buttonPool, button)
     end
-    
+
     IM:Debug("[BagUI.ItemButton] Initialized pool with " .. poolSize .. " buttons")
 end
+
+-- Debug flag for button structure dump
+local _debugDumped = false
 
 -- ============================================================================
 -- BUTTON CREATION (SECURE)
@@ -77,9 +80,10 @@ function ItemButton:CreateButton(index)
     -- This template provides built-in support for right-click, equip, use, etc.
     local button = CreateFrame("ItemButton", "InventoryManagerBagItem" .. index, _parentFrame, "ContainerFrameItemButtonTemplate")
 
-    -- Use dynamic icon size from settings
+    -- Scale button to match desired icon size (scales all child textures including border)
     local iconSize = BagUI:GetSettings().iconSize or UI.layout.iconSize or 20
-    button:SetSize(iconSize + 17, iconSize + 17)
+    local scale = (iconSize + 17) / 37  -- 37 = default ContainerFrameItemButtonTemplate size
+    button:SetScale(scale)
     button:Hide()
     
     -- Hide the blue Battlepay glow texture
@@ -189,7 +193,23 @@ end
 
 function ItemButton:SetItem(button, bagID, slotID)
     if not button then return end
-    
+
+    -- Debug dump button structure (first item only, when debug enabled)
+    if not _debugDumped and #_buttonPool > 0 and IM.db and IM.db.global and IM.db.global.debugMode then
+        _debugDumped = true
+        local btn = _buttonPool[1]
+        IM:Debug("[ItemButton] === BUTTON STRUCTURE ===")
+        for key, val in pairs(btn) do
+            if type(val) == "table" and type(val.GetObjectType) == "function" then
+                IM:Debug("[ItemButton]   KEY:", key, "=", val:GetObjectType())
+            end
+        end
+        for i, region in ipairs({btn:GetRegions()}) do
+            IM:Debug("[ItemButton]   REGION", i, ":", region:GetObjectType(), "-", region:GetName() or "(unnamed)")
+        end
+        IM:Debug("[ItemButton] === END ===")
+    end
+
     -- Store our reference
     button._imBagID = bagID
     button._imSlotID = slotID
@@ -388,19 +408,25 @@ end
 -- DYNAMIC RESIZING
 -- ============================================================================
 
+-- Default Blizzard button size (ContainerFrameItemButtonTemplate = 37x37)
+local DEFAULT_BUTTON_SIZE = 37
+
 function ItemButton:ResizeButton(button, newSize)
     if not button then return end
-    button:SetSize(newSize, newSize)
+    -- Scale proportionally so all child textures (including border) scale too
+    local scale = newSize / DEFAULT_BUTTON_SIZE
+    button:SetScale(scale)
 end
 
 function ItemButton:ResizeAll()
-    -- Resize all buttons in pool to match current icon size setting
+    -- Scale all buttons in pool to match current icon size setting
     local iconSize = BagUI:GetSettings().iconSize or UI.layout.iconSize or 20
     local buttonSize = iconSize + 17
+    local scale = buttonSize / DEFAULT_BUTTON_SIZE
 
     for _, button in ipairs(_buttonPool) do
-        button:SetSize(buttonSize, buttonSize)
+        button:SetScale(scale)
     end
 
-    IM:Debug("[BagUI.ItemButton] Resized " .. #_buttonPool .. " buttons to " .. buttonSize .. "px")
+    IM:Debug(string.format("[BagUI.ItemButton] Scaled %d buttons to %.2fx (target: %dpx)", #_buttonPool, scale, buttonSize))
 end

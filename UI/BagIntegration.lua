@@ -24,6 +24,7 @@ function BagIntegration:Initialize()
     -- Universal events for overlay refresh
     local integration = self
     IM:RegisterEvent("BAG_UPDATE_DELAYED", function()
+        IM:Debug("[BagIntegration] BAG_UPDATE_DELAYED fired, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
         integration:RefreshAllOverlays()
     end)
 
@@ -37,6 +38,7 @@ function BagIntegration:HookBlizzardBags()
     -- Hook ContainerFrame_Update to add our overlays after items are set
     if ContainerFrame_Update then
         hooksecurefunc("ContainerFrame_Update", function(frame)
+            IM:Debug("[BagIntegration] ContainerFrame_Update hook, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
             integration:OnContainerFrameUpdate(frame)
         end)
     end
@@ -44,13 +46,16 @@ function BagIntegration:HookBlizzardBags()
     -- Hook for combined bags (Blizzard's combined bag view)
     if ContainerFrameCombinedBags then
         ContainerFrameCombinedBags:HookScript("OnShow", function()
+            IM:Debug("[BagIntegration] CombinedBags OnShow, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
             C_Timer.After(0.1, function()
+                IM:Debug("[BagIntegration] CombinedBags OnShow timer, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
                 integration:RefreshAllOverlays()
             end)
         end)
 
         if ContainerFrameCombinedBags.Update then
             hooksecurefunc(ContainerFrameCombinedBags, "Update", function()
+                IM:Debug("[BagIntegration] CombinedBags Update hook, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
                 integration:RefreshAllOverlays()
             end)
         end
@@ -61,7 +66,9 @@ function BagIntegration:HookBlizzardBags()
         local frame = _G["ContainerFrame" .. i]
         if frame then
             frame:HookScript("OnShow", function()
+                IM:Debug("[BagIntegration] ContainerFrame" .. i .. " OnShow, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
                 C_Timer.After(0.1, function()
+                    IM:Debug("[BagIntegration] ContainerFrame" .. i .. " OnShow timer, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
                     integration:RefreshAllOverlays()
                 end)
             end)
@@ -74,11 +81,22 @@ end
 function BagIntegration:OnContainerFrameUpdate(frame)
     if not frame then return end
 
+    -- Skip during secure interactions to avoid taint
+    if IM:IsSecureInteractionActive() then
+        IM:Debug("[BagIntegration] OnContainerFrameUpdate skipped - secure interaction active")
+        return
+    end
+
     local bagID = frame:GetID()
     if not bagID then return end
 
     -- Refresh overlays for this bag after a frame
     C_Timer.After(0, function()
+        -- Re-check secure interaction inside timer callback
+        if IM:IsSecureInteractionActive() then
+            IM:Debug("[BagIntegration] OnContainerFrameUpdate timer skipped - secure interaction active")
+            return
+        end
         if IM.modules.ItemLock then
             IM.modules.ItemLock:RefreshBagOverlays(bagID)
         end
@@ -104,6 +122,11 @@ end
 
 -- Force refresh all bag overlays
 function BagIntegration:RefreshAllOverlays()
+    -- Skip during secure interactions to avoid taint
+    if IM:IsSecureInteractionActive() then
+        IM:Debug("[BagIntegration] RefreshAllOverlays skipped - secure interaction active")
+        return
+    end
     if IM.modules.ItemLock then
         IM.modules.ItemLock:RefreshAllOverlays()
     end

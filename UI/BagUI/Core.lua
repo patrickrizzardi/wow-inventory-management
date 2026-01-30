@@ -23,6 +23,18 @@ local _isVisible = false
 local _searchFilter = ""
 local _searchRefreshTimer = nil
 
+-- Secure interaction tracking (to avoid taint from override bindings)
+local _secureInteractionActive = false
+local _secureInteractionTypes = {
+    -- These interaction types use secure item handling - clear override bindings
+    [53] = true,  -- ItemUpgrade
+    [10] = true,  -- Banker (personal bank)
+    [17] = true,  -- GuildBanker
+    [21] = true,  -- Auctioneer
+    [26] = true,  -- Transmogrifier
+    -- Add more as needed
+}
+
 -- ============================================================================
 -- SEARCH FILTER
 -- ============================================================================
@@ -150,30 +162,32 @@ function BagUI:Create()
     gearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     header.gearButton = gearBtn
 
-    -- Search bar below header
-    local searchBarHeight = 26
+    -- Search bar below header (with horizontal padding to match category cards)
     local searchBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    searchBar:SetHeight(searchBarHeight)
-    searchBar:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
-    searchBar:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, 0)
+    searchBar:SetHeight(UI.layout.buttonHeight)
+    searchBar:SetPoint("TOPLEFT", header, "BOTTOMLEFT", UI.layout.cardSpacing, -UI.layout.paddingSmall)
+    searchBar:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", -UI.layout.cardSpacing, -UI.layout.paddingSmall)
     searchBar:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = UI.layout.borderSize,
     })
     searchBar:SetBackdropColor(0.06, 0.06, 0.06, 1)
+    searchBar:SetBackdropBorderColor(unpack(UI.colors.border))
     frame.searchBar = searchBar
 
     -- Search icon
     local searchIcon = searchBar:CreateTexture(nil, "ARTWORK")
-    searchIcon:SetSize(14, 14)
-    searchIcon:SetPoint("LEFT", UI.layout.padding, 0)
+    searchIcon:SetSize(UI.layout.iconSizeSmall, UI.layout.iconSizeSmall)
+    searchIcon:SetPoint("LEFT", UI.layout.paddingSmall, 0)
     searchIcon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
     searchIcon:SetVertexColor(0.6, 0.6, 0.6)
 
     -- Search editbox
     local searchBox = CreateFrame("EditBox", nil, searchBar, "InputBoxTemplate")
-    searchBox:SetPoint("LEFT", searchIcon, "RIGHT", 4, 0)
-    searchBox:SetPoint("RIGHT", searchBar, "RIGHT", -26, 0)
-    searchBox:SetHeight(18)
+    searchBox:SetPoint("LEFT", searchIcon, "RIGHT", UI.layout.paddingSmall, 0)
+    searchBox:SetPoint("RIGHT", searchBar, "RIGHT", -(UI.layout.iconSizeSmall + UI.layout.paddingSmall * 2), 0)
+    searchBox:SetHeight(UI.layout.rowHeightTiny)
     searchBox:SetAutoFocus(false)
     searchBox:SetFontObject("GameFontHighlightSmall")
     searchBox:SetTextInsets(0, 0, 0, 0)
@@ -186,7 +200,7 @@ function BagUI:Create()
 
     -- Placeholder text
     local placeholder = searchBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    placeholder:SetPoint("LEFT", 2, 0)
+    placeholder:SetPoint("LEFT", UI.layout.paddingSmall, 0)
     placeholder:SetText("Search items... (name, ilvl, category)")
     placeholder:SetTextColor(0.5, 0.5, 0.5)
     searchBox.placeholder = placeholder
@@ -215,7 +229,7 @@ function BagUI:Create()
 
     -- Clear button
     local clearBtn = CreateFrame("Button", nil, searchBar)
-    clearBtn:SetSize(16, 16)
+    clearBtn:SetSize(UI.layout.iconSizeSmall, UI.layout.iconSizeSmall)
     clearBtn:SetPoint("RIGHT", -UI.layout.paddingSmall, 0)
     clearBtn:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
     clearBtn:GetNormalTexture():SetVertexColor(0.6, 0.6, 0.6)
@@ -234,7 +248,7 @@ function BagUI:Create()
 
     -- Content container (for categories and items) - below search bar
     local contentContainer = CreateFrame("Frame", nil, frame)
-    contentContainer:SetPoint("TOPLEFT", searchBar, "BOTTOMLEFT", 0, 0)
+    contentContainer:SetPoint("TOPLEFT", searchBar, "BOTTOMLEFT", -UI.layout.cardSpacing, -UI.layout.paddingSmall)
     contentContainer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, UI.layout.bottomBarHeight + UI.layout.padding)
     frame.contentContainer = contentContainer
     
@@ -668,9 +682,15 @@ end
 
 function BagUI:HookBagToggleNormal()
     -- Standard hooks when no other bag addon is present
-    
+
     -- Hook ToggleAllBags (called when pressing B key)
     hooksecurefunc("ToggleAllBags", function()
+        IM:Debug("[BagUI] ToggleAllBags hook fired, enabled=" .. tostring(self:IsEnabled()) .. ", secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
+        -- Skip during secure interactions - let Blizzard handle it
+        if IM:IsSecureInteractionActive() then
+            IM:Debug("[BagUI] Skipping ToggleAllBags during secure interaction")
+            return
+        end
         if self:IsEnabled() then
             -- Close Blizzard bags IMMEDIATELY (no timer delay)
             -- Regular bags
@@ -680,12 +700,12 @@ function BagUI:HookBagToggleNormal()
                     frame:Hide()
                 end
             end
-            
+
             -- Combined bags
             if ContainerFrameCombinedBags and ContainerFrameCombinedBags:IsShown() then
                 ContainerFrameCombinedBags:Hide()
             end
-            
+
             -- Reagent bag
             if Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag then
                 local reagentFrame = _G["ContainerFrame"..(NUM_BAG_SLOTS + 2)]
@@ -693,14 +713,20 @@ function BagUI:HookBagToggleNormal()
                     reagentFrame:Hide()
                 end
             end
-            
+
             -- Toggle our UI
             self:Toggle()
         end
     end)
-    
+
     -- Hook OpenAllBags (called when opening vendor/AH)
     hooksecurefunc("OpenAllBags", function(forceOpen)
+        IM:Debug("[BagUI] OpenAllBags hook fired, enabled=" .. tostring(self:IsEnabled()) .. ", secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
+        -- Skip during secure interactions - let Blizzard handle it
+        if IM:IsSecureInteractionActive() then
+            IM:Debug("[BagUI] Skipping OpenAllBags during secure interaction")
+            return
+        end
         if self:IsEnabled() then
             -- Close Blizzard bags
             for i = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
@@ -709,25 +735,25 @@ function BagUI:HookBagToggleNormal()
                     frame:Hide()
                 end
             end
-            
+
             if ContainerFrameCombinedBags and ContainerFrameCombinedBags:IsShown() then
                 ContainerFrameCombinedBags:Hide()
             end
-            
+
             if Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag then
                 local reagentFrame = _G["ContainerFrame"..(NUM_BAG_SLOTS + 2)]
                 if reagentFrame and reagentFrame:IsShown() then
                     reagentFrame:Hide()
                 end
             end
-            
+
             -- Show our UI
             if not self:IsShown() then
                 self:Show()
             end
         end
     end)
-    
+
     IM:Debug("[BagUI] Normal bag toggle hooks applied")
 end
 
@@ -800,25 +826,39 @@ function BagUI:HookBagToggleWithPriority(otherAddon)
     -- Hook ToggleAllBags
     hooksecurefunc("ToggleAllBags", function()
         if not self:IsEnabled() then return end
-        
+        -- Skip during secure interactions
+        if IM:IsSecureInteractionActive() then
+            IM:Debug("[BagUI] Skipping priority ToggleAllBags during secure interaction")
+            return
+        end
+
         -- Use a slightly delayed close to override other addons
         C_Timer.After(0.05, function()
+            -- Re-check inside timer
+            if IM:IsSecureInteractionActive() then return end
             CloseAllBagFrames()
-            
+
             -- Show our UI
             if not self:IsShown() then
                 self:Show()
             end
         end)
     end)
-    
+
     -- Hook OpenAllBags (for vendor/AH)
     hooksecurefunc("OpenAllBags", function(forceOpen)
         if not self:IsEnabled() then return end
-        
+        -- Skip during secure interactions
+        if IM:IsSecureInteractionActive() then
+            IM:Debug("[BagUI] Skipping priority OpenAllBags during secure interaction")
+            return
+        end
+
         C_Timer.After(0.05, function()
+            -- Re-check inside timer
+            if IM:IsSecureInteractionActive() then return end
             CloseAllBagFrames()
-            
+
             -- Show our UI
             if not self:IsShown() then
                 self:Show()
@@ -990,8 +1030,41 @@ end)
 
 -- Re-apply overrides when user changes keybinds
 IM:RegisterEvent("UPDATE_BINDINGS", function()
-    if BagUI:IsEnabled() then
+    if BagUI:IsEnabled() and not _secureInteractionActive then
         BagUI:ClearBindingOverrides()
         BagUI:SetupBindingOverrides()
+    end
+end)
+
+-- Clear override bindings when secure interactions open (prevents taint)
+IM:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", function(event, interactionType)
+    if _secureInteractionTypes[interactionType] then
+        _secureInteractionActive = true
+        BagUI:ClearBindingOverrides()
+        -- Also disable the toggle button entirely during secure interactions
+        if _toggleButton then
+            _toggleButton:SetScript("OnClick", nil)
+            _toggleButton:Hide()
+        end
+        IM:Debug("[BagUI] Cleared override bindings for secure interaction type " .. interactionType)
+    end
+end)
+
+-- Restore override bindings when secure interactions close
+IM:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", function(event, interactionType)
+    if _secureInteractionTypes[interactionType] then
+        _secureInteractionActive = false
+        if BagUI:IsEnabled() then
+            -- Restore the toggle button's OnClick script
+            if _toggleButton then
+                _toggleButton:SetScript("OnClick", function()
+                    if BagUI:IsEnabled() then
+                        BagUI:Toggle()
+                    end
+                end)
+            end
+            BagUI:SetupBindingOverrides()
+            IM:Debug("[BagUI] Restored override bindings after secure interaction closed")
+        end
     end
 end)
