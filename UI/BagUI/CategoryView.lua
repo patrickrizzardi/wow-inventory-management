@@ -125,13 +125,19 @@ function CategoryView:Refresh(scrollContent)
 
     local columnData, totalHeight = BagUI.MasonryLayout:CalculateFromSettings(categories, containerWidth)
 
-    -- Render categories
-    self:RenderCategories(scrollContent, columnData)
+    -- Render categories and track actual content bounds
+    local contentBounds = { maxX = 0, maxY = 0 }
+    self:RenderCategories(scrollContent, columnData, contentBounds)
 
-    -- Update scroll content height (dynamic minimum based on one row)
+    -- Set scroll content size from actual rendered bounds
     local itemSize = BagUI.MasonryLayout:GetItemSize()
-    local minHeight = itemSize + 40  -- One row + padding
-    scrollContent:SetHeight(math.max(totalHeight + 20, minHeight))
+    local padding = IM.UI.layout.padding or 8
+    local minHeight = itemSize + 40
+    local minWidth = 200
+
+    -- maxY is positive (distance from top), add item size + padding for bottom buffer
+    scrollContent:SetHeight(math.max(contentBounds.maxY + itemSize + padding, minHeight))
+    scrollContent:SetWidth(math.max(contentBounds.maxX + itemSize + padding, minWidth))
 end
 
 -- ============================================================================
@@ -599,17 +605,17 @@ end
 -- RENDERING
 -- ============================================================================
 
-function CategoryView:RenderCategories(scrollContent, columnData)
+function CategoryView:RenderCategories(scrollContent, columnData, contentBounds)
     if not scrollContent or not columnData then return end
-    
+
     for colIndex, column in ipairs(columnData) do
         for _, categoryData in ipairs(column) do
-            self:RenderCategory(scrollContent, categoryData)
+            self:RenderCategory(scrollContent, categoryData, contentBounds)
         end
     end
 end
 
-function CategoryView:RenderCategory(scrollContent, categoryData)
+function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     local category = categoryData.category
     local x = categoryData.x
     local y = categoryData.y
@@ -623,6 +629,7 @@ function CategoryView:RenderCategory(scrollContent, categoryData)
         category.name, y, itemStartY, itemStartX))
 
     local settings = BagUI:GetSettings()
+    local itemSize = BagUI.MasonryLayout:GetItemSize()
     local positions = BagUI.MasonryLayout:CalculateItemPositions(
         #category.items,
         itemStartX,
@@ -642,6 +649,14 @@ function CategoryView:RenderCategory(scrollContent, categoryData)
             if i == 1 then
                 firstButton = button
                 IM:Debug(string.format("  First item at: x=%d, y=%d", positions[i].x, positions[i].y))
+            end
+
+            -- Track content bounds (positions use negative Y, convert to positive distance from top)
+            if contentBounds then
+                local rightEdge = positions[i].x + itemSize
+                local bottomEdge = math.abs(positions[i].y)  -- Convert negative Y to positive distance
+                if rightEdge > contentBounds.maxX then contentBounds.maxX = rightEdge end
+                if bottomEdge > contentBounds.maxY then contentBounds.maxY = bottomEdge end
             end
         end
     end
