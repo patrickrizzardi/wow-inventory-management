@@ -14,6 +14,9 @@ local _isSelling = false
 local _sellTimer = nil
 local _pendingAttempts = 0
 
+-- Track items merchant rejected (cleared when merchant closes)
+local _rejectedItems = {}
+
 -- Statistics for current sell session
 local _sessionStats = {
     itemCount = 0,
@@ -81,6 +84,9 @@ function AutoSell:OnMerchantClosed()
     -- Cancel any pending sales
     self:CancelSelling()
 
+    -- Clear rejected items list for next merchant
+    wipe(_rejectedItems)
+
     -- Hide the Auto-Sell popup
     if IM.UI and IM.UI.AutoSellPopup then
         IM.UI.AutoSellPopup:Hide()
@@ -99,6 +105,8 @@ end
 
 -- Start selling junk items
 function AutoSell:SellJunk()
+    local module = self  -- Capture for closures
+
     IM:Debug("[AutoSell] SellJunk called")
 
     -- Check if at merchant
@@ -123,7 +131,7 @@ function AutoSell:SellJunk()
     IM:Debug("[AutoSell] SellJunk: Getting items to sell...")
 
     -- Get items to sell
-    local items, pendingItems = IM.Filters:GetAutoSellItems()
+    local items, pendingItems = IM.Filters:GetAutoSellItems(true)  -- verbose=true for actual selling
 
     IM:Debug("[AutoSell] SellJunk: GetAutoSellItems returned " .. #items .. " items")
 
@@ -196,6 +204,13 @@ function AutoSell:ProcessNextItem()
     local item = table.remove(_sellQueue, 1)
     IM:Debug("[AutoSell] Processing: bag=" .. item.bagID .. " slot=" .. item.slotID .. " itemID=" .. item.itemID)
 
+    -- Skip items the merchant already rejected this session
+    if _rejectedItems[item.itemID] then
+        IM:Debug("[AutoSell] SKIPPING rejected item (merchant won't buy): " .. (item.itemLink or item.itemID))
+        module:ProcessNextItem()
+        return
+    end
+
     -- Verify item still exists in that slot
     local info = C_Container.GetContainerItemInfo(item.bagID, item.slotID)
     if not info or not info.itemID then
@@ -230,7 +245,7 @@ function AutoSell:ProcessNextItem()
     end
 
     -- Verify item still passes filters (in case whitelist changed)
-    local shouldSell = IM.Filters:ShouldAutoSell(item.bagID, item.slotID, item.itemID, item.itemLink)
+    local shouldSell = IM.Filters:ShouldAutoSell(item.bagID, item.slotID, item.itemID, item.itemLink, true)
     if not shouldSell then
         IM:Debug("[AutoSell] Item no longer passes filters: " .. (item.itemLink or item.itemID))
         module:ProcessNextItem()
@@ -268,8 +283,25 @@ function AutoSell:ProcessNextItem()
     IM:Debug("[AutoSell] <<< UseContainerItem returned")
 
     -- Schedule next item (longer delay to prevent "object is busy" errors)
+    -- Also check if the item was actually sold - if still in bag, merchant rejected it
+    local checkBagID, checkSlotID, checkItemID = item.bagID, item.slotID, item.itemID
     _sellTimer = C_Timer.NewTimer(0.15, function()
         if _isSelling then
+            -- Check if item is still in the bag (merchant rejected it)
+            local checkInfo = C_Container.GetContainerItemInfo(checkBagID, checkSlotID)
+            if checkInfo and checkInfo.itemID == checkItemID then
+                -- Item still there - merchant rejected it
+                _rejectedItems[checkItemID] = true
+                local rejectedCount = 0
+                for _ in pairs(_rejectedItems) do rejectedCount = rejectedCount + 1 end
+                IM:Debug("[AutoSell] REJECTED by merchant (total rejected: " .. rejectedCount .. "): " .. (item.itemLink or checkItemID))
+                -- Undo the stats we added
+                local _, _, _, _, _, _, _, _, _, _, sellPrice = GetItemInfo(checkItemID)
+                if sellPrice then
+                    _sessionStats.itemCount = _sessionStats.itemCount - (checkInfo.stackCount or 1)
+                    _sessionStats.totalValue = _sessionStats.totalValue - (sellPrice * (checkInfo.stackCount or 1))
+                end
+            end
             module:ProcessNextItem()
         end
     end)
@@ -296,14 +328,35 @@ function AutoSell:FinishSelling()
     end
 
     -- If additional items become eligible after item data loads, keep selling
+    -- But filter out items we already know the merchant won't buy
+    -- NOTE: Only reschedule for actual valid items, NOT pending items.
+    -- SellJunk() has its own retry logic for pending items (max 10 attempts).
     if MerchantFrame and MerchantFrame:IsShown() then
         local items, pendingItems = IM.Filters:GetAutoSellItems()
-        if (items and #items > 0) or (pendingItems and #pendingItems > 0) then
+
+        -- Filter out rejected items
+        local validItems = {}
+        local filteredCount = 0
+        for _, item in ipairs(items or {}) do
+            if not _rejectedItems[item.itemID] then
+                table.insert(validItems, item)
+            else
+                filteredCount = filteredCount + 1
+            end
+        end
+
+        IM:Debug("[AutoSell] FinishSelling check: " .. #(items or {}) .. " found, " .. filteredCount .. " rejected, " .. #validItems .. " valid, " .. #(pendingItems or {}) .. " pending")
+
+        -- Only reschedule if there are actual valid items to sell
+        -- Pending items will be handled by SellJunk's retry logic
+        if #validItems > 0 then
             C_Timer.After(0.2, function()
                 if not _isSelling and MerchantFrame and MerchantFrame:IsShown() then
                     self:SellJunk()
                 end
             end)
+        elseif pendingItems and #pendingItems > 0 then
+            IM:Debug("[AutoSell] Only pending items remain (" .. #pendingItems .. "), letting retry logic handle it")
         end
     end
 end
