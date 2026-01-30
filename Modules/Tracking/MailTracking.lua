@@ -64,54 +64,56 @@ function MailTracking:OnMailClosed()
     IM:Debug("[MailTracking] Mailbox closed")
 end
 
--- Hook mail sending
+-- Hook mail sending (using hooksecurefunc to prevent taint)
 function MailTracking:HookMailFunctions()
-    -- Hook SendMail to track outgoing
-    local originalSendMail = SendMail
+    -- Hook SendMail to track outgoing - capture data BEFORE in a pre-hook via event
+    -- We need to capture mail contents before SendMail clears them
+    -- Use a frame script to capture on click, then hooksecurefunc to confirm send
 
-    SendMail = function(recipient, subject, body)
-        -- Capture what we're sending
-        local money = GetSendMailMoney() or 0
-        local cod = GetSendMailCOD() or 0
-        local items = {}
+    -- Track pending send data when send button is clicked
+    if SendMailMailButton then
+        SendMailMailButton:HookScript("PreClick", function()
+            local recipient = SendMailNameEditBox and SendMailNameEditBox:GetText() or ""
+            local money = GetSendMailMoney() or 0
+            local cod = GetSendMailCOD() or 0
+            local items = {}
 
-        -- Get attached items
-        for i = 1, ATTACHMENTS_MAX_SEND or 12 do
-            local itemLink = GetSendMailItemLink(i)
-            if itemLink then
-                local _, _, _, count = GetSendMailItem(i)
-                local itemID = GetItemInfoInstant(itemLink)
-                if itemID then
-                    table.insert(items, {
-                        itemID = itemID,
-                        itemLink = itemLink,
-                        quantity = count or 1,
-                    })
+            -- Get attached items
+            for i = 1, ATTACHMENTS_MAX_SEND or 12 do
+                local itemLink = GetSendMailItemLink(i)
+                if itemLink then
+                    local _, _, _, count = GetSendMailItem(i)
+                    local itemID = GetItemInfoInstant(itemLink)
+                    if itemID then
+                        table.insert(items, {
+                            itemID = itemID,
+                            itemLink = itemLink,
+                            quantity = count or 1,
+                        })
+                    end
                 end
             end
-        end
 
-        _pendingSend = {
-            recipient = recipient,
-            money = money,
-            cod = cod,
-            items = items,
-            timestamp = time(),
-        }
-
-        -- Call original
-        return originalSendMail(recipient, subject, body)
+            _pendingSend = {
+                recipient = recipient,
+                money = money,
+                cod = cod,
+                items = items,
+                timestamp = time(),
+            }
+        end)
     end
 
+    -- Confirm send happened via hooksecurefunc
+    hooksecurefunc("SendMail", function(recipient, subject, body)
+        -- _pendingSend was captured in PreClick, send success handled by MAIL_SEND_SUCCESS event
+        IM:Debug("[MailTracking] SendMail called for: " .. (recipient or "unknown"))
+    end)
+
     -- Hook TakeInboxMoney to track incoming gold
-    local originalTakeInboxMoney = TakeInboxMoney
-
-    TakeInboxMoney = function(index)
-        -- Get money amount before taking
+    hooksecurefunc("TakeInboxMoney", function(index)
+        -- Get money amount (mail frame still open)
         local _, _, sender, subject, money = GetInboxHeaderInfo(index)
-
-        -- Call original
-        originalTakeInboxMoney(index)
 
         -- Log if there was money
         if money and money > 0 then
@@ -121,19 +123,14 @@ function MailTracking:HookMailFunctions()
             })
             IM:Debug("[MailTracking] Received gold: " .. IM:FormatMoney(money) .. " from " .. (sender or "Unknown"))
         end
-    end
+    end)
 
     -- Hook TakeInboxItem to track incoming items
-    local originalTakeInboxItem = TakeInboxItem
-
-    TakeInboxItem = function(index, itemIndex)
-        -- Get item info before taking
+    hooksecurefunc("TakeInboxItem", function(index, itemIndex)
+        -- Get item info (mail frame still open)
         local itemLink = GetInboxItemLink(index, itemIndex)
         local _, itemID, _, itemCount = GetInboxItem(index, itemIndex)
         local _, _, sender = GetInboxHeaderInfo(index)
-
-        -- Call original
-        originalTakeInboxItem(index, itemIndex)
 
         -- Log if there was an item
         if itemID then
@@ -146,7 +143,7 @@ function MailTracking:HookMailFunctions()
             })
             IM:Debug("[MailTracking] Received item: " .. (itemLink or "item") .. " from " .. (sender or "Unknown"))
         end
-    end
+    end)
 end
 
 -- Handle successful mail send

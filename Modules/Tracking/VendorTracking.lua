@@ -230,12 +230,10 @@ function VendorTracking:LogSellTransaction(itemID, itemLink, quantity, value)
     IM:Debug("[VendorTracking] Sale complete: " .. (itemLink or "item") .. " x" .. quantity .. " for " .. IM:FormatMoney(value))
 end
 
--- Hook vendor purchases
+-- Hook vendor purchases (using hooksecurefunc to prevent taint)
 function VendorTracking:HookPurchases()
-    local originalBuyMerchantItem = BuyMerchantItem
-
-    BuyMerchantItem = function(index, quantity)
-        -- Get item info before buying (use modern API with fallback)
+    hooksecurefunc("BuyMerchantItem", function(index, quantity)
+        -- Get item info (merchant frame still open after purchase)
         local itemLink = C_MerchantFrame and C_MerchantFrame.GetItemLink and C_MerchantFrame.GetItemLink(index) or (GetMerchantItemLink and GetMerchantItemLink(index))
         local price, stackCount
         if C_MerchantFrame and C_MerchantFrame.GetItemInfo then
@@ -249,14 +247,7 @@ function VendorTracking:HookPurchases()
         end
         local buyQuantity = quantity or stackCount or 1
 
-        -- Call original FIRST (safer order - won't break purchase if logging fails)
-        local success, errorMsg = pcall(originalBuyMerchantItem, index, quantity)
-        if not success then
-            IM:Debug("[VendorTracking] BuyMerchantItem failed: " .. tostring(errorMsg))
-            return
-        end
-
-        -- Log the purchase (after successful purchase)
+        -- Log the purchase
         if itemLink and price then
             local itemID = GetItemInfoInstant(itemLink)
             if itemID then
@@ -276,20 +267,15 @@ function VendorTracking:HookPurchases()
                 IM:Debug("[VendorTracking] Purchase: " .. itemLink .. " x" .. buyQuantity .. " for " .. IM:FormatMoney(totalCost))
             end
         end
-    end
+    end)
 end
 
--- Hook buybacks
+-- Hook buybacks (using hooksecurefunc to prevent taint)
 function VendorTracking:HookBuybacks()
-    local originalBuybackItem = BuybackItem
-
-    BuybackItem = function(index)
-        -- Get item info before buyback
+    hooksecurefunc("BuybackItem", function(index)
+        -- Get item info (buyback tab still open after action)
         local itemLink = GetBuybackItemLink(index)
         local _, _, price, quantity = GetBuybackItemInfo(index)
-
-        -- Call original
-        originalBuybackItem(index)
 
         -- Log the buyback
         if itemLink and price then
@@ -309,7 +295,7 @@ function VendorTracking:HookBuybacks()
                 IM:Debug("[VendorTracking] Buyback: " .. itemLink .. " for " .. IM:FormatMoney(price))
             end
         end
-    end
+    end)
 end
 
 -- Check if currently at vendor
