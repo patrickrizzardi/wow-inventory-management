@@ -97,42 +97,17 @@ function ItemButton:CreateButton(index)
     button._imSlotID = nil
     button._imIndex = index
     
-    -- Hook into Blizzard's secure click handling (no taint)
-    -- ContainerFrameItemButtonTemplate handles:
-    -- - Right-click to use/equip
-    -- - Shift-click for linking
-    -- - Alt-click for our lock system
-    -- - Ctrl-Alt-click for our junk system
-    
-    -- Add our custom click handlers (non-secure, but execute before Blizzard's)
-    button:HookScript("OnClick", function(self, mouseButton)
-        if not self._imBagID or not self._imSlotID then return end
-        
-        -- Alt+Click: Toggle lock
-        if IsAltKeyDown() and not IsControlKeyDown() then
-            if IM.modules.ItemLock then
-                IM.modules.ItemLock:ToggleItemLock(self._imBagID, self._imSlotID)
-            end
-            return  -- Don't propagate
-        end
-        
-        -- Ctrl+Alt+Click: Toggle junk
-        if IsControlKeyDown() and IsAltKeyDown() then
-            if IM.modules.JunkList then
-                IM.modules.JunkList:ToggleJunk(self._imBagID, self._imSlotID)
-            end
-            return  -- Don't propagate
-        end
-        
-        -- All other clicks (including right-click) are handled by Blizzard's secure code
-    end)
-    
     -- Create overlay frame for our indicators (lock, sell, mail, etc.)
     local overlay = CreateFrame("Frame", nil, button)
     overlay:SetAllPoints(button)
     overlay:SetFrameLevel(button:GetFrameLevel() + 5)
     button._imOverlay = overlay
-    
+
+    -- NOTE: Alt+Click (lock) and Ctrl+Alt+Click (junk) are handled globally by
+    -- ItemLock.lua and JunkList.lua via hooksecurefunc on ContainerFrameItemButtonMixin.OnClick
+    -- Since our buttons inherit from ContainerFrameItemButtonTemplate, they're already covered.
+    -- No duplicate hook needed here.
+
     return button
 end
 
