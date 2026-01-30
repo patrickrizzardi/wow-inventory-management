@@ -19,21 +19,18 @@
 ## Current Context (REPLACE each update)
 
 **Goal**: General maintenance / feature additions
-**Immediate Task**: Testing Item Upgrade vendor taint fix - awaiting user test results
+**Immediate Task**: User testing converted hooks (vendor buy, repair, mail tracking)
 
 **In Progress**:
 - Icon border resize bug - debug dump behind `/im debug` flag, waiting for user to test
-- Item Upgrade taint fix - comprehensive secure interaction protection implemented
+- Testing converted hooks (vendor buy, repair, mail tracking)
 
 **Recently Completed** (last 3-5 items):
-- Disabled toggle button entirely during secure interactions (OnClick=nil, Hide)
-- Added secure interaction checks to ToggleAllBags/OpenAllBags hooks (normal + priority)
-- Added secure interaction checks to BagIntegration.lua, ItemLock.lua, JunkList.lua
-- Added comprehensive debug logging to trace hook execution during secure interactions
-- Removed "AutoSell module enabled" log message (inconsistent with other modules)
-- Updated publish.sh to auto-update Core.lua version (IM.version)
-- Fixed WSL symlink to WoW addon folder (Debian, not Ubuntu)
-- Cleaned up debug code in ItemButton.lua (behind debug flag now)
+- FIXED Alt+click/Ctrl+Alt+click double-firing - removed duplicate handlers from ItemButton.lua (ItemLock.lua & JunkList.lua already handle via ContainerFrameItemButtonMixin hook)
+- FIXED Infinite loop v2 - FinishSelling now only reschedules for valid items, not pending items
+- FIXED Merchant reject loop - items merchant won't buy now tracked in _rejectedItems list
+- FIXED Worth display - GetAutoSellItems now includes totalValue in returned items
+- FIXED Item Upgrade taint - root cause was StaticPopup_Show function replacement
 
 ---
 
