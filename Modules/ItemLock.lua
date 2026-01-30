@@ -217,7 +217,8 @@ function ItemLock:HookDeletion()
                 if IM:IsWhitelisted(itemID) then
                     -- The popup already appeared, so hide it immediately
                     -- Find which popup dialog is showing this
-                    for i = 1, STATICPOPUP_NUMDIALOGS do
+                    -- STATICPOPUP_NUMDIALOGS may not exist in all WoW versions, default to 4
+                    for i = 1, (STATICPOPUP_NUMDIALOGS or 4) do
                         local popup = _G["StaticPopup" .. i]
                         if popup and popup:IsShown() and popup.which == which then
                             popup:Hide()
