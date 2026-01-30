@@ -614,25 +614,14 @@ function CategoryView:RenderCategory(scrollContent, categoryData)
     local x = categoryData.x
     local y = categoryData.y
     local width = categoryData.width
-    
-    -- Create category header
-    local header = CreateFrame("Frame", nil, scrollContent)
-    header:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", x, y)
-    header:SetSize(width, UI.layout.rowHeightSmall)
-    header._imCategoryHeader = true
-    
-    local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    headerText:SetPoint("LEFT", UI.layout.paddingSmall, 0)
-    headerText:SetText(category.name)
-    headerText:SetTextColor(unpack(UI.colors.accent))
-    
-    -- Render items
+
+    -- Calculate item positions FIRST so we can anchor header to first item
     local itemStartY = y - (IM.UI.layout.rowHeightSmall or 24) - (IM.UI.layout.elementSpacing or 6)
     local itemStartX = x + (IM.UI.layout.paddingSmall or 4)
-    
-    IM:Debug(string.format("[CategoryView] Rendering '%s': headerY=%d, itemStartY=%d, itemStartX=%d", 
+
+    IM:Debug(string.format("[CategoryView] Rendering '%s': headerY=%d, itemStartY=%d, itemStartX=%d",
         category.name, y, itemStartY, itemStartX))
-    
+
     local settings = BagUI:GetSettings()
     local positions = BagUI.MasonryLayout:CalculateItemPositions(
         #category.items,
@@ -641,17 +630,39 @@ function CategoryView:RenderCategory(scrollContent, categoryData)
         width - (IM.UI.layout.padding or 8),
         settings.itemsPerRow or 8
     )
-    
+
+    -- Render items first and track the first button for header anchoring
+    local firstButton = nil
     for i, item in ipairs(category.items) do
         local button = BagUI.ItemButton:Acquire()
         if button then
             BagUI.ItemButton:SetItem(button, item.bagID, item.slotID)
-            
+            BagUI.ItemButton:SetPosition(button, positions[i].x, positions[i].y)
+
             if i == 1 then
+                firstButton = button
                 IM:Debug(string.format("  First item at: x=%d, y=%d", positions[i].x, positions[i].y))
             end
-            
-            BagUI.ItemButton:SetPosition(button, positions[i].x, positions[i].y)
         end
     end
+
+    -- Create category header ANCHORED to first item (follows icon size changes automatically)
+    local header = CreateFrame("Frame", nil, scrollContent)
+    header:SetSize(width, UI.layout.rowHeightSmall)
+    header._imCategoryHeader = true
+
+    if firstButton then
+        -- Anchor header above the first item - header follows items automatically
+        -- Use negative offset since header is ABOVE the button (WoW Y goes down as negative)
+        local headerGap = IM.UI.layout.elementSpacing or 6
+        header:SetPoint("BOTTOMLEFT", firstButton, "TOPLEFT", -(IM.UI.layout.paddingSmall or 4), headerGap)
+    else
+        -- Fallback for empty categories (shouldn't happen but safety)
+        header:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", x, y)
+    end
+
+    local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    headerText:SetPoint("LEFT", UI.layout.paddingSmall, 0)
+    headerText:SetText(category.name)
+    headerText:SetTextColor(unpack(UI.colors.accent))
 end
