@@ -786,6 +786,28 @@ update_toc_version() {
     fi
 }
 
+# Function to update Core.lua version string
+update_core_version() {
+    local new_version=$1
+    local core_file="Core.lua"
+
+    if [ ! -f "$core_file" ]; then
+        echo -e "${RED}Error: Core.lua not found${NC}"
+        return 1
+    fi
+
+    # Update IM.version = "X.X.X" line
+    sed -i "s/^IM\.version = \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/IM.version = \"${new_version}\"/" "$core_file"
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ Updated Core.lua to version ${new_version}${NC}"
+        return 0
+    else
+        echo -e "${RED}Error: Failed to update Core.lua${NC}"
+        return 1
+    fi
+}
+
 # Function to create package
 create_package() {
     local version=$1
@@ -944,17 +966,27 @@ if ! update_toc_version "$NEW_VERSION"; then
     exit 1
 fi
 
+# Update Core.lua version
+if ! update_core_version "$NEW_VERSION"; then
+    # Rollback VERSION and TOC files
+    echo "$CURRENT_VERSION" > "$VERSION_FILE"
+    update_toc_version "$CURRENT_VERSION"
+    echo -e "${RED}Rolled back VERSION and TOC files${NC}"
+    exit 1
+fi
+
 # Commit version changes
 echo ""
 echo -e "${BLUE}Committing version changes...${NC}"
-if git add VERSION "$TOC_FILE" && git commit -m "Bump version to ${NEW_VERSION}"; then
+if git add VERSION "$TOC_FILE" Core.lua && git commit -m "Bump version to ${NEW_VERSION}"; then
     echo -e "${GREEN}✓ Committed version changes${NC}"
 else
     echo -e "${RED}Error: Failed to commit version changes${NC}"
     # Rollback
     echo "$CURRENT_VERSION" > "$VERSION_FILE"
     update_toc_version "$CURRENT_VERSION"
-    git reset HEAD VERSION "$TOC_FILE" 2>/dev/null
+    update_core_version "$CURRENT_VERSION"
+    git reset HEAD VERSION "$TOC_FILE" Core.lua 2>/dev/null
     exit 1
 fi
 

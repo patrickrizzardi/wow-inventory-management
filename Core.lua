@@ -15,6 +15,19 @@ IM.version = "1.1.1"
 -- Show welcome message on first load
 IM.showWelcomeMessage = true
 
+-- Secure interaction tracking (global, accessible to all modules)
+IM.secureInteraction = {
+    active = false,
+    type = nil,
+    types = {
+        [53] = "ItemUpgrade",
+        [10] = "Banker",
+        [17] = "GuildBanker",
+        [21] = "Auctioneer",
+        [26] = "Transmogrifier",
+    }
+}
+
 -- Module registry
 IM.modules = {}
 
@@ -103,6 +116,30 @@ IM:RegisterEvent("PLAYER_ENTERING_WORLD", function()
         welcomeShown = true
     end
 end)
+
+-- Track secure interactions globally (helps debug taint issues)
+IM:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", function(event, interactionType)
+    local typeName = IM.secureInteraction.types[interactionType]
+    if typeName then
+        IM.secureInteraction.active = true
+        IM.secureInteraction.type = interactionType
+        IM:Debug("[Core] SECURE INTERACTION START: " .. typeName .. " (type " .. interactionType .. ")")
+    end
+end)
+
+IM:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", function(event, interactionType)
+    local typeName = IM.secureInteraction.types[interactionType]
+    if typeName then
+        IM:Debug("[Core] SECURE INTERACTION END: " .. typeName .. " (type " .. interactionType .. ")")
+        IM.secureInteraction.active = false
+        IM.secureInteraction.type = nil
+    end
+end)
+
+-- Helper to check if secure interaction is active (for other modules)
+function IM:IsSecureInteractionActive()
+    return self.secureInteraction.active
+end
 
 -- Get a registered module
 function IM:GetModule(name)
@@ -307,8 +344,6 @@ IM:RegisterEvent("ADDON_LOADED", function(event, loadedAddon)
             module:OnEnable()
         end
     end
-
-    IM:Print("v" .. IM.version .. " loaded. Type /im for options.")
 
     -- Register with Blizzard Settings (AddOns menu)
     if IM.RegisterBlizzardSettings then
@@ -703,4 +738,4 @@ function IM:ExtractItemLinkFromMessage(message)
 end
 
 -- Expose namespace to other files
-InventoryManager = IM
+InventoryManager = IM 
