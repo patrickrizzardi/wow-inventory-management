@@ -46,6 +46,11 @@ function JunkList:HookItemButtons()
     -- Hook for combined bags view (modern retail default)
     if ContainerFrameItemButtonMixin and ContainerFrameItemButtonMixin.OnClick then
         hooksecurefunc(ContainerFrameItemButtonMixin, "OnClick", function(itemButton, button)
+            IM:Debug("[JunkList] ItemButton OnClick hook, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
+            if IM:IsSecureInteractionActive() then
+                IM:Debug("[JunkList] Skipping OnClick during secure interaction")
+                return
+            end
             JunkList:OnItemButtonClick(itemButton, button)
         end)
     end
@@ -53,6 +58,11 @@ function JunkList:HookItemButtons()
     -- Also refresh when container updates
     if ContainerFrame_Update then
         hooksecurefunc("ContainerFrame_Update", function(frame)
+            IM:Debug("[JunkList] ContainerFrame_Update hook, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
+            if IM:IsSecureInteractionActive() then
+                IM:Debug("[JunkList] Skipping ContainerFrame_Update during secure interaction")
+                return
+            end
             JunkList:RefreshAllOverlays()
         end)
     end
