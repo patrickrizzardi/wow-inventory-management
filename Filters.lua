@@ -491,14 +491,15 @@ end
     @param slotID number - Slot ID within bag
     @param itemID number - Item ID
     @param itemLink string - Item link (optional, will use itemID if not provided)
+    @param verbose boolean - Enable verbose debug logging (default: false, use true when actually selling)
     @return boolean shouldSell - True if item should be sold
     @return string reason - Reason for the decision
 ]]
-function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
+function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink, verbose)
     local db = IM.db.global
 
-    -- Debug: show custom exclusions on first call
-    if not Filters._debuggedCustomExclusions then
+    -- Debug: show custom exclusions on first call (only when verbose)
+    if verbose and not Filters._debuggedCustomExclusions then
         Filters._debuggedCustomExclusions = true
         local customs = {}
         for key, _ in pairs(db.customCategoryExclusions or {}) do
@@ -514,7 +515,9 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
           _, _, _, sellPrice, classID, subclassID, bindType = _GetCachedItemInfo(itemLink or itemID)
 
     if not itemName then
-        IM:Debug("[Filters] ShouldAutoSell: " .. tostring(itemID) .. " - Item info not available")
+        if verbose then
+            IM:Debug("[Filters] ShouldAutoSell: " .. tostring(itemID) .. " - Item info not available")
+        end
         return false, "Item info not available"
     end
 
@@ -531,15 +534,17 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
         end
     end
 
-    IM:Debug("[Filters] Checking: " .. itemName ..
-        " (quality=" .. tostring(itemQuality) ..
-        ", ilvl=" .. tostring(effectiveItemLevel) ..
-        ", class=" .. tostring(classID) .. "_" .. tostring(subclassID) ..
-        ", price=" .. tostring(sellPrice) .. ")")
+    if verbose then
+        IM:Debug("[Filters] Checking: " .. itemName ..
+            " (quality=" .. tostring(itemQuality) ..
+            ", ilvl=" .. tostring(effectiveItemLevel) ..
+            ", class=" .. tostring(classID) .. "_" .. tostring(subclassID) ..
+            ", price=" .. tostring(sellPrice) .. ")")
+    end
 
     -- WHITELIST CHECK (highest priority - NEVER sell whitelisted items)
     if IM:IsWhitelisted(itemID) then
-        IM:Debug("[Filters]   -> Rejected: Whitelisted (locked)")
+        if verbose then IM:Debug("[Filters]   -> Rejected: Whitelisted (locked)") end
         return false, "Whitelisted"
     end
 
@@ -548,10 +553,10 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
     if IM:IsJunk(itemID) then
         -- Only additional check: must have vendor value
         if sellPrice and sellPrice > 0 then
-            IM:Debug("[Filters]   -> WILL SELL: On junk list (overrides all protections)")
+            if verbose then IM:Debug("[Filters]   -> WILL SELL: On junk list (overrides all protections)") end
             return true, "On junk list"
         else
-            IM:Debug("[Filters]   -> Rejected: On junk list but no vendor value")
+            if verbose then IM:Debug("[Filters]   -> Rejected: On junk list but no vendor value") end
             return false, "No vendor value"
         end
     end
@@ -561,7 +566,7 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
     if IM.modules.MailHelper and IM.modules.MailHelper.ItemMatchesAnyRule then
         local matchesRule, altKey, ruleName = IM.modules.MailHelper:ItemMatchesAnyRule(itemID)
         if matchesRule then
-            IM:Debug("[Filters]   -> Rejected: Matches mail rule '" .. (ruleName or "?") .. "' for " .. (altKey or "?"))
+            if verbose then IM:Debug("[Filters]   -> Rejected: Matches mail rule '" .. (ruleName or "?") .. "' for " .. (altKey or "?")) end
             return false, "Mail rule: " .. (ruleName or "sending to alt")
         end
     end
@@ -570,13 +575,13 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
 
     -- Check equipment sets (if protection enabled)
     if db.categoryExclusions.equipmentSets and self:IsInEquipmentSet(itemID) then
-        IM:Debug("[Filters]   -> Rejected: In equipment set")
+        if verbose then IM:Debug("[Filters]   -> Rejected: In equipment set") end
         return false, "In equipment set"
     end
 
     -- Check category exclusions
     if self:IsExcludedByCategory(classID, subclassID, itemID) then
-        IM:Debug("[Filters]   -> Rejected: Excluded category (" .. tostring(classID) .. "_" .. tostring(subclassID) .. ")")
+        if verbose then IM:Debug("[Filters]   -> Rejected: Excluded category (" .. tostring(classID) .. "_" .. tostring(subclassID) .. ")") end
         return false, "Excluded category"
     end
 
@@ -588,52 +593,52 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
     -- Option 1: Only sell soulbound items (protect non-soulbound)
     if db.autoSell.onlySellSoulbound then
         if not isSoulbound then
-            IM:Debug("[Filters]   -> Rejected: Non-soulbound (only selling soulbound)")
+            if verbose then IM:Debug("[Filters]   -> Rejected: Non-soulbound (only selling soulbound)") end
             return false, "Non-soulbound"
         end
     -- Option 2: Protect soulbound items (don't sell them)
     elseif db.autoSell.skipSoulbound and isSoulbound then
-        IM:Debug("[Filters]   -> Rejected: Soulbound")
+        if verbose then IM:Debug("[Filters]   -> Rejected: Soulbound") end
         return false, "Soulbound"
     end
 
     -- Check warbound/account-bound filter
     if db.autoSell.skipWarbound and self:IsWarbound(bagID, slotID) then
-        IM:Debug("[Filters]   -> Rejected: Warbound")
+        if verbose then IM:Debug("[Filters]   -> Rejected: Warbound") end
         return false, "Warbound"
     end
 
     -- Check transmog protection
     if db.autoSell.skipUncollectedTransmog and self:HasUncollectedTransmog(itemID) then
-        IM:Debug("[Filters]   -> Rejected: Uncollected transmog")
+        if verbose then IM:Debug("[Filters]   -> Rejected: Uncollected transmog") end
         return false, "Uncollected transmog"
     end
 
     -- Check quality threshold
     if itemQuality > db.autoSell.maxQuality then
-        IM:Debug("[Filters]   -> Rejected: Quality " .. tostring(itemQuality) .. " > maxQuality " .. tostring(db.autoSell.maxQuality))
+        if verbose then IM:Debug("[Filters]   -> Rejected: Quality " .. tostring(itemQuality) .. " > maxQuality " .. tostring(db.autoSell.maxQuality)) end
         return false, "Quality too high"
     end
 
     -- Check item level threshold (if enabled)
     if db.autoSell.maxItemLevel > 0 and (effectiveItemLevel or 0) > db.autoSell.maxItemLevel then
-        IM:Debug("[Filters]   -> Rejected: Item level too high")
+        if verbose then IM:Debug("[Filters]   -> Rejected: Item level too high") end
         return false, "Item level too high"
     end
 
     -- Check minimum sell price (if enabled)
     if db.autoSell.minSellPrice > 0 and sellPrice < db.autoSell.minSellPrice then
-        IM:Debug("[Filters]   -> Rejected: Sell price too low")
+        if verbose then IM:Debug("[Filters]   -> Rejected: Sell price too low") end
         return false, "Sell price too low"
     end
 
     -- Check if item has no vendor value
     if not sellPrice or sellPrice == 0 then
-        IM:Debug("[Filters]   -> Rejected: No vendor value")
+        if verbose then IM:Debug("[Filters]   -> Rejected: No vendor value") end
         return false, "No vendor value"
     end
 
-    IM:Debug("[Filters]   -> WILL SELL: " .. itemName)
+    if verbose then IM:Debug("[Filters]   -> WILL SELL: " .. itemName) end
     return true, "Matches filters"
 end
 
@@ -684,29 +689,35 @@ function Filters:GetAutoSellCount()
 end
 
 -- Get list of items matching auto-sell criteria
-function Filters:GetAutoSellItems()
+-- @param verbose boolean - Enable debug logging (default: false for UI, true when actually selling)
+function Filters:GetAutoSellItems(verbose)
     local items = {}
     local pendingItems = {}
     local pendingLookup = {}
     local bagsToScan = _GetBagIDsToScan()
 
-    IM:Debug("[Filters] GetAutoSellItems: Scanning " .. #bagsToScan .. " bags (including reagent bag if available)")
+    if verbose then
+        IM:Debug("[Filters] GetAutoSellItems: Scanning " .. #bagsToScan .. " bags")
+    end
 
     for _, bagID in ipairs(bagsToScan) do
         local numSlots = C_Container.GetContainerNumSlots(bagID)
-        IM:Debug("[Filters]   Bag " .. bagID .. " has " .. tostring(numSlots) .. " slots")
         for slotID = 1, numSlots do
             local info = C_Container.GetContainerItemInfo(bagID, slotID)
             if info and info.itemID then
-                local shouldSell, reason = self:ShouldAutoSell(bagID, slotID, info.itemID, info.hyperlink)
+                local shouldSell, reason = self:ShouldAutoSell(bagID, slotID, info.itemID, info.hyperlink, verbose)
                 if shouldSell then
+                    -- Get sell price for total value calculation
+                    local _, _, _, _, _, _, _, _, _, _, sellPrice = _GetCachedItemInfo(info.itemID)
+                    local stackCount = info.stackCount or 1
                     table.insert(items, {
                         bagID = bagID,
                         slotID = slotID,
                         itemID = info.itemID,
                         itemLink = info.hyperlink,
-                        stackCount = info.stackCount or 1,
+                        stackCount = stackCount,
                         reason = reason,
+                        totalValue = (sellPrice or 0) * stackCount,
                     })
                 elseif reason == "Item info not available" then
                     if not pendingLookup[info.itemID] then
@@ -725,9 +736,8 @@ function Filters:GetAutoSellItems()
         end
     end
 
-    IM:Debug("[Filters] GetAutoSellItems: Found " .. #items .. " items to sell")
-    if #pendingItems > 0 then
-        IM:Debug("[Filters] GetAutoSellItems: Pending item info for " .. #pendingItems .. " items")
+    if verbose then
+        IM:Debug("[Filters] GetAutoSellItems: Found " .. #items .. " items to sell" .. (#pendingItems > 0 and (", " .. #pendingItems .. " pending") or ""))
     end
 
     return items, pendingItems
