@@ -18,9 +18,6 @@
 
 local addonName, IM = ...
 
--- DEBUG: Verify module file is loading
-print("|cff888888[IM Debug] GuildBankTracking.lua loading...|r")
-
 local GuildBankTracking = {}
 IM:RegisterModule("GuildBankTracking", GuildBankTracking)
 
@@ -128,16 +125,12 @@ end
 
 -- Handle bag updates while guild bank is open (for item tracking)
 local function _OnBagUpdate()
-    print("|cff888888[IM Debug] GuildBankTracking: _OnBagUpdate() called, bankOpen=" .. tostring(_guildBankOpen) .. "|r")
-
     if not _guildBankOpen then
-        print("|cffff6666[IM Debug] GuildBankTracking: Bank not open, ignoring bag update|r")
         return
     end
 
     -- Debounce: Only process once per frame
     if _pendingUpdate then
-        print("|cff888888[IM Debug] GuildBankTracking: Update already pending, debouncing|r")
         return
     end
     _pendingUpdate = true
@@ -147,21 +140,17 @@ local function _OnBagUpdate()
         _pendingUpdate = false
 
         if not _guildBankOpen then
-            print("|cffff6666[IM Debug] GuildBankTracking: Bank closed during debounce, skipping|r")
             return
         end
 
         -- Take new snapshot
         local newSnapshot = _SnapshotBags()
-        print("|cff888888[IM Debug] GuildBankTracking: Took new snapshot|r")
 
         -- Compare with current snapshot
         local changes = _CompareBagSnapshots(_bagSnapshot, newSnapshot)
-        print("|cff888888[IM Debug] GuildBankTracking: Found " .. #changes .. " item changes|r")
 
         -- Process any changes found
         if #changes > 0 then
-            print("|cff00ff00[IM Debug] GuildBankTracking: Processing " .. #changes .. " changes!|r")
             _ProcessItemChanges(changes)
         end
 
@@ -178,7 +167,6 @@ function GuildBankTracking:OnEnable()
     local module = self  -- Capture for closures
 
     IM:Debug("[GuildBankTracking] Registering events")
-    print("|cff888888[IM Debug] GuildBankTracking:OnEnable() called|r")
 
     -- Create bag update handler
     _bagUpdateHandler = function()
@@ -189,55 +177,35 @@ function GuildBankTracking:OnEnable()
     -- Guild bank uses Enum.PlayerInteractionType.GuildBanker
     if Enum and Enum.PlayerInteractionType then
         IM:Debug("[GuildBankTracking] PlayerInteractionType enum available")
-        print("|cff888888[IM Debug] GuildBankTracking: Enum.PlayerInteractionType available|r")
-
-        -- Check if GuildBanker type exists
-        if Enum.PlayerInteractionType.GuildBanker then
-            print("|cff888888[IM Debug] GuildBankTracking: GuildBanker type = " .. tostring(Enum.PlayerInteractionType.GuildBanker) .. "|r")
-        else
-            print("|cffff6666[IM Debug] GuildBankTracking: WARNING - GuildBanker type NOT FOUND in enum!|r")
-            -- List available types for debugging
-            print("|cff888888[IM Debug] Available PlayerInteractionType values:|r")
-            for k, v in pairs(Enum.PlayerInteractionType) do
-                print("|cff888888  " .. tostring(k) .. " = " .. tostring(v) .. "|r")
-            end
-        end
 
         IM:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", function(event, interactionType)
             IM:Debug("[GuildBankTracking] FRAME_SHOW fired, type=" .. tostring(interactionType))
-            print("|cff888888[IM Debug] GuildBankTracking: FRAME_SHOW type=" .. tostring(interactionType) .. "|r")
 
             if Enum.PlayerInteractionType.GuildBanker and interactionType == Enum.PlayerInteractionType.GuildBanker then
                 IM:Debug("[GuildBankTracking] Guild bank opened (interaction manager)")
-                print("|cff00ff00[IM Debug] GuildBankTracking: GUILD BANK DETECTED!|r")
                 module:OnGuildBankOpened()
             end
         end)
 
         IM:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", function(event, interactionType)
             IM:Debug("[GuildBankTracking] FRAME_HIDE fired, type=" .. tostring(interactionType))
-            print("|cff888888[IM Debug] GuildBankTracking: FRAME_HIDE type=" .. tostring(interactionType) .. "|r")
 
             if Enum.PlayerInteractionType.GuildBanker and interactionType == Enum.PlayerInteractionType.GuildBanker then
                 IM:Debug("[GuildBankTracking] Guild bank closed (interaction manager)")
-                print("|cff00ff00[IM Debug] GuildBankTracking: GUILD BANK CLOSED!|r")
                 module:OnGuildBankClosed()
             end
         end)
     else
-        print("|cffff6666[IM Debug] GuildBankTracking: WARNING - Enum.PlayerInteractionType NOT available!|r")
         IM:Debug("[GuildBankTracking] PlayerInteractionType enum NOT available - using fallback events")
 
         -- FALLBACK: Try the legacy events (may or may not work)
         IM:RegisterEvent("GUILDBANKFRAME_OPENED", function()
             IM:Debug("[GuildBankTracking] Guild bank opened (legacy event)")
-            print("|cff00ff00[IM Debug] GuildBankTracking: GUILDBANKFRAME_OPENED fired!|r")
             module:OnGuildBankOpened()
         end)
 
         IM:RegisterEvent("GUILDBANKFRAME_CLOSED", function()
             IM:Debug("[GuildBankTracking] Guild bank closed (legacy event)")
-            print("|cff00ff00[IM Debug] GuildBankTracking: GUILDBANKFRAME_CLOSED fired!|r")
             module:OnGuildBankClosed()
         end)
     end
@@ -245,21 +213,16 @@ function GuildBankTracking:OnEnable()
     -- Gold tracking - fires when guild bank gold changes
     IM:RegisterEvent("GUILDBANK_UPDATE_MONEY", function()
         IM:Debug("[GuildBankTracking] GUILDBANK_UPDATE_MONEY fired, bankOpen=" .. tostring(_guildBankOpen))
-        print("|cff888888[IM Debug] GuildBankTracking: GUILDBANK_UPDATE_MONEY fired|r")
         if _guildBankOpen then
             module:OnGuildBankMoneyChanged()
         end
     end)
 
     IM:Debug("[GuildBankTracking] Module enabled")
-    print("|cff00ff00[IM Debug] GuildBankTracking: Module enabled successfully|r")
 end
 
 function GuildBankTracking:OnGuildBankOpened()
-    print("|cff00ff00[IM Debug] GuildBankTracking:OnGuildBankOpened() called|r")
-
     if _guildBankOpen then
-        print("|cffff6666[IM Debug] GuildBankTracking: Already open, skipping|r")
         return
     end
 
@@ -270,9 +233,6 @@ function GuildBankTracking:OnGuildBankOpened()
     if GetGuildBankMoney then
         _lastGuildBankGold = GetGuildBankMoney()
         IM:Debug("[GuildBankTracking] Initial guild gold: " .. IM:FormatMoney(_lastGuildBankGold or 0))
-        print("|cff888888[IM Debug] GuildBankTracking: Initial guild gold = " .. IM:FormatMoney(_lastGuildBankGold or 0) .. "|r")
-    else
-        print("|cffff6666[IM Debug] GuildBankTracking: WARNING - GetGuildBankMoney() not available!|r")
     end
 
     -- Take initial bag snapshot for item tracking
@@ -284,25 +244,19 @@ function GuildBankTracking:OnGuildBankOpened()
         totalQty = totalQty + data.quantity
     end
     IM:Debug("[GuildBankTracking] Initial snapshot: " .. itemCount .. " unique items, " .. totalQty .. " total")
-    print("|cff888888[IM Debug] GuildBankTracking: Initial snapshot: " .. itemCount .. " unique items, " .. totalQty .. " total|r")
 
     -- Register for bag updates while guild bank is open
     IM:RegisterEvent("BAG_UPDATE_DELAYED", _bagUpdateHandler)
-    print("|cff00ff00[IM Debug] GuildBankTracking: Now listening for BAG_UPDATE_DELAYED events|r")
 end
 
 function GuildBankTracking:OnGuildBankClosed()
-    print("|cff888888[IM Debug] GuildBankTracking:OnGuildBankClosed() called|r")
-
     if not _guildBankOpen then
-        print("|cffff6666[IM Debug] GuildBankTracking: Bank wasn't open, skipping|r")
         return
     end
 
     -- Unregister bag update handler
     if _bagUpdateHandler then
         IM:UnregisterEvent("BAG_UPDATE_DELAYED", _bagUpdateHandler)
-        print("|cff888888[IM Debug] GuildBankTracking: Unregistered BAG_UPDATE_DELAYED handler|r")
     end
 
     _guildBankOpen = false
@@ -310,23 +264,17 @@ function GuildBankTracking:OnGuildBankClosed()
     _lastGuildBankGold = nil
 
     IM:Debug("[GuildBankTracking] Guild bank closed, handler unregistered")
-    print("|cff00ff00[IM Debug] GuildBankTracking: Bank closed, state reset|r")
 end
 
 function GuildBankTracking:OnGuildBankMoneyChanged()
-    print("|cff888888[IM Debug] GuildBankTracking:OnGuildBankMoneyChanged() called|r")
-
     if not GetGuildBankMoney then
-        print("|cffff6666[IM Debug] GuildBankTracking: GetGuildBankMoney not available!|r")
         return
     end
 
     local currentGold = GetGuildBankMoney()
-    print("|cff888888[IM Debug] GuildBankTracking: Current guild gold = " .. tostring(currentGold) .. "|r")
 
     if not currentGold or currentGold < 0 then
         IM:Debug("[GuildBankTracking] Invalid gold value")
-        print("|cffff6666[IM Debug] GuildBankTracking: Invalid gold value|r")
         return
     end
 
@@ -339,12 +287,10 @@ function GuildBankTracking:OnGuildBankMoneyChanged()
 
     -- Skip if no meaningful change
     if math.abs(delta) < 1 then
-        print("|cff888888[IM Debug] GuildBankTracking: No meaningful change (delta < 1)|r")
         return
     end
 
     IM:Debug("[GuildBankTracking] Guild gold changed: " .. previousGold .. " -> " .. currentGold .. " (delta: " .. delta .. ")")
-    print("|cff00ff00[IM Debug] GuildBankTracking: Gold changed! " .. IM:FormatMoney(previousGold) .. " -> " .. IM:FormatMoney(currentGold) .. " (delta: " .. IM:FormatMoney(math.abs(delta)) .. ")|r")
 
     -- Determine if player deposited or withdrew
     -- NOTE: We detect this by checking player's gold change
