@@ -22,8 +22,16 @@ IM:RegisterModule("ItemLock", ItemLock)
 local pendingRefresh = false
 local pendingBags = {} -- Track which bags need refresh
 
+-- Note: Uses global IM:IsSecureInteractionActive() for secure interaction tracking
+
 -- Request a debounced refresh (batches multiple rapid events)
 local function _RequestRefresh(bagID)
+    -- Skip refresh during secure interactions to avoid taint
+    if IM:IsSecureInteractionActive() then
+        IM:Debug("[ItemLock] Skipping refresh - secure interaction active (type " .. tostring(IM.secureInteraction.type) .. ")")
+        return
+    end
+
     if bagID then
         pendingBags[bagID] = true
     else
@@ -177,17 +185,28 @@ function ItemLock:HookMerchantSelling()
     IM:RegisterEvent("MERCHANT_UPDATE", function()
         C_Timer.After(0.1, _CheckAndBuybackLockedItems)
     end)
+
+    -- Refresh overlays after secure interactions end
+    IM:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", function(event, interactionType)
+        if IM.secureInteraction.types[interactionType] then
+            -- Refresh overlays now that it's safe
+            C_Timer.After(0.2, function()
+                if not IM:IsSecureInteractionActive() then
+                    IM:Debug("[ItemLock] Refreshing overlays after secure interaction ended")
+                    _RequestRefresh()
+                end
+            end)
+        end
+    end)
 end
 
 -- Hook to prevent deletion of locked items
 function ItemLock:HookDeletion()
     -- The delete confirmation dialogs in WoW:
     -- DELETE_ITEM, DELETE_GOOD_ITEM, DELETE_QUEST_ITEM, DELETE_GOOD_QUEST_ITEM
-    -- We hook StaticPopup_Show to intercept these
+    -- We use hooksecurefunc to avoid tainting the secure execution path
 
-    local originalStaticPopupShow = StaticPopup_Show
-
-    StaticPopup_Show = function(which, text_arg1, text_arg2, data, insertedFrame)
+    hooksecurefunc("StaticPopup_Show", function(which, text_arg1, text_arg2, data, insertedFrame)
         -- Check if this is a delete confirmation
         if which == "DELETE_ITEM" or which == "DELETE_GOOD_ITEM" or
            which == "DELETE_QUEST_ITEM" or which == "DELETE_GOOD_QUEST_ITEM" then
@@ -196,21 +215,27 @@ function ItemLock:HookDeletion()
             if cursorType == "item" and itemID then
                 -- Check if this item is locked
                 if IM:IsWhitelisted(itemID) then
-                    -- Clear the cursor and show warning popup
+                    -- The popup already appeared, so hide it immediately
+                    -- Find which popup dialog is showing this
+                    for i = 1, STATICPOPUP_NUMDIALOGS do
+                        local popup = _G["StaticPopup" .. i]
+                        if popup and popup:IsShown() and popup.which == which then
+                            popup:Hide()
+                            break
+                        end
+                    end
+                    -- Clear the cursor
                     ClearCursor()
+                    -- Show our warning
                     local itemLink = select(2, GetItemInfo(itemID))
                     local itemName = itemLink or ("Item #" .. itemID)
                     IM:ShowWarning("Cannot delete locked item:\n\n" .. itemName .. "\n\nUnlock it first (Alt+Click) to delete.")
-                    return nil -- Block the popup
                 end
             end
         end
+    end)
 
-        -- Call original for all other cases
-        return originalStaticPopupShow(which, text_arg1, text_arg2, data, insertedFrame)
-    end
-
-    IM:Debug("ItemLock: Hooked StaticPopup_Show for deletion protection")
+    IM:Debug("ItemLock: Hooked StaticPopup_Show for deletion protection (secure)")
 end
 
 --[[
@@ -326,6 +351,13 @@ function ItemLock:HookItemButtons()
     -- Helper function to hook a single item button
     local function _HookButton(btn)
         if not btn or hookedButtons[btn] then return end
+
+        -- SAFETY: Never hook buttons during secure interactions (can cause taint)
+        if IM:IsSecureInteractionActive() then
+            IM:Debug("[ItemLock] _HookButton skipped during secure interaction")
+            return
+        end
+
         hookedButtons[btn] = true
 
         -- Hook OnClick if it exists
@@ -347,6 +379,11 @@ function ItemLock:HookItemButtons()
 
     -- Hook combined bags items
     local function _HookCombinedBags()
+        -- Skip during secure interactions
+        if IM:IsSecureInteractionActive() then
+            IM:Debug("[ItemLock] _HookCombinedBags skipped during secure interaction")
+            return
+        end
         if ContainerFrameCombinedBags and ContainerFrameCombinedBags.Items then
             for _, btn in ipairs(ContainerFrameCombinedBags.Items) do
                 _HookButton(btn)
@@ -356,6 +393,11 @@ function ItemLock:HookItemButtons()
 
     -- Hook individual container frame items
     local function _HookContainerFrames()
+        -- Skip during secure interactions
+        if IM:IsSecureInteractionActive() then
+            IM:Debug("[ItemLock] _HookContainerFrames skipped during secure interaction")
+            return
+        end
         for i = 1, 13 do
             local cf = _G["ContainerFrame" .. i]
             if cf and cf.Items then
@@ -369,6 +411,11 @@ function ItemLock:HookItemButtons()
     -- Hook for combined bags view (modern retail default)
     if ContainerFrameItemButtonMixin and ContainerFrameItemButtonMixin.OnClick then
         hooksecurefunc(ContainerFrameItemButtonMixin, "OnClick", function(itemButton, button)
+            IM:Debug("[ItemLock] ItemButton OnClick hook fired, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
+            if IM:IsSecureInteractionActive() then
+                IM:Debug("[ItemLock] Skipping OnClick during secure interaction")
+                return
+            end
             ItemLock:OnItemButtonClick(itemButton, button)
         end)
     end
@@ -376,6 +423,11 @@ function ItemLock:HookItemButtons()
     -- Fallback: Hook HandleModifiedItemClick
     if HandleModifiedItemClick then
         hooksecurefunc("HandleModifiedItemClick", function(itemLink, itemLocation)
+            IM:Debug("[ItemLock] HandleModifiedItemClick hook fired, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
+            if IM:IsSecureInteractionActive() then
+                IM:Debug("[ItemLock] Skipping HandleModifiedItemClick during secure interaction")
+                return
+            end
             C_Timer.After(0.05, function()
                 ItemLock:RefreshAllOverlays()
             end)
@@ -385,6 +437,11 @@ function ItemLock:HookItemButtons()
     -- Hook ContainerFrame_Update to catch new buttons
     if ContainerFrame_Update then
         hooksecurefunc("ContainerFrame_Update", function(frame)
+            IM:Debug("[ItemLock] ContainerFrame_Update hook fired, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
+            if IM:IsSecureInteractionActive() then
+                IM:Debug("[ItemLock] Skipping ContainerFrame_Update during secure interaction")
+                return
+            end
             _HookContainerFrames()
             ItemLock:RefreshAllOverlays()
         end)
@@ -393,7 +450,12 @@ function ItemLock:HookItemButtons()
     -- Hook combined bags OnShow to catch its buttons
     if ContainerFrameCombinedBags then
         ContainerFrameCombinedBags:HookScript("OnShow", function()
+            IM:Debug("[ItemLock] CombinedBags OnShow, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
             C_Timer.After(0.1, function()
+                if IM:IsSecureInteractionActive() then
+                    IM:Debug("[ItemLock] Skipping CombinedBags OnShow timer during secure interaction")
+                    return
+                end
                 _HookCombinedBags()
             end)
         end)
@@ -401,6 +463,11 @@ function ItemLock:HookItemButtons()
         -- Also hook its Update method if it exists
         if ContainerFrameCombinedBags.Update then
             hooksecurefunc(ContainerFrameCombinedBags, "Update", function()
+                IM:Debug("[ItemLock] CombinedBags Update hook, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
+                if IM:IsSecureInteractionActive() then
+                    IM:Debug("[ItemLock] Skipping CombinedBags Update during secure interaction")
+                    return
+                end
                 _HookCombinedBags()
             end)
         end
@@ -411,7 +478,12 @@ function ItemLock:HookItemButtons()
         local frame = _G["ContainerFrame" .. i]
         if frame then
             frame:HookScript("OnShow", function()
+                IM:Debug("[ItemLock] ContainerFrame" .. i .. " OnShow, secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
                 C_Timer.After(0.1, function()
+                    if IM:IsSecureInteractionActive() then
+                        IM:Debug("[ItemLock] Skipping ContainerFrame" .. i .. " OnShow timer during secure interaction")
+                        return
+                    end
                     _HookContainerFrames()
                 end)
             end)

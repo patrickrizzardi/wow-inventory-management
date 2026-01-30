@@ -19,17 +19,21 @@
 ## Current Context (REPLACE each update)
 
 **Goal**: General maintenance / feature additions
-**Immediate Task**: None
+**Immediate Task**: Testing Item Upgrade vendor taint fix - awaiting user test results
 
 **In Progress**:
-- (none)
+- Icon border resize bug - debug dump behind `/im debug` flag, waiting for user to test
+- Item Upgrade taint fix - comprehensive secure interaction protection implemented
 
 **Recently Completed** (last 3-5 items):
-- Added search bar to Bag UI (filters by name, ilvl with operators, category/subcategory)
-- Added icon size slider to Bag UI settings (16-32px, dynamic resize)
-- Partially implemented keybind override for bag toggle (SetOverrideBinding)
-- Implemented auto-loot mail feature
-- Removed ~30 rogue `print()` calls from GuildBankTracking.lua
+- Disabled toggle button entirely during secure interactions (OnClick=nil, Hide)
+- Added secure interaction checks to ToggleAllBags/OpenAllBags hooks (normal + priority)
+- Added secure interaction checks to BagIntegration.lua, ItemLock.lua, JunkList.lua
+- Added comprehensive debug logging to trace hook execution during secure interactions
+- Removed "AutoSell module enabled" log message (inconsistent with other modules)
+- Updated publish.sh to auto-update Core.lua version (IM.version)
+- Fixed WSL symlink to WoW addon folder (Debian, not Ubuntu)
+- Cleaned up debug code in ItemButton.lua (behind debug flag now)
 
 ---
 
