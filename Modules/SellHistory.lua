@@ -51,6 +51,9 @@ end
 
 -- Parse loot message and log it
 function SellHistory:OnLootMessage(message)
+    -- Guard against nil message (event can fire without args in some cases)
+    if not message then return end
+
     -- Debug: log all loot messages received
     IM:Debug("[SellHistory] CHAT_MSG_LOOT received: " .. tostring(message))
 

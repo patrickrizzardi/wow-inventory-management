@@ -42,12 +42,7 @@ function AutoSell:OnEnable()
         module:OnMerchantClosed()
     end)
 
-    -- Listen for item lock changes (item being processed)
-    IM:RegisterEvent("ITEM_LOCK_CHANGED", function(event, bagID, slotID)
-        if _isSelling then
-            module:ProcessNextItem()
-        end
-    end)
+    -- No ITEM_LOCK_CHANGED handler - timer-only progression is more reliable
 
     IM:Debug("[AutoSell] Events registered successfully")
 end
@@ -271,7 +266,7 @@ function AutoSell:ProcessNextItem()
         IM:Debug("[AutoSell] <<< UseContainerItem error: " .. tostring(err))
         -- Retry after longer delay if busy
         _sellTimer = C_Timer.NewTimer(0.3, function()
-            if _isSelling then
+            if _isSelling and MerchantFrame and MerchantFrame:IsShown() then
                 -- Put item back for retry
                 table.insert(_sellQueue, 1, item)
                 module:ProcessNextItem()
@@ -282,28 +277,32 @@ function AutoSell:ProcessNextItem()
 
     IM:Debug("[AutoSell] <<< UseContainerItem returned")
 
-    -- Schedule next item (longer delay to prevent "object is busy" errors)
-    -- Also check if the item was actually sold - if still in bag, merchant rejected it
+    -- Timer-based progression: wait for sell to complete, then check result
     local checkBagID, checkSlotID, checkItemID = item.bagID, item.slotID, item.itemID
     _sellTimer = C_Timer.NewTimer(0.15, function()
-        if _isSelling then
-            -- Check if item is still in the bag (merchant rejected it)
-            local checkInfo = C_Container.GetContainerItemInfo(checkBagID, checkSlotID)
-            if checkInfo and checkInfo.itemID == checkItemID then
-                -- Item still there - merchant rejected it
-                _rejectedItems[checkItemID] = true
-                local rejectedCount = 0
-                for _ in pairs(_rejectedItems) do rejectedCount = rejectedCount + 1 end
-                IM:Debug("[AutoSell] REJECTED by merchant (total rejected: " .. rejectedCount .. "): " .. (item.itemLink or checkItemID))
-                -- Undo the stats we added
-                local _, _, _, _, _, _, _, _, _, _, sellPrice = GetItemInfo(checkItemID)
-                if sellPrice then
-                    _sessionStats.itemCount = _sessionStats.itemCount - (checkInfo.stackCount or 1)
-                    _sessionStats.totalValue = _sessionStats.totalValue - (sellPrice * (checkInfo.stackCount or 1))
-                end
-            end
-            module:ProcessNextItem()
+        if not _isSelling or not MerchantFrame or not MerchantFrame:IsShown() then
+            return
         end
+
+        local checkInfo = C_Container.GetContainerItemInfo(checkBagID, checkSlotID)
+
+        if not checkInfo or checkInfo.itemID ~= checkItemID then
+            -- Item gone or different item = sold successfully
+            IM:Debug("[AutoSell] Timer: Item sold successfully")
+        else
+            -- Same item still there = merchant rejected it
+            IM:Debug("[AutoSell] Timer: Item rejected by merchant")
+            _rejectedItems[checkItemID] = true
+            -- Undo stats we added
+            local _, _, _, _, _, _, _, _, _, _, sellPrice = GetItemInfo(checkItemID)
+            if sellPrice then
+                _sessionStats.itemCount = _sessionStats.itemCount - (checkInfo.stackCount or 1)
+                _sessionStats.totalValue = _sessionStats.totalValue - (sellPrice * (checkInfo.stackCount or 1))
+            end
+        end
+
+        -- Process next item
+        module:ProcessNextItem()
     end)
 end
 
