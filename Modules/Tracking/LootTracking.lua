@@ -92,7 +92,13 @@ function LootTracking:OnLootMessage(message)
 
     -- Extract quantity
     local quantity = 1
-    local qtyMatch = message:match("x(%d+)%.?$") or message:match("|rx(%d+)") or message:match(" x(%d+)")
+    local ok, qtyMatch = pcall(string.match, message, "x(%d+)%.?$")
+    if not ok or not qtyMatch then
+        ok, qtyMatch = pcall(string.match, message, "|rx(%d+)")
+    end
+    if not ok or not qtyMatch then
+        ok, qtyMatch = pcall(string.match, message, " x(%d+)")
+    end
     if qtyMatch then
         quantity = tonumber(qtyMatch) or 1
     end
@@ -117,8 +123,10 @@ function LootTracking:OnMoneyLoot(message)
     -- Loot messages typically contain "loot" or come without specific context
     -- We'll be conservative here to avoid double-counting
 
-    -- Skip if message contains auction-related words
-    if message:lower():find("auction") then
+    -- Skip if message contains auction-related words (use pcall for tainted strings)
+    local ok, msgLower = pcall(string.lower, message)
+    if not ok then return end
+    if string.find(msgLower, "auction") then
         return
     end
 
@@ -131,7 +139,7 @@ function LootTracking:OnMoneyLoot(message)
 
     -- Check if this looks like a loot message vs other money sources
     -- This is heuristic - gold loot usually has "You loot" prefix
-    if message:lower():find("loot") then
+    if string.find(msgLower, "loot") then
         IM:AddTransaction("loot", {
             value = totalCopper,
             source = "Gold Loot",

@@ -186,8 +186,10 @@ function AuctionTracking:OnSystemMessage(message)
     local itemLink = IM:ExtractItemLinkFromMessage(message)
     if not itemLink then return end
 
-    -- Check if this is an auction message
-    if message:lower():find("auction") and message:lower():find("sold") then
+    -- Check if this is an auction message (use pcall for tainted strings)
+    local ok, msgLower = pcall(string.lower, message)
+    if not ok then return end
+    if string.find(msgLower, "auction") and string.find(msgLower, "sold") then
         local itemID = GetItemInfoInstant(itemLink)
         if itemID and not _pendingAuctionSale then
             _pendingAuctionSale = {
@@ -210,8 +212,9 @@ function AuctionTracking:OnMoneyMessage(message)
 
     -- Check if we have a pending auction sale (within 5 seconds)
     if _pendingAuctionSale and (time() - _pendingAuctionSale.timestamp) < 5 then
-        -- Check if message mentions auction
-        if message:lower():find("auction") then
+        -- Check if message mentions auction (use pcall for tainted strings)
+        local ok2, msgLower2 = pcall(string.lower, message)
+        if ok2 and string.find(msgLower2, "auction") then
             -- Calculate AH fee (5% of sale price, approximately)
             -- The money received is after the 5% cut
             local grossSale = math.floor(totalCopper / 0.95) -- Approximate original price
