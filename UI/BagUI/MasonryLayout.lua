@@ -18,21 +18,51 @@ local MasonryLayout = BagUI.MasonryLayout
 -- DYNAMIC LAYOUT HELPERS
 -- ============================================================================
 
+-- Get sizing constants from BagUI (single source of truth)
+local function _GetSizing()
+    if BagUI.GetSizingConstants then
+        return BagUI:GetSizingConstants()
+    end
+    -- Fallback if not available yet
+    return {
+        BUTTON_BORDER_PADDING = 17,
+        ITEM_GAP = 2,
+        CATEGORY_PADDING = 6,
+        COLUMN_GAP = 12,
+        LEFT_MARGIN_EXTRA = 4,
+    }
+end
+
 -- Get item size dynamically from bag settings
 function MasonryLayout:GetItemSize()
-    -- Read from bag settings (user-configurable), fallback to UI constant
     local settings = BagUI:GetSettings()
-    local iconSize = settings.iconSize or (IM.UI and IM.UI.layout and IM.UI.layout.iconSize) or 20
-    return iconSize + 17  -- icon + border/padding (matches ItemButton size)
+    local iconSize = settings.iconSize or 20
+    local sizing = _GetSizing()
+    return iconSize + sizing.BUTTON_BORDER_PADDING
 end
 
 function MasonryLayout:GetCategoryPadding()
-    -- Access via IM.UI to ensure we get the live reference
-    return (IM.UI and IM.UI.layout and IM.UI.layout.cardSpacing) or 10
+    local sizing = _GetSizing()
+    return sizing.CATEGORY_PADDING
+end
+
+function MasonryLayout:GetColumnGap()
+    local sizing = _GetSizing()
+    return sizing.COLUMN_GAP
+end
+
+function MasonryLayout:GetItemGap()
+    local sizing = _GetSizing()
+    return sizing.ITEM_GAP
+end
+
+function MasonryLayout:GetLeftMarginExtra()
+    local sizing = _GetSizing()
+    return sizing.LEFT_MARGIN_EXTRA
 end
 
 function MasonryLayout:GetRowPadding()
-    -- Access via IM.UI to ensure we get the live reference
+    -- Vertical spacing between category groups
     return (IM.UI and IM.UI.layout and IM.UI.layout.elementSpacing) or 6
 end
 
@@ -53,28 +83,23 @@ end
 function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRow)
     columns = columns or 1
     itemsPerRow = itemsPerRow or 8
-    
-    -- Get dynamic sizing
+
+    -- Get dynamic sizing from single source of truth
     local itemSize = self:GetItemSize()
     local categoryPadding = self:GetCategoryPadding()
+    local columnGap = self:GetColumnGap()
     local rowPadding = self:GetRowPadding()
-    
+
     -- Debug: Verify we got valid values
     if not itemSize or not categoryPadding or not rowPadding then
         IM:Debug("[MasonryLayout] ERROR: Invalid sizing values!")
-        IM:Debug("  itemSize: " .. tostring(itemSize))
-        IM:Debug("  categoryPadding: " .. tostring(categoryPadding))
-        IM:Debug("  rowPadding: " .. tostring(rowPadding))
-        IM:Debug("  UI: " .. tostring(UI))
-        IM:Debug("  UI.layout: " .. tostring(UI and UI.layout))
-        
         -- Emergency fallbacks
         itemSize = itemSize or 37
-        categoryPadding = categoryPadding or 10
+        categoryPadding = categoryPadding or 6
+        columnGap = columnGap or 12
         rowPadding = rowPadding or 6
     end
-    
-    local columnGap = categoryPadding * 2  -- Gap between columns (20px)
+
     local categoryGapHorizontal = categoryPadding  -- Gap between categories sharing a row
     
     -- Calculate column width
@@ -216,25 +241,26 @@ function MasonryLayout:CalculateCategoryHeight(category, availableWidth, itemsPe
     if itemCount == 0 then
         return 0
     end
-    
-    -- Get dynamic sizing
+
+    -- Get dynamic sizing from single source of truth
     local itemSize = self:GetItemSize()
-    
-    -- Header height (category name) - use IM.UI for live reference
+    local itemGap = self:GetItemGap()
+
+    -- Header height (category name)
     local headerHeight = (IM.UI.layout.rowHeightSmall or 24) + (IM.UI.layout.elementSpacing or 6)
-    
+
     -- Calculate how many items fit per row
     local itemsPerRowActual = math.min(itemsPerRow, math.floor(availableWidth / itemSize))
     if itemsPerRowActual < 1 then itemsPerRowActual = 1 end
-    
+
     -- Calculate number of rows needed
     local numRows = math.ceil(itemCount / itemsPerRowActual)
-    
-    -- Calculate item area height
-    local itemsHeight = numRows * itemSize + (numRows - 1) * (IM.UI.layout.paddingSmall or 4)
-    
-    -- Total height
-    return headerHeight + itemsHeight + (IM.UI.layout.padding or 8)
+
+    -- Calculate item area height (itemSize + gap for each row, minus gap after last row)
+    local itemsHeight = numRows * itemSize + (numRows - 1) * itemGap
+
+    -- Total height with bottom padding
+    return headerHeight + itemsHeight + 4  -- Reduced bottom padding
 end
 
 -- ============================================================================
@@ -253,37 +279,37 @@ end
 ]]
 function MasonryLayout:CalculateItemPositions(itemCount, startX, startY, availableWidth, itemsPerRow)
     local positions = {}
-    
-    -- Get dynamic sizing
+
+    -- Get dynamic sizing from single source of truth
     local itemSize = self:GetItemSize()
-    local paddingSmall = IM.UI.layout.paddingSmall or 4
-    
+    local itemGap = self:GetItemGap()
+
     local itemsPerRowActual = math.min(itemsPerRow, math.floor(availableWidth / itemSize))
     if itemsPerRowActual < 1 then itemsPerRowActual = 1 end
-    
+
     local currentX = startX
     local currentY = startY
     local itemsInCurrentRow = 0
-    
+
     for i = 1, itemCount do
         table.insert(positions, {
             x = currentX,
             y = currentY,
         })
-        
+
         itemsInCurrentRow = itemsInCurrentRow + 1
-        
+
         if itemsInCurrentRow >= itemsPerRowActual then
             -- Start new row
             currentX = startX
-            currentY = currentY - (itemSize + paddingSmall)
+            currentY = currentY - (itemSize + itemGap)
             itemsInCurrentRow = 0
         else
             -- Next item in row
-            currentX = currentX + itemSize + paddingSmall
+            currentX = currentX + itemSize + itemGap
         end
     end
-    
+
     return positions
 end
 

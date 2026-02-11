@@ -349,8 +349,15 @@ end
 
 function ItemButton:SetPosition(button, x, y)
     if not button then return end
-    
+
     button:ClearAllPoints()
+    -- CRITICAL: SetScale() causes SetPoint offsets to be multiplied by scale on screen.
+    -- Divide by scale so items appear at the intended pixel position.
+    local buttonScale = button:GetScale()
+    if buttonScale ~= 1 then
+        x = x / buttonScale
+        y = y / buttonScale
+    end
     -- Position relative to the scrollContent (buttons are parented to virtual bag frames which are children of scrollContent)
     -- _parentFrame IS the scrollContent
     if _parentFrame then

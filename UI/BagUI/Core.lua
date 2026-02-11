@@ -69,34 +69,98 @@ function BagUI:ClearSearchFilter()
 end
 
 -- ============================================================================
+-- SIZING CONSTANTS (Single Source of Truth)
+-- ============================================================================
+
+-- All sizing constants in ONE place to avoid scattered magic numbers
+local SIZING = {
+    BUTTON_BORDER_PADDING = 17,    -- ContainerFrameItemButtonTemplate adds ~17px to icon size
+    SCROLL_CONTAINER_MARGIN = 10,  -- CreateScrollFrame fill mode uses 10px margins
+    SCROLLBAR_WIDTH = 10,          -- Scrollbar track width
+    SCROLLBAR_MARGIN = 8,          -- Space around scrollbar
+    SCROLL_CONTENT_INSET = 22,     -- Scroll content is inset from container (4 left + 18 scrollbar area)
+    MIN_FRAME_WIDTH = 480,
+    MAX_FRAME_WIDTH = 1200,
+    -- Layout tweaks (tighter spacing)
+    ITEM_GAP = 2,                  -- Gap between items (was 4, reduced for tighter packing)
+    CATEGORY_PADDING = 6,          -- Padding around category content (was 10)
+    COLUMN_GAP = 12,               -- Gap between columns (was 20)
+    LEFT_MARGIN_EXTRA = 4,         -- Extra left margin to prevent border clipping
+}
+
+-- ============================================================================
+-- WIDTH CALCULATION (Canonical)
+-- ============================================================================
+
+--[[
+    Calculate required frame width based on current settings.
+    This is THE canonical width calculation - used by Create() and ResizeForSettings().
+
+    Layout breakdown (left to right):
+    - 10px: scroll container left margin
+    - 4px: scroll content left inset
+    - categoryPadding: left padding inside content
+    - [column 1]: paddingSmall + (itemSize * itemsPerRow) + (paddingSmall gaps)
+    - columnGap: gap between columns
+    - [column 2]: same as column 1
+    - categoryPadding: right padding inside content
+    - 18px: scrollbar area (10 width + margins)
+    - 10px: scroll container right margin
+]]
+function BagUI:CalculateRequiredWidth()
+    local settings = self:GetSettings()
+    local iconSize = settings.iconSize or 20
+    local columns = settings.columns or 2
+    local itemsPerRow = settings.itemsPerRow or 6
+
+    -- Use our own tighter spacing constants
+    local itemGap = SIZING.ITEM_GAP
+    local categoryPadding = SIZING.CATEGORY_PADDING
+    local columnGap = SIZING.COLUMN_GAP
+    local leftMarginExtra = SIZING.LEFT_MARGIN_EXTRA
+
+    -- Item button total size (icon + border/padding from template)
+    local itemSize = iconSize + SIZING.BUTTON_BORDER_PADDING
+
+    -- Width of items in one row: N items + (N-1) gaps between them
+    local itemRowWidth = (itemSize * itemsPerRow) + (itemGap * (itemsPerRow - 1))
+
+    -- Each column content: left margin + item row
+    local columnContentWidth = leftMarginExtra + itemRowWidth
+
+    -- Total content area: outer padding + columns + gaps between columns + outer padding
+    local contentAreaWidth = categoryPadding + (columnContentWidth * columns) + (columnGap * (columns - 1)) + categoryPadding
+
+    -- Frame width = content + scroll container margins (both sides) + scrollbar area
+    local scrollbarArea = SIZING.SCROLLBAR_WIDTH + SIZING.SCROLLBAR_MARGIN
+    local frameWidth = contentAreaWidth + (SIZING.SCROLL_CONTAINER_MARGIN * 2) + scrollbarArea + 4
+
+    -- Clamp to bounds
+    frameWidth = math.max(SIZING.MIN_FRAME_WIDTH, math.min(SIZING.MAX_FRAME_WIDTH, frameWidth))
+
+    IM:Debug(string.format("[BagUI] CalculateRequiredWidth: %d (icon=%d, cols=%d, items/row=%d, itemSize=%d, rowWidth=%d, colWidth=%d, content=%d)",
+        frameWidth, iconSize, columns, itemsPerRow, itemSize, itemRowWidth, columnContentWidth, contentAreaWidth))
+
+    return frameWidth
+end
+
+-- Export SIZING for MasonryLayout to use
+function BagUI:GetSizingConstants()
+    return SIZING
+end
+
+-- ============================================================================
 -- MAIN BAG FRAME
 -- ============================================================================
 
 function BagUI:Create()
     if _bagFrame then return _bagFrame end
 
-    -- Calculate optimal width based on settings
     local settings = self:GetSettings()
-    local columns = settings.columns or 2
-    local itemsPerRow = settings.itemsPerRow or 6
     local height = settings.height or 500
-    local iconSize = settings.iconSize or 20
 
-    -- Calculate required width
-    local itemSize = iconSize + 17  -- icon + border/padding
-    local paddingSmall = IM.UI.layout.paddingSmall or 4
-    local categoryPadding = IM.UI.layout.cardSpacing or 10
-    local columnGap = categoryPadding * 2  -- 20px between columns
-    
-    -- Width = (itemSize * itemsPerRow) + (gaps between items) + (category padding) per column + gaps between columns
-    local itemRowWidth = (itemSize * itemsPerRow) + (paddingSmall * (itemsPerRow - 1)) + (paddingSmall * 2)
-    local totalWidth = (itemRowWidth * columns) + (columnGap * (columns - 1)) + (categoryPadding * 2) + 40
-    
-    -- Clamp to reasonable bounds
-    totalWidth = math.max(totalWidth, 480)  -- Minimum
-    totalWidth = math.min(totalWidth, 1200)  -- Maximum
-    
-    IM:Debug(string.format("[BagUI] Calculated width: %d (cols=%d, items/row=%d)", totalWidth, columns, itemsPerRow))
+    -- Calculate width using canonical function
+    local totalWidth = self:CalculateRequiredWidth()
 
     -- Main frame using DRY CreatePanel (calculated width and height)
     local frame = UI:CreatePanel("InventoryManagerBagFrame", UIParent, totalWidth, height)
@@ -410,6 +474,10 @@ function BagUI:IsShown()
     return _isVisible and _bagFrame and _bagFrame:IsShown()
 end
 
+function BagUI:GetFrame()
+    return _bagFrame
+end
+
 -- ============================================================================
 -- REFRESH & UPDATE
 -- ============================================================================
@@ -500,6 +568,43 @@ function BagUI:OnResize()
     end
 end
 
+-- Track overflow state to prevent infinite loops
+local _overflowCheckInProgress = false
+
+function BagUI:OnContentOverflow(contentWidth, containerWidth)
+    -- Prevent re-entrant calls (resize triggers refresh triggers overflow check)
+    if _overflowCheckInProgress then
+        IM:Debug("[BagUI] OnContentOverflow: skipping (already in progress)")
+        return
+    end
+
+    _overflowCheckInProgress = true
+
+    -- Calculate how much wider we need to be
+    local overflow = contentWidth - containerWidth
+    local currentFrameWidth = _bagFrame:GetWidth()
+    local newFrameWidth = currentFrameWidth + overflow + 10  -- +10 for safety margin
+
+    -- Clamp to max
+    newFrameWidth = math.min(newFrameWidth, SIZING.MAX_FRAME_WIDTH)
+
+    if newFrameWidth > currentFrameWidth then
+        IM:Debug(string.format("[BagUI] OnContentOverflow: expanding frame from %d to %d", currentFrameWidth, newFrameWidth))
+        _bagFrame:SetWidth(newFrameWidth)
+
+        -- Re-render with new width (delayed to let frame settle)
+        C_Timer.After(0.01, function()
+            _overflowCheckInProgress = false
+            if BagUI.CategoryView and _isVisible then
+                BagUI.CategoryView:Refresh(_bagFrame.scrollContent)
+            end
+        end)
+    else
+        _overflowCheckInProgress = false
+        IM:Debug("[BagUI] OnContentOverflow: at max width, cannot expand further")
+    end
+end
+
 function BagUI:SavePosition()
     if not _bagFrame then return end
     
@@ -523,33 +628,35 @@ function BagUI:ResizeForSettings()
     if not _bagFrame then return end
 
     local settings = self:GetSettings()
-    local columns = settings.columns or 2
-    local itemsPerRow = settings.itemsPerRow or 6
     local height = settings.height or 500
-    local iconSize = settings.iconSize or 20
 
     -- Resize item buttons to match new icon size
     if BagUI.ItemButton and BagUI.ItemButton.ResizeAll then
         BagUI.ItemButton:ResizeAll()
     end
 
-    -- Calculate optimal width with dynamic icon size
-    local itemSize = iconSize + 17
-    local paddingSmall = IM.UI.layout.paddingSmall or 4
-    local categoryPadding = IM.UI.layout.cardSpacing or 10
-    local columnGap = categoryPadding * 2
+    -- Use canonical width calculation (single source of truth)
+    local totalWidth = self:CalculateRequiredWidth()
 
-    local itemRowWidth = (itemSize * itemsPerRow) + (paddingSmall * (itemsPerRow - 1)) + (paddingSmall * 2)
-    local totalWidth = (itemRowWidth * columns) + (columnGap * (columns - 1)) + (categoryPadding * 2) + 40
-
-    -- Clamp to reasonable bounds
-    totalWidth = math.max(totalWidth, 480)
-    totalWidth = math.min(totalWidth, 1200)
-
-    IM:Debug(string.format("[BagUI] Resizing to width: %d, height: %d (cols=%d, items/row=%d, iconSize=%d)", totalWidth, height, columns, itemsPerRow, iconSize))
+    IM:Debug(string.format("[BagUI] ResizeForSettings: width=%d, height=%d", totalWidth, height))
 
     _bagFrame:SetWidth(totalWidth)
     _bagFrame:SetHeight(height)
+
+    -- CRITICAL: Explicitly update scroll content width since OnSizeChanged won't fire until next frame
+    -- This ensures CategoryView:Refresh() sees the correct container width immediately
+    if _bagFrame.scrollFrame and _bagFrame.scrollFrame.content then
+        local scrollContainer = _bagFrame.scrollFrame:GetParent()
+        if scrollContainer then
+            -- Scroll container fills contentContainer with 10px margins (from CreateScrollFrame fill mode)
+            -- Content container fills frame (minus footer)
+            -- So scroll container width = frame width - 20
+            -- And scroll content width = scroll container - 22 (from CreateScrollFrame)
+            local newScrollContentWidth = totalWidth - 20 - 22
+            _bagFrame.scrollFrame.content:SetWidth(newScrollContentWidth)
+            IM:Debug(string.format("[BagUI] Updated scroll content width to %d", newScrollContentWidth))
+        end
+    end
 end
 
 -- ============================================================================

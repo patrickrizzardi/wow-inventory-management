@@ -118,9 +118,24 @@ function CategoryView:Refresh(scrollContent)
 
     -- Calculate layout
     local containerWidth = scrollContent:GetWidth()
+
+    -- Debug: trace the width chain
+    local scrollFrame = scrollContent:GetParent()
+    local scrollContainer = scrollFrame and scrollFrame:GetParent() or nil
+    local contentContainer = scrollContainer and scrollContainer:GetParent() or nil
+    local bagFrame = contentContainer and contentContainer:GetParent() or nil
+
+    IM:Debug(string.format("[CategoryView] Width chain: bagFrame=%d, contentContainer=%d, scrollContainer=%d, scrollFrame=%d, scrollContent=%d",
+        bagFrame and bagFrame:GetWidth() or -1,
+        contentContainer and contentContainer:GetWidth() or -1,
+        scrollContainer and scrollContainer:GetWidth() or -1,
+        scrollFrame and scrollFrame:GetWidth() or -1,
+        containerWidth))
+
     -- Dynamic fallback based on parent frame width
     if containerWidth <= 0 then
         containerWidth = (scrollContent:GetParent() and scrollContent:GetParent():GetWidth() or 480) - 40
+        IM:Debug(string.format("[CategoryView] Using fallback containerWidth=%d", containerWidth))
     end
 
     local columnData, totalHeight = BagUI.MasonryLayout:CalculateFromSettings(categories, containerWidth)
@@ -132,12 +147,23 @@ function CategoryView:Refresh(scrollContent)
     -- Set scroll content size from actual rendered bounds
     local itemSize = BagUI.MasonryLayout:GetItemSize()
     local padding = IM.UI.layout.padding or 8
-    local minHeight = itemSize + 40
-    local minWidth = 200
 
-    -- maxY is positive (distance from top), add item size + padding for bottom buffer
-    scrollContent:SetHeight(math.max(contentBounds.maxY + itemSize + padding, minHeight))
-    scrollContent:SetWidth(math.max(contentBounds.maxX + itemSize + padding, minWidth))
+    -- Calculate actual required dimensions
+    local requiredHeight = contentBounds.maxY + itemSize + padding
+
+    IM:Debug(string.format("[CategoryView] Content bounds: maxX=%d, maxY=%d, containerWidth=%d, requiredHeight=%d",
+        contentBounds.maxX, contentBounds.maxY, containerWidth, requiredHeight))
+
+    -- Check for horizontal overflow - if content exceeds container, we need wider frame
+    if contentBounds.maxX > containerWidth then
+        IM:Debug(string.format("[CategoryView] WIDTH OVERFLOW: content=%d > container=%d", contentBounds.maxX, containerWidth))
+        -- Signal that frame needs to be wider (will be handled by BagUI:OnContentOverflow)
+        if BagUI.OnContentOverflow then
+            BagUI:OnContentOverflow(contentBounds.maxX, containerWidth)
+        end
+    end
+
+    scrollContent:SetHeight(math.max(requiredHeight, itemSize + 40))
 end
 
 -- ============================================================================
@@ -621,9 +647,12 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     local y = categoryData.y
     local width = categoryData.width
 
+    -- Get sizing from MasonryLayout (single source of truth)
+    local leftMarginExtra = BagUI.MasonryLayout:GetLeftMarginExtra()
+
     -- Calculate item positions FIRST so we can anchor header to first item
     local itemStartY = y - (IM.UI.layout.rowHeightSmall or 24) - (IM.UI.layout.elementSpacing or 6)
-    local itemStartX = x + (IM.UI.layout.paddingSmall or 4)
+    local itemStartX = x + leftMarginExtra
 
     IM:Debug(string.format("[CategoryView] Rendering '%s': headerY=%d, itemStartY=%d, itemStartX=%d",
         category.name, y, itemStartY, itemStartX))
@@ -634,7 +663,7 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
         #category.items,
         itemStartX,
         itemStartY,
-        width - (IM.UI.layout.padding or 8),
+        width - 4,  -- Reduced inner padding
         settings.itemsPerRow or 8
     )
 
@@ -670,7 +699,7 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
         -- Anchor header above the first item - header follows items automatically
         -- Use negative offset since header is ABOVE the button (WoW Y goes down as negative)
         local headerGap = IM.UI.layout.elementSpacing or 6
-        header:SetPoint("BOTTOMLEFT", firstButton, "TOPLEFT", -(IM.UI.layout.paddingSmall or 4), headerGap)
+        header:SetPoint("BOTTOMLEFT", firstButton, "TOPLEFT", -leftMarginExtra, headerGap)
     else
         -- Fallback for empty categories (shouldn't happen but safety)
         header:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", x, y)
