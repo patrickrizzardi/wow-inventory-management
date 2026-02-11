@@ -54,11 +54,11 @@ UI\Config.lua
 UI\OverlayFactory.lua
 UI\BagIntegration.lua
 
-# Custom Bag UI
+# Custom Bag UI (Core.lua first - defines SIZING constants)
+UI\BagUI\Core.lua
 UI\BagUI\ItemButton.lua
 UI\BagUI\MasonryLayout.lua
 UI\BagUI\CategoryView.lua
-UI\BagUI\Core.lua
 
 # UI Popups
 UI\MailPopup.lua

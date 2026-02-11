@@ -708,9 +708,14 @@ end
 function IM:ParseMoneyFromMessage(message)
     if not message then return 0 end
 
-    local gold = tonumber(message:match("(%d+) gold")) or 0
-    local silver = tonumber(message:match("(%d+) silver")) or 0
-    local copper = tonumber(message:match("(%d+) copper")) or 0
+    -- Use pcall for tainted strings from chat events
+    local ok, goldStr = pcall(string.match, message, "(%d+) gold")
+    local ok2, silverStr = pcall(string.match, message, "(%d+) silver")
+    local ok3, copperStr = pcall(string.match, message, "(%d+) copper")
+
+    local gold = (ok and tonumber(goldStr)) or 0
+    local silver = (ok2 and tonumber(silverStr)) or 0
+    local copper = (ok3 and tonumber(copperStr)) or 0
 
     return gold * 10000 + silver * 100 + copper
 end
@@ -722,15 +727,16 @@ end
 function IM:ExtractItemLinkFromMessage(message)
     if not message then return nil end
 
-    -- Try full colored link first (|c color code + item link)
-    local itemLink = message:match("|c%x+|Hitem:[^|]+|h%[[^%]]+%]|h|r")
-    if itemLink then
+    -- Use pcall + string.match() (not method syntax) to handle tainted strings
+    -- WoW taints CHAT_MSG_SYSTEM args when addon code is in the call chain
+    local ok, itemLink = pcall(string.match, message, "|c%x+|Hitem:[^|]+|h%[[^%]]+%]|h|r")
+    if ok and itemLink then
         return itemLink
     end
 
     -- Try bare item link (no color code)
-    itemLink = message:match("|Hitem:[^|]+|h%[[^%]]+%]|h")
-    if itemLink then
+    ok, itemLink = pcall(string.match, message, "|Hitem:[^|]+|h%[[^%]]+%]|h")
+    if ok and itemLink then
         return itemLink
     end
 
