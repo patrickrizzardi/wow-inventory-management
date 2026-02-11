@@ -55,15 +55,10 @@ function SellHistory:OnLootMessage(message)
     if not message then return end
 
     -- Debug: log all loot messages received
-    IM:Debug("[SellHistory] CHAT_MSG_LOOT received: " .. tostring(message))
+    IM:Debug("[SellHistory] CHAT_MSG_LOOT received")
 
-    -- Extract item link from message - try multiple patterns for different WoW versions
-    -- Pattern 1: Standard colored item link
-    local itemLink = message:match("|c%x+|Hitem:[^|]+|h%[[^%]]+%]|h|r")
-    -- Pattern 2: Simpler match for edge cases
-    if not itemLink then
-        itemLink = message:match("|Hitem:[^|]+|h%[[^%]]+%]|h")
-    end
+    -- Extract item link using shared utility (handles tainted strings via pcall)
+    local itemLink = IM:ExtractItemLinkFromMessage(message)
 
     if not itemLink then
         IM:Debug("[SellHistory] No item link found in message")
@@ -73,8 +68,8 @@ function SellHistory:OnLootMessage(message)
     -- Get item ID from link
     local itemID = GetItemInfoInstant(itemLink)
     if not itemID then
-        -- Try extracting itemID directly from the link string
-        local idFromLink = itemLink:match("|Hitem:(%d+)")
+        -- Try extracting itemID directly from the link string (itemLink is untainted at this point)
+        local idFromLink = string.match(itemLink, "|Hitem:(%d+)")
         if idFromLink then
             itemID = tonumber(idFromLink)
         end
@@ -85,13 +80,17 @@ function SellHistory:OnLootMessage(message)
         return
     end
 
-    -- Extract quantity (defaults to 1)
+    -- Extract quantity (defaults to 1, use pcall for tainted strings)
     local quantity = 1
-    -- Try multiple quantity patterns used by WoW
-    -- Patterns: "x2", "|rx2", " x2", or nothing (single item)
-    local quantityMatch = message:match("x(%d+)%.?$") or message:match("|rx(%d+)") or message:match(" x(%d+)")
-    if quantityMatch then
-        quantity = tonumber(quantityMatch) or 1
+    local ok, qtyMatch = pcall(string.match, message, "x(%d+)%.?$")
+    if not ok or not qtyMatch then
+        ok, qtyMatch = pcall(string.match, message, "|rx(%d+)")
+    end
+    if not ok or not qtyMatch then
+        ok, qtyMatch = pcall(string.match, message, " x(%d+)")
+    end
+    if ok and qtyMatch then
+        quantity = tonumber(qtyMatch) or 1
     end
 
     -- Log the loot
