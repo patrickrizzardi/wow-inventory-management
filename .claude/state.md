@@ -1,6 +1,6 @@
 # Session State: InventoryManager
 
-**Last Updated**: 2026-01-29
+**Last Updated**: 2026-01-30
 
 ---
 
@@ -18,20 +18,25 @@
 
 ## Current Context (REPLACE each update)
 
-**Goal**: General maintenance / feature additions
-**Immediate Task**: BagUI polish - icon resizer and header positioning
+**Goal**: BagUI icon cutoff fix at larger icon sizes
+**Immediate Task**: User testing SetScale position fix
 
 **In Progress**:
-- AutoSell infinite loop fix - reworked ITEM_LOCK_CHANGED detection
-- BagUI scroll content sizing - dynamic based on rendered content
-- Settings panel blocking keybinds (user reports it used to work)
+- Waiting for user to test both fixes
 
-**Recently Completed** (last 3-5 items):
-- FIXED BagUI category header positioning - headers now anchor to first item in category (CategoryView.lua) instead of absolute positions
-- Icon border resize bug - debug dump behind `/im debug` flag
-- FIXED Alt+click/Ctrl+Alt+click double-firing - removed duplicate handlers from ItemButton.lua
-- FIXED Infinite loop v2 - FinishSelling now only reschedules for valid items
-- FIXED Item Upgrade taint - root cause was StaticPopup_Show function replacement
+**Fixes Applied**:
+1. SetScale position bug - ItemButton:SetPosition() divides x/y by button scale
+2. Tainted string bug - All chat message string ops wrapped in pcall(string.match/lower/find)
+   - Core.lua: ParseMoneyFromMessage, ExtractItemLinkFromMessage
+   - AuctionTracking.lua: OnSystemMessage, OnMoneyMessage
+   - LootTracking.lua: OnItemLoot qty extraction, OnMoneyLoot auction/loot checks
+
+**Waiting On**:
+- User to /reload and test icon sizes + taint fix
+
+**Recently Completed**:
+- Fixed SetScale root cause of icon cutoff at sizes > 20
+- Fixed tainted string errors in 6 spots across 3 files
 
 ---
 

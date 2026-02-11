@@ -5,15 +5,21 @@ General maintenance and feature work
 
 ## Active Phases
 
-### BagUI Icon Resizer Polish
-- [x] Add debug dump function to ItemButton.lua
-- [x] Trigger dump on first SetItem call
-- [x] Clean up debug code (put behind `/im debug` flag)
-- [x] Fix category header positioning - headers now anchor to first item (CategoryView.lua)
-- [x] Fix scroll content height cut off - dynamic bottom padding
-- [x] Make scroll content size fully dynamic - tracks actual rendered bounds (X and Y)
-- [ ] Verify scroll works at all icon sizes (waiting for user test)
-- [ ] Identify actual border element from debug output (if still needed)
+### BagUI Dynamic Sizing Fix (In Progress)
+- [x] Centralize width calculation - single `CalculateRequiredWidth()` function with documented constants
+- [x] Update ResizeForSettings to use canonical width calc
+- [x] Add explicit scroll content width update after frame resize (fixes timing issue)
+- [x] Add content overflow detection in CategoryView with callback to BagUI
+- [x] Add comprehensive debug logging to trace width chain
+- [x] Create SIZING constants table with tighter spacing values
+- [x] Update MasonryLayout to use GetSizingConstants() from BagUI
+- [x] Update CategoryView to use MasonryLayout helper functions
+- [x] Reduce ITEM_GAP from 4 to 2, CATEGORY_PADDING from 10 to 6, COLUMN_GAP from 20 to 12
+- [x] Fix SetScale position bug - divide SetPoint offsets by button scale (ROOT CAUSE of right-side cutoff)
+- [ ] Test at various icon sizes (16, 20, 24, 28, 32) - waiting for user test
+- [ ] Verify no left/right icon cutoff
+- [ ] Verify scrollbar properly reflects content height
+- [ ] Clean up debug logging after fix confirmed
 
 ### Item Upgrade Taint Fix
 - [x] Identify cause (SetOverrideBindingClick active during secure interactions)
