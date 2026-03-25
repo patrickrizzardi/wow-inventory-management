@@ -17,8 +17,8 @@ General maintenance and feature work
 - [x] Add profession reagent quality pips (1/2/3 star tiers) to item icons - using Blizzard's SetItemCraftingQualityOverlay, repositioned to BOTTOMLEFT
 - [x] Test at various icon sizes (16, 20, 24, 28, 32) - user confirmed good
 - [x] Verify no left/right icon cutoff - user confirmed good
-- [ ] Verify scrollbar properly reflects content height
-- [ ] Clean up debug logging after fix confirmed
+- [x] Verify scrollbar properly reflects content height - user confirmed good
+- [ ] Clean up debug logging - reduce verbose BagUI/ItemButton spam (low priority, debug off hides it)
 
 ### Post-hooksecurefunc Regression Fixes
 - [x] Alt+click lock not working
@@ -38,7 +38,7 @@ General maintenance and feature work
 - [ ] Bank UI - community requested, extend BagUI pattern to bank/warband bank
 
 ### UX Improvements
-- [ ] Improve category exclusion descriptions/tooltips - clarify what "Trade Goods" vs "Crafting Reagents" covers (fish/leather/ore = Trade Goods classID 7, not Crafting Reagents classID 5)
+- [x] Improve category exclusion descriptions/tooltips - clarified Trade Goods vs Crafting Reagents, added tip about mats being sold
 
 ### Misc Bug Fixes
 - [x] SellHistory nil message

@@ -31,16 +31,16 @@ function CategoriesPanel:Create(parent)
     -- Define category order and display info
     local names = IM.CATEGORY_EXCLUSION_NAMES or {}
     local categoryOrder = {
-        {key = "consumables", label = names.consumables or "Consumables", tooltip = "Food, potions, flasks"},
-        {key = "questItems", label = names.questItems or "Quest Items", tooltip = "Items used for quests"},
-        {key = "craftingReagents", label = names.craftingReagents or "Crafting Reagents", tooltip = "Profession materials"},
-        {key = "tradeGoods", label = names.tradeGoods or "Trade Goods", tooltip = "Trade skill items"},
-        {key = "recipes", label = names.recipes or "Recipes", tooltip = "Patterns, schematics, formulas"},
-        {key = "toys", label = names.toys or "Toys", tooltip = "Items in Toy Box"},
-        {key = "pets", label = names.pets or "Battle Pets", tooltip = "Pet cages and items"},
-        {key = "mounts", label = names.mounts or "Mounts", tooltip = "Mount items"},
-        {key = "currencyTokens", label = names.currencyTokens or "Currency Tokens", tooltip = "Event tokens, valor, etc."},
-        {key = "housingItems", label = names.housingItems or "Housing Items", tooltip = "Player housing decorations"},
+        {key = "consumables", label = names.consumables or "Consumables", tooltip = "Food, drinks, potions, flasks, elixirs, bandages"},
+        {key = "questItems", label = names.questItems or "Quest Items", tooltip = "Items used for or obtained from quests"},
+        {key = "craftingReagents", label = names.craftingReagents or "Crafting Reagents", tooltip = "Special reagents (Awakened elements, etc.) — NOT ores, herbs, or leather (those are Trade Goods)"},
+        {key = "tradeGoods", label = names.tradeGoods or "Trade Goods", tooltip = "Ores, herbs, leather, cloth, fish, enchanting mats, gems, cooking ingredients — most gathering/crafting materials"},
+        {key = "recipes", label = names.recipes or "Recipes", tooltip = "Patterns, schematics, formulas, plans"},
+        {key = "toys", label = names.toys or "Toys", tooltip = "Items in your Toy Box collection"},
+        {key = "pets", label = names.pets or "Battle Pets", tooltip = "Battle pet cages and pet items"},
+        {key = "mounts", label = names.mounts or "Mounts", tooltip = "Mount items not yet learned"},
+        {key = "currencyTokens", label = names.currencyTokens or "Currency Tokens", tooltip = "Event tokens, valor, conquest, etc."},
+        {key = "housingItems", label = names.housingItems or "Housing Items", tooltip = "Player housing furniture and decorations"},
     }
 
     -- Add checkboxes for each category
@@ -300,7 +300,9 @@ function CategoriesPanel:Create(parent)
         title = "Tips",
     })
 
-    tipsCard:AddText("- Enable tooltip info in General to see classID_subclassID on items")
+    tipsCard:AddText("- Mats getting sold? Ores, herbs, leather, fish are")
+    tipsCard:AddText("  Trade Goods, not Crafting Reagents. Check both!")
+    tipsCard:AddText("- Enable tooltip info in General to see an item's classID_subclassID")
     tipsCard:AddText("- Use classID alone (e.g., 7) for all items in that category")
     tipsCard:AddText("- Use classID_subclassID (e.g., 7_8) for specific subclasses")
 
