@@ -776,7 +776,7 @@ function BagUI:HookBagToggle()
     
     if otherAddon then
         IM:Debug("[BagUI] Other bag addon detected: " .. otherAddon .. ", hooking with priority override")
-        
+
         -- Delay our hooks slightly so they run AFTER the other addon's hooks
         C_Timer.After(0.5, function()
             self:HookBagToggleWithPriority(otherAddon)
@@ -785,6 +785,28 @@ function BagUI:HookBagToggle()
         IM:Debug("[BagUI] No other bag addon detected, using normal hooks")
         self:HookBagToggleNormal()
     end
+
+    -- Hook all ContainerFrame OnShow to suppress Blizzard bags when our BagUI is enabled.
+    -- This catches vendors (Item Upgrade, etc.) that open bags directly without calling
+    -- OpenAllBags/ToggleAllBags.
+    for i = 1, 13 do
+        local frame = _G["ContainerFrame" .. i]
+        if frame then
+            frame:HookScript("OnShow", function(f)
+                if self:IsEnabled() then
+                    f:Hide()
+                end
+            end)
+        end
+    end
+    if ContainerFrameCombinedBags then
+        ContainerFrameCombinedBags:HookScript("OnShow", function(f)
+            if self:IsEnabled() then
+                f:Hide()
+            end
+        end)
+    end
+    IM:Debug("[BagUI] Blizzard bag suppression hooks applied")
 end
 
 function BagUI:HookBagToggleNormal()
@@ -793,11 +815,6 @@ function BagUI:HookBagToggleNormal()
     -- Hook ToggleAllBags (called when pressing B key)
     hooksecurefunc("ToggleAllBags", function()
         IM:Debug("[BagUI] ToggleAllBags hook fired, enabled=" .. tostring(self:IsEnabled()) .. ", secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
-        -- Skip during secure interactions - let Blizzard handle it
-        if IM:IsSecureInteractionActive() then
-            IM:Debug("[BagUI] Skipping ToggleAllBags during secure interaction")
-            return
-        end
         if self:IsEnabled() then
             -- Close Blizzard bags IMMEDIATELY (no timer delay)
             -- Regular bags
@@ -829,11 +846,6 @@ function BagUI:HookBagToggleNormal()
     -- Hook OpenAllBags (called when opening vendor/AH)
     hooksecurefunc("OpenAllBags", function(forceOpen)
         IM:Debug("[BagUI] OpenAllBags hook fired, enabled=" .. tostring(self:IsEnabled()) .. ", secureInteraction=" .. tostring(IM:IsSecureInteractionActive()))
-        -- Skip during secure interactions - let Blizzard handle it
-        if IM:IsSecureInteractionActive() then
-            IM:Debug("[BagUI] Skipping OpenAllBags during secure interaction")
-            return
-        end
         if self:IsEnabled() then
             -- Close Blizzard bags
             for i = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
@@ -933,16 +945,9 @@ function BagUI:HookBagToggleWithPriority(otherAddon)
     -- Hook ToggleAllBags
     hooksecurefunc("ToggleAllBags", function()
         if not self:IsEnabled() then return end
-        -- Skip during secure interactions
-        if IM:IsSecureInteractionActive() then
-            IM:Debug("[BagUI] Skipping priority ToggleAllBags during secure interaction")
-            return
-        end
 
         -- Use a slightly delayed close to override other addons
         C_Timer.After(0.05, function()
-            -- Re-check inside timer
-            if IM:IsSecureInteractionActive() then return end
             CloseAllBagFrames()
 
             -- Show our UI
@@ -955,15 +960,8 @@ function BagUI:HookBagToggleWithPriority(otherAddon)
     -- Hook OpenAllBags (for vendor/AH)
     hooksecurefunc("OpenAllBags", function(forceOpen)
         if not self:IsEnabled() then return end
-        -- Skip during secure interactions
-        if IM:IsSecureInteractionActive() then
-            IM:Debug("[BagUI] Skipping priority OpenAllBags during secure interaction")
-            return
-        end
 
         C_Timer.After(0.05, function()
-            -- Re-check inside timer
-            if IM:IsSecureInteractionActive() then return end
             CloseAllBagFrames()
 
             -- Show our UI
@@ -1154,6 +1152,13 @@ IM:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", function(event, intera
             _toggleButton:Hide()
         end
         IM:Debug("[BagUI] Cleared override bindings for secure interaction type " .. interactionType)
+
+        -- Show our bags when a secure vendor opens (Item Upgrade, AH, etc.)
+        -- Blizzard bag suppression is handled by the ContainerFrame OnShow hooks.
+        if BagUI:IsEnabled() and not BagUI:IsShown() then
+            BagUI:Show()
+            IM:Debug("[BagUI] Opened our bags for secure interaction type " .. interactionType)
+        end
     end
 end)
 
@@ -1162,6 +1167,10 @@ IM:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", function(event, intera
     if _secureInteractionTypes[interactionType] then
         _secureInteractionActive = false
         if BagUI:IsEnabled() then
+            -- Close our bags (mirrors Blizzard closing theirs when vendor closes)
+            if BagUI:IsShown() then
+                BagUI:Hide()
+            end
             -- Restore the toggle button's OnClick script
             if _toggleButton then
                 _toggleButton:SetScript("OnClick", function()

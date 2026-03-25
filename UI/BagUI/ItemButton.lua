@@ -160,6 +160,11 @@ function ItemButton:Clear(button)
             child:Hide()
         end
     end
+
+    -- Clear crafting quality pips
+    if ClearItemCraftingQualityOverlay then
+        ClearItemCraftingQualityOverlay(button)
+    end
 end
 
 -- ============================================================================
@@ -316,6 +321,22 @@ function ItemButton:SetItem(button, bagID, slotID)
         else
             if button.IconBorder then
                 button.IconBorder:Hide()
+            end
+        end
+
+        -- Set crafting quality pips (reagent tier 1/2/3)
+        if SetItemCraftingQualityOverlay then
+            SetItemCraftingQualityOverlay(button, itemInfo.itemID)
+            -- Find and reposition Blizzard's overlay to BOTTOMLEFT
+            -- The overlay key name isn't documented, so scan button keys
+            for key, child in pairs(button) do
+                if type(child) == "table" and type(child.GetAtlas) == "function" then
+                    local atlas = child:GetAtlas()
+                    if atlas and atlas:find("Professions") then
+                        child:ClearAllPoints()
+                        child:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", -3, -16)
+                    end
+                end
             end
         end
         

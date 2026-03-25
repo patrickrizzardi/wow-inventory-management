@@ -1,6 +1,6 @@
 # Session State: InventoryManager
 
-**Last Updated**: 2026-01-30
+**Last Updated**: 2026-03-24
 
 ---
 
@@ -18,68 +18,51 @@
 
 ## Current Context (REPLACE each update)
 
-**Goal**: BagUI icon cutoff fix at larger icon sizes
-**Immediate Task**: User testing SetScale position fix
+**Goal**: Reviewing user-reported bugs from community feedback
+**Immediate Task**: Triaging user bug reports to see if they're already fixed or need investigation
 
 **In Progress**:
-- Waiting for user to test both fixes
-
-**Fixes Applied**:
-1. SetScale position bug - ItemButton:SetPosition() divides x/y by button scale
-2. Tainted string bug - All chat message string ops wrapped in pcall(string.match/lower/find)
-   - Core.lua: ParseMoneyFromMessage, ExtractItemLinkFromMessage
-   - AuctionTracking.lua: OnSystemMessage, OnMoneyMessage
-   - LootTracking.lua: OnItemLoot qty extraction, OnMoneyLoot auction/loot checks
+- Reviewing community bug reports
+- First report: "duplicate axe at vendor" from equipment set interaction — ANALYZED, NOT OUR BUG
+  - Addon cannot create/duplicate items (server-side only)
+  - Likely vendor buyback tab, equipment set ghost icon, or NA server desync
+  - Equipment set protection in Filters.lua:576-580 is working correctly
+  - AutoSell.lua:209-221 verifies items exist before selling
 
 **Waiting On**:
-- User to /reload and test icon sizes + taint fix
+- User may have more bug reports to review
 
-**Recently Completed**:
-- Fixed SetScale root cause of icon cutoff at sizes > 20
-- Fixed tainted string errors in 6 spots across 3 files
+**Previously Applied (from earlier sessions)**:
+- Stack overflow in CategoryView:Refresh - header frame pooling fix
+- SetScale position bug - ItemButton:SetPosition() divides x/y by button scale
+- Tainted string bug - All chat message string ops wrapped in pcall
+- Item Upgrade vendor taint - hooksecurefunc conversions
 
 ---
 
 ## Environment & Commands (CRITICAL - often lost after compaction)
 
-**Container Setup**:
-- Containers Running: {Yes/No}
-- Start Command: {e.g., `docker compose up -d`}
-- Exec Pattern: {e.g., `docker compose exec api`}
-
-**Database**:
-- Connection: {e.g., localhost:3306}
-- Which DB: {e.g., myapp_dev}
-
-**Package Manager**: {bun/npm/yarn}
-
-**Common Commands**:
-```bash
-# Start
-{command}
-
-# Test
-{command}
-
-# Build
-{command}
-```
+**WoW Addon**: No containers, no DB. Direct Lua files symlinked to WoW addon folder.
+**Testing**: `/reload` in WoW client, `/im debug` for verbose logging
 
 ---
 
 ## Active Decisions (append with reasoning)
 
-- [2026-01-27] **{decision}**: {reasoning}
+- [2026-03-24] **Duplicate axe report = not our bug**: Analyzed AutoSell, Filters, and AutoSellPopup code. Addon cannot create items. User likely seeing vendor buyback tab or equipment set ghost after NA server issues.
+- [2026-03-09] **Header frame pooling**: Same pattern as ItemButton pooling. CreateFrame every refresh was leaking frames as children of scrollContent, causing stack overflow when GetChildren() pushed them all onto Lua C stack.
 
 ---
 
 ## Superseded/Archived
 
-- (none yet)
+- (none)
 
 ---
 
 ## Remember for This Project
 
-- {project-specific context}
-- {user preferences}
+- CategoryView headers now pooled via `_headerPool`/`_activeHeaders` (same pattern as ItemButton)
+- Never use `{frame:GetChildren()}` pattern in WoW Lua - can overflow C stack with many children
+- FontStrings on pooled frames stored as `header._imHeaderText` for reuse
+- WoW addons CANNOT create/duplicate items - only server can. Always clarify this to users worried about item duplication.

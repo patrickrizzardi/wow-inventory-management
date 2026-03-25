@@ -60,15 +60,39 @@ function BagUIPanel:Create(parent)
             IM.UI.BagUI:InitializeSettings()
         end
         IM.db.global.bagUI.enabled = value
-        
-        if value and otherBagAddon then
-            IM:Print("Custom Bag UI: |cff00ff00ENABLED|r (will override " .. otherBagAddon .. ")")
-            IM:Print("If you experience issues, disable " .. otherBagAddon)
+
+        if value then
+            if otherBagAddon then
+                IM:Print("Custom Bag UI: |cff00ff00ENABLED|r (will override " .. otherBagAddon .. ")")
+                IM:Print("If you experience issues, disable " .. otherBagAddon)
+            else
+                IM:Print("Custom Bag UI: |cff00ff00ENABLED|r")
+            end
+            IM.UI.BagUI:SetupBindingOverrides()
+            -- Close Blizzard bags if they're open
+            for i = BACKPACK_CONTAINER, NUM_BAG_SLOTS do
+                local frame = _G["ContainerFrame"..(i+1)]
+                if frame and frame:IsShown() then
+                    frame:Hide()
+                end
+            end
+            if ContainerFrameCombinedBags and ContainerFrameCombinedBags:IsShown() then
+                ContainerFrameCombinedBags:Hide()
+            end
+            if Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag then
+                local reagentFrame = _G["ContainerFrame"..(NUM_BAG_SLOTS + 2)]
+                if reagentFrame and reagentFrame:IsShown() then
+                    reagentFrame:Hide()
+                end
+            end
         else
-            IM:Print("Custom Bag UI: " .. (value and "|cff00ff00ENABLED|r" or "|cffff0000DISABLED|r"))
+            IM:Print("Custom Bag UI: |cffff0000DISABLED|r - Blizzard bags restored")
+            -- Close our bags and restore Blizzard bindings
+            if IM.UI.BagUI:IsShown() then
+                IM.UI.BagUI:Hide()
+            end
+            IM.UI.BagUI:ClearBindingOverrides()
         end
-        
-        IM:Print("Close and reopen bags to see the change")
     end
 
     content:AdvanceY(mainCard:GetContentHeight() + UI.layout.cardSpacing)

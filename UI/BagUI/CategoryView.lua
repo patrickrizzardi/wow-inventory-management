@@ -14,6 +14,11 @@ local BagUI = UI.BagUI
 BagUI.CategoryView = {}
 local CategoryView = BagUI.CategoryView
 
+-- Header frame pool (prevents frame leak that causes stack overflow)
+local _headerPool = {}
+local _activeHeaders = {}
+local _emptyStateText = nil
+
 -- Equipment slot order (for subcategory mode)
 local EQUIPMENT_SLOT_ORDER = {
     "INVTYPE_HEAD",
@@ -47,6 +52,33 @@ for i, slot in ipairs(EQUIPMENT_SLOT_ORDER) do
 end
 
 -- ============================================================================
+-- HEADER POOL
+-- ============================================================================
+
+local function _AcquireHeader(scrollContent)
+    local header = table.remove(_headerPool)
+    if not header then
+        header = CreateFrame("Frame", nil, scrollContent)
+        header._imCategoryHeader = true
+    else
+        header:SetParent(scrollContent)
+    end
+    header:ClearAllPoints()
+    header:Show()
+    table.insert(_activeHeaders, header)
+    return header
+end
+
+local function _ReleaseAllHeaders()
+    for _, header in ipairs(_activeHeaders) do
+        header:Hide()
+        header:ClearAllPoints()
+        table.insert(_headerPool, header)
+    end
+    wipe(_activeHeaders)
+end
+
+-- ============================================================================
 -- MAIN REFRESH
 -- ============================================================================
 
@@ -58,11 +90,12 @@ function CategoryView:Refresh(scrollContent)
         BagUI.ItemButton:ReleaseAll()
     end
 
-    -- Clear any existing category headers and empty state message
-    for _, child in ipairs({scrollContent:GetChildren()}) do
-        if child._imCategoryHeader or child._imEmptyState then
-            child:Hide()
-        end
+    -- Release all category headers back to pool
+    _ReleaseAllHeaders()
+
+    -- Hide empty state from previous render
+    if _emptyStateText then
+        _emptyStateText:Hide()
     end
 
     -- Gather items from bags (filtered by search)
@@ -71,31 +104,23 @@ function CategoryView:Refresh(scrollContent)
     -- Handle empty state (no items or no search results)
     if #items == 0 then
         local searchFilter = BagUI:GetSearchFilter()
-        local emptyText = scrollContent._imEmptyText
 
-        if not emptyText then
-            emptyText = scrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            emptyText:SetPoint("CENTER", scrollContent, "CENTER", 0, 50)
-            emptyText._imEmptyState = true
-            scrollContent._imEmptyText = emptyText
+        if not _emptyStateText then
+            _emptyStateText = scrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            _emptyStateText:SetPoint("CENTER", scrollContent, "CENTER", 0, 50)
         end
 
         if searchFilter and searchFilter ~= "" then
-            emptyText:SetText("|cff888888No items match \"" .. searchFilter .. "\"|r")
+            _emptyStateText:SetText("|cff888888No items match \"" .. searchFilter .. "\"|r")
         else
-            emptyText:SetText("|cff888888No items in bags|r")
+            _emptyStateText:SetText("|cff888888No items in bags|r")
         end
-        emptyText:Show()
+        _emptyStateText:Show()
 
         -- Set minimal scroll content height
         local itemSize = BagUI.MasonryLayout:GetItemSize()
         scrollContent:SetHeight(itemSize + 40)
         return
-    end
-
-    -- Hide empty state if we have items
-    if scrollContent._imEmptyText then
-        scrollContent._imEmptyText:Hide()
     end
 
     -- Organize into categories
@@ -690,23 +715,23 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
         end
     end
 
-    -- Create category header ANCHORED to first item (follows icon size changes automatically)
-    local header = CreateFrame("Frame", nil, scrollContent)
+    -- Acquire category header from pool
+    local header = _AcquireHeader(scrollContent)
     header:SetSize(width, UI.layout.rowHeightSmall)
-    header._imCategoryHeader = true
 
     if firstButton then
-        -- Anchor header above the first item - header follows items automatically
-        -- Use negative offset since header is ABOVE the button (WoW Y goes down as negative)
         local headerGap = IM.UI.layout.elementSpacing or 6
         header:SetPoint("BOTTOMLEFT", firstButton, "TOPLEFT", -leftMarginExtra, headerGap)
     else
-        -- Fallback for empty categories (shouldn't happen but safety)
         header:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", x, y)
     end
 
-    local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    headerText:SetPoint("LEFT", UI.layout.paddingSmall, 0)
-    headerText:SetText(category.name)
-    headerText:SetTextColor(unpack(UI.colors.accent))
+    -- Reuse or create header text
+    if not header._imHeaderText then
+        local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        headerText:SetPoint("LEFT", UI.layout.paddingSmall, 0)
+        header._imHeaderText = headerText
+    end
+    header._imHeaderText:SetText(category.name)
+    header._imHeaderText:SetTextColor(unpack(UI.colors.accent))
 end
