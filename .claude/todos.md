@@ -18,7 +18,7 @@ General maintenance and feature work
 - [x] Test at various icon sizes (16, 20, 24, 28, 32) - user confirmed good
 - [x] Verify no left/right icon cutoff - user confirmed good
 - [x] Verify scrollbar properly reflects content height - user confirmed good
-- [ ] Clean up debug logging - reduce verbose BagUI/ItemButton spam (low priority, debug off hides it)
+- [x] Clean up debug logging - not needed, debug off hides it
 
 ### Post-hooksecurefunc Regression Fixes
 - [x] Alt+click lock not working
@@ -42,8 +42,8 @@ General maintenance and feature work
 
 ### Misc Bug Fixes
 - [x] SellHistory nil message
-- [ ] Settings panel blocking keybinds - user says it used to work, investigate
-- [ ] MoneyFrame tooltip error - happens on item hover, might be Blizzard bug
+- [x] Settings panel blocking keybinds - user says resolved
+- [x] MoneyFrame tooltip error - user says resolved
 
 ## Completed
 - [2026-03-24] Duplicate axe report triaged - not our bug
