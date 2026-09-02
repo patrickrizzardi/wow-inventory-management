@@ -140,7 +140,8 @@ local SIZING = {
     SCROLLBAR_WIDTH = 10,          -- Scrollbar track width
     SCROLLBAR_MARGIN = 8,          -- Space around scrollbar
     SCROLL_CONTENT_INSET = 22,     -- Scroll content is inset from container (4 left + 18 scrollbar area)
-    MIN_FRAME_WIDTH = 480,
+    MIN_FRAME_WIDTH = 400,
+    RAIL_WIDTH = 96,               -- view-mode rail down the left side
     MAX_FRAME_WIDTH = 1200,
     MIN_FRAME_HEIGHT = 300,        -- floor for content-fitted height
     -- Layout tweaks (tighter spacing)
@@ -191,9 +192,10 @@ function BagUI:CalculateRequiredWidth()
     -- One full-width section: outer padding, the item row inset on both sides
     local contentAreaWidth = (categoryPadding * 2) + (blockPadding * 2) + itemRowWidth
 
-    -- Frame width = content + scroll container margins (both sides) + scrollbar area
+    -- Frame width = rail + content + scroll container margins + scrollbar area
     local scrollbarArea = SIZING.SCROLLBAR_WIDTH + SIZING.SCROLLBAR_MARGIN
-    local frameWidth = contentAreaWidth + (SIZING.SCROLL_CONTAINER_MARGIN * 2) + scrollbarArea + 4
+    local frameWidth = UI.layout.cardSpacing + SIZING.RAIL_WIDTH + contentAreaWidth
+        + (SIZING.SCROLL_CONTAINER_MARGIN * 2) + scrollbarArea + 4
 
     frameWidth = math.max(SIZING.MIN_FRAME_WIDTH, math.min(SIZING.MAX_FRAME_WIDTH, frameWidth))
 
@@ -371,19 +373,35 @@ function BagUI:Create()
     clearBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- ============================================================
-    -- VIEW MODE FILTER BAR (below search)
+    -- VIEW MODE RAIL (left side)
     -- ============================================================
-    local filterBar = CreateFrame("Frame", nil, frame)
-    filterBar:SetHeight(UI.layout.buttonHeightSmall)
-    filterBar:SetPoint("TOPLEFT", searchBar, "BOTTOMLEFT", 0, -UI.layout.paddingSmall)
-    filterBar:SetPoint("TOPRIGHT", searchBar, "BOTTOMRIGHT", 0, -UI.layout.paddingSmall)
-    frame.filterBar = filterBar
+    -- Vertical, not a row across the top. Four buttons side by side forced a
+    -- 480px minimum frame width regardless of how few items per row the user
+    -- wanted, which showed up as dead space to the right of the grid. A rail
+    -- takes width that is USED, scales to more modes, and lets the window fit
+    -- the grid exactly at any items-per-row.
+    local rail = CreateFrame("Frame", nil, frame)
+    rail:SetWidth(SIZING.RAIL_WIDTH)
+    rail:SetPoint("TOPLEFT", searchBar, "BOTTOMLEFT", 0, -UI.layout.padding)
+    rail:SetPoint("BOTTOM", frame, "BOTTOM", 0, UI.layout.bottomBarHeight + UI.layout.padding)
+    frame.rail = rail
+
+    local railRule = rail:CreateTexture(nil, "ARTWORK")
+    railRule:SetWidth(1)
+    railRule:SetPoint("TOPRIGHT", rail, "TOPRIGHT", 0, 0)
+    railRule:SetPoint("BOTTOMRIGHT", rail, "BOTTOMRIGHT", 0, 0)
+    railRule:SetVertexColor(unpack(UI.colors.border))
 
     local filterButtons = {}
-    for _, def in ipairs(BagUI.VIEW_MODE_BUTTONS) do
-        local btn = UI:CreateButton(filterBar, def.label, 60, UI.layout.buttonHeightSmall)
+    for index, def in ipairs(BagUI.VIEW_MODE_BUTTONS) do
+        local btn = UI:CreateButton(rail, def.label,
+            SIZING.RAIL_WIDTH - UI.layout.padding, UI.layout.buttonHeight)
         btn._imViewMode = def.mode
         btn._imActive = false
+        btn.text:ClearAllPoints()
+        btn.text:SetPoint("LEFT", btn, "LEFT", UI.layout.paddingSmall + 2, 0)
+        btn:SetPoint("TOPLEFT", rail, "TOPLEFT", 0,
+            -((index - 1) * (UI.layout.buttonHeight + UI.layout.paddingSmall)))
 
         -- CreateButton's hover handlers reset the backdrop, so they are replaced
         -- here to keep the active mode visibly selected on mouse-out.
@@ -392,7 +410,7 @@ function BagUI:Create()
                 self:SetBackdropColor(unpack(UI.colors.surfaceRaised))
                 self:SetBackdropBorderColor(unpack(UI.colors.borderLight))
             end
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(def.label)
             GameTooltip:AddLine(def.tooltip, 0.7, 0.7, 0.7, true)
             GameTooltip:Show()
@@ -420,30 +438,11 @@ function BagUI:Create()
     end
     frame.filterButtons = filterButtons
 
-    -- Split the bar evenly; recalculated on resize since the frame is resizable
-    local function LayoutFilterButtons()
-        local count = #filterButtons
-        if count == 0 then return end
-
-        local gap = UI.layout.paddingSmall
-        local available = filterBar:GetWidth() - (gap * (count - 1))
-        if available <= 0 then return end
-
-        local btnWidth = available / count
-        for i, btn in ipairs(filterButtons) do
-            btn:ClearAllPoints()
-            btn:SetSize(btnWidth, UI.layout.buttonHeightSmall)
-            btn:SetPoint("TOPLEFT", filterBar, "TOPLEFT", (i - 1) * (btnWidth + gap), 0)
-        end
-    end
-    filterBar:SetScript("OnSizeChanged", LayoutFilterButtons)
-    LayoutFilterButtons()
-
     BagUI:UpdateFilterButtons(frame)
 
-    -- Content container (for categories and items) - below filter bar
+    -- Content container (for categories and items) - right of the rail
     local contentContainer = CreateFrame("Frame", nil, frame)
-    contentContainer:SetPoint("TOPLEFT", filterBar, "BOTTOMLEFT", -UI.layout.cardSpacing, -UI.layout.paddingSmall)
+    contentContainer:SetPoint("TOPLEFT", rail, "TOPRIGHT", 0, UI.layout.paddingSmall)
     contentContainer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, UI.layout.bottomBarHeight + UI.layout.padding)
     frame.contentContainer = contentContainer
     
@@ -867,7 +866,10 @@ function BagUI:ResizeForSettings()
             -- Content container fills frame (minus footer)
             -- So scroll container width = frame width - 20
             -- And scroll content width = scroll container - 22 (from CreateScrollFrame)
-            local newScrollContentWidth = totalWidth - 20 - 22
+            -- Frame minus the rail and its left inset, then the scroll
+            -- container's own margins (20) and content inset (22)
+            local newScrollContentWidth = totalWidth
+                - (UI.layout.cardSpacing + SIZING.RAIL_WIDTH) - 20 - 22
             _bagFrame.scrollFrame.content:SetWidth(newScrollContentWidth)
             IM:Debug(string.format("[BagUI] Updated scroll content width to %d", newScrollContentWidth))
         end
