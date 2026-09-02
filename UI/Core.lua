@@ -311,6 +311,31 @@ function UI:CreatePanel(name, parent, width, height)
 end
 
 -- Create a header/title bar for a panel
+-- Small glyph control (close, clear, dismiss). One implementation so these
+-- cannot drift apart: the window close and the search clear were previously a
+-- FontString and a Blizzard texture respectively, and looked it.
+-- @param hoverColor: colour on hover; defaults to the accent
+function UI:CreateGlyphButton(parent, glyph, hoverColor)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(self.layout.iconSize - 2, self.layout.iconSize - 2)
+
+    btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    btn.text:SetPoint("CENTER")
+    btn.text:SetText(glyph or "X")
+    btn.text:SetTextColor(unpack(self.colors.textDim))
+
+    btn._imHoverColor = hoverColor or self.colors.accent
+
+    btn:SetScript("OnEnter", function(self)
+        self.text:SetTextColor(unpack(self._imHoverColor))
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self.text:SetTextColor(unpack(UI.colors.textDim))
+    end)
+
+    return btn
+end
+
 function UI:CreateHeader(parent, title)
     local header = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     header:SetHeight(self.layout.rowHeight)
@@ -328,22 +353,11 @@ function UI:CreateHeader(parent, title)
     header.title:SetText(title or "InventoryManager")
     header.title:SetTextColor(unpack(self.colors.text))
 
-    -- Close button: neutral at rest, red only once you are actually on it
-    local closeBtn = CreateFrame("Button", nil, header)
-    closeBtn:SetSize(self.layout.iconSize - 2, self.layout.iconSize - 2)
+    -- Close: neutral at rest, red only once you are actually on it
+    local closeBtn = self:CreateGlyphButton(header, "X", self.colors.error)
     closeBtn:SetPoint("RIGHT", header, "RIGHT", -self.layout.paddingSmall, 0)
-    closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    closeBtn.text:SetPoint("CENTER")
-    closeBtn.text:SetText("X")
-    closeBtn.text:SetTextColor(unpack(self.colors.textDim))
     closeBtn:SetScript("OnClick", function()
         parent:Hide()
-    end)
-    closeBtn:SetScript("OnEnter", function(self)
-        self.text:SetTextColor(unpack(UI.colors.error))
-    end)
-    closeBtn:SetScript("OnLeave", function(self)
-        self.text:SetTextColor(unpack(UI.colors.textDim))
     end)
     header.closeButton = closeBtn
 

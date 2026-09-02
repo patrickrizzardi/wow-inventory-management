@@ -260,7 +260,7 @@ function BagUI:Create()
     
     -- Gear icon button (settings)
     local gearBtn = CreateFrame("Button", nil, header)
-    gearBtn:SetSize(UI.layout.iconSize, UI.layout.iconSize)
+    gearBtn:SetSize(UI.layout.iconSize - 2, UI.layout.iconSize - 2)  -- match the close glyph
     gearBtn:SetPoint("RIGHT", header.closeButton, "LEFT", -UI.layout.paddingSmall, 0)
     
     -- Use a cleaner settings icon without background
@@ -361,26 +361,20 @@ function BagUI:Create()
 
     frame.searchBox = searchBox
 
-    -- Clear button
-    local clearBtn = CreateFrame("Button", nil, searchBar)
-    clearBtn:SetSize(UI.layout.iconSizeSmall, UI.layout.iconSizeSmall)
+    -- Clear button: the same glyph control as the window close, so the two X's
+    -- in this window are literally the same thing rather than lookalikes.
+    local clearBtn = UI:CreateGlyphButton(searchBar, "X")
     clearBtn:SetPoint("RIGHT", -UI.layout.paddingSmall, 0)
-    clearBtn:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
-    clearBtn:GetNormalTexture():SetDesaturated(true)
-    clearBtn:GetNormalTexture():SetVertexColor(unpack(UI.colors.textDim))
-    clearBtn:SetHighlightTexture("Interface\\Buttons\\UI-StopButton")
-    clearBtn:GetHighlightTexture():SetDesaturated(true)
-    clearBtn:GetHighlightTexture():SetVertexColor(unpack(UI.colors.accent))
     clearBtn:SetScript("OnClick", function()
         searchBox:SetText("")
         searchBox:ClearFocus()
     end)
-    clearBtn:SetScript("OnEnter", function(self)
+    clearBtn:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine("Clear search")
         GameTooltip:Show()
     end)
-    clearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    clearBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- ============================================================
     -- VIEW MODE FILTER BAR (below search)
