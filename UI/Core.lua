@@ -14,7 +14,9 @@ UI.colors = {
     -- shadow (a black shadow on a black ground is invisible). Each step up the
     -- stack is a lighter surface; the old palette spanned only 7% so every
     -- surface read as one flat plane.
-    background = { 0.039, 0.039, 0.047, 0.97 },   -- #0A0A0C  window ground
+    background = { 0.039, 0.039, 0.047, 1 },      -- #0A0A0C  window ground (opaque:
+                                                 -- elevation is relative lightness, so the
+                                                 -- world showing through destroys the ramp)
     backgroundLight = { 0.078, 0.078, 0.098, 1 }, -- #141419  raised block
     backgroundDark = { 0.031, 0.031, 0.039, 1 },  -- #08080A  inset well
     surfaceRaised = { 0.102, 0.102, 0.129, 1 },   -- #1A1A21  hovered item
@@ -201,27 +203,28 @@ function UI:CreateHeader(parent, title)
     header:SetBackdropColor(unpack(self.colors.headerBar))
     header:SetBackdropBorderColor(unpack(self.colors.border))
 
-    -- Title text (uses accent color)
+    -- Title carries weight, not colour. The accent is reserved for state.
     header.title = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     header.title:SetPoint("LEFT", self.layout.padding, 0)
     header.title:SetText(title or "InventoryManager")
-    header.title:SetTextColor(unpack(self.colors.accent))
+    header.title:SetTextColor(unpack(self.colors.text))
 
-    -- Close button (red X style)
+    -- Close button: neutral at rest, red only once you are actually on it
     local closeBtn = CreateFrame("Button", nil, header)
     closeBtn:SetSize(self.layout.iconSize - 2, self.layout.iconSize - 2)
     closeBtn:SetPoint("RIGHT", header, "RIGHT", -self.layout.paddingSmall, 0)
     closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     closeBtn.text:SetPoint("CENTER")
-    closeBtn.text:SetText("|cffff6666X|r")
+    closeBtn.text:SetText("✕")
+    closeBtn.text:SetTextColor(unpack(self.colors.textDim))
     closeBtn:SetScript("OnClick", function()
         parent:Hide()
     end)
     closeBtn:SetScript("OnEnter", function(self)
-        self.text:SetText("|cffff0000X|r")
+        self.text:SetTextColor(unpack(UI.colors.error))
     end)
     closeBtn:SetScript("OnLeave", function(self)
-        self.text:SetText("|cffff6666X|r")
+        self.text:SetTextColor(unpack(UI.colors.textDim))
     end)
     header.closeButton = closeBtn
 
