@@ -751,7 +751,7 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     -- as light falling from above.
     local blockHeight = categoryData.height or 0
     if blockHeight > 0 then
-        local pad = 3
+        local pad = 2  -- must stay under half of SIZING.CATEGORY_GAP
         local radius = UI.layout.radiusBlock
         local bx, by = x - pad, y + pad
         local bw = width + (pad * 2)

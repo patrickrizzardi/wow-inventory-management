@@ -146,7 +146,10 @@ local SIZING = {
     -- Layout tweaks (tighter spacing)
     ITEM_GAP = 2,                  -- Gap between items (was 4, reduced for tighter packing)
     CATEGORY_PADDING = 6,          -- Padding around category content (was 10)
-    COLUMN_GAP = 12,               -- Gap between columns (was 20)
+    CATEGORY_GAP = 12,             -- Gap BETWEEN category blocks, horizontally and
+                                   -- vertically. Must exceed twice the block's draw
+                                   -- inflation or the raised surfaces touch.
+    COLUMN_GAP = 16,               -- Gap between columns (was 20)
     LEFT_MARGIN_EXTRA = 4,         -- Extra left margin to prevent border clipping
 }
 

@@ -28,7 +28,8 @@ local function _GetSizing()
         BUTTON_BORDER_PADDING = 17,
         ITEM_GAP = 2,
         CATEGORY_PADDING = 6,
-        COLUMN_GAP = 12,
+        CATEGORY_GAP = 12,
+        COLUMN_GAP = 16,
         LEFT_MARGIN_EXTRA = 4,
     }
 end
@@ -61,9 +62,15 @@ function MasonryLayout:GetLeftMarginExtra()
     return sizing.LEFT_MARGIN_EXTRA
 end
 
+function MasonryLayout:GetCategoryGap()
+    local sizing = _GetSizing()
+    return sizing.CATEGORY_GAP or 12
+end
+
 function MasonryLayout:GetRowPadding()
-    -- Vertical spacing between category groups
-    return (IM.UI and IM.UI.layout and IM.UI.layout.elementSpacing) or 6
+    -- Vertical spacing between category groups. Shares one constant with the
+    -- horizontal gap so blocks are separated by the same amount in both axes.
+    return self:GetCategoryGap()
 end
 
 -- ============================================================================
@@ -100,7 +107,7 @@ function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRo
         rowPadding = rowPadding or 6
     end
 
-    local categoryGapHorizontal = categoryPadding  -- Gap between categories sharing a row
+    local categoryGapHorizontal = self:GetCategoryGap()  -- Gap between categories sharing a row
     
     -- Calculate column width
     local totalPadding = categoryPadding * 2  -- Left and right padding
