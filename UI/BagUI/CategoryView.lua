@@ -18,6 +18,48 @@ local CategoryView = BagUI.CategoryView
 local _headerPool = {}
 local _activeHeaders = {}
 
+-- Empty-slot placeholders. Deliberately pooled TEXTURES, not ItemButtons: the
+-- button pool is sized to the character's actual bag slots, so drawing a
+-- placeholder per partial row would exhaust it and real items would vanish.
+local _slotPool = {}
+local _activeSlots = {}
+
+local function _AcquireSlot(scrollContent)
+    local tex = table.remove(_slotPool)
+    if not tex then
+        tex = scrollContent:CreateTexture(nil, "BACKGROUND")
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+    end
+    tex:ClearAllPoints()
+    tex:SetVertexColor(unpack(UI.colors.backgroundDark))
+    tex:Show()
+    table.insert(_activeSlots, tex)
+    return tex
+end
+
+local function _ReleaseAllSlots()
+    for _, tex in ipairs(_activeSlots) do
+        tex:Hide()
+        tex:ClearAllPoints()
+        table.insert(_slotPool, tex)
+    end
+    wipe(_activeSlots)
+end
+
+local function _AcquireHeader(scrollContent)
+    local header = table.remove(_headerPool)
+    if not header then
+        header = CreateFrame("Frame", nil, scrollContent)
+        header._imCategoryHeader = true
+    else
+        header:SetParent(scrollContent)
+    end
+    header:ClearAllPoints()
+    header:Show()
+    table.insert(_activeHeaders, header)
+    return header
+end
+
 local function _ReleaseAllHeaders()
     for _, header in ipairs(_activeHeaders) do
         header:Hide()
@@ -39,8 +81,9 @@ function CategoryView:Refresh(scrollContent)
         BagUI.ItemButton:ReleaseAll()
     end
 
-    -- Release all category headers back to pool
+    -- Release all category headers and slot placeholders back to their pools
     _ReleaseAllHeaders()
+    _ReleaseAllSlots()
 
     -- Hide empty state from previous render
     if _emptyStateText then
@@ -600,12 +643,20 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
 
     local settings = BagUI:GetSettings()
     local itemSize = BagUI.MasonryLayout:GetItemSize()
+    local maxPerRow = settings.itemsPerRow or 8
+
+    -- Pad the last row out with placeholders so a section is always a complete
+    -- rectangle, instead of stopping mid-row and leaving a notch. Costs no
+    -- extra height: the row already exists.
+    local perRow = BagUI.MasonryLayout:GetItemsPerRow(width, maxPerRow)
+    local slotCount = math.ceil(#category.items / perRow) * perRow
+
     local positions = BagUI.MasonryLayout:CalculateItemPositions(
-        #category.items,
+        slotCount,
         itemStartX,
         itemStartY,
         width,  -- block width; MasonryLayout applies the inner inset itself
-        settings.itemsPerRow or 8
+        maxPerRow
     )
 
     -- Render items first and track the first button for header anchoring
@@ -629,6 +680,13 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
                 if bottomEdge > contentBounds.maxY then contentBounds.maxY = bottomEdge end
             end
         end
+    end
+
+    -- Fill the remainder of the last row
+    for i = #category.items + 1, slotCount do
+        local slot = _AcquireSlot(scrollContent)
+        slot:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", positions[i].x, positions[i].y)
+        slot:SetSize(itemSize, itemSize)
     end
 
     -- Raised surface behind the category. Elevation here is lightness, not a
