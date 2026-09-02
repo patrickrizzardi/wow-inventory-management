@@ -149,7 +149,6 @@ local SIZING = {
     CATEGORY_GAP = 12,             -- Gap BETWEEN category blocks, horizontally and
                                    -- vertically. Must exceed twice the block's draw
                                    -- inflation or the raised surfaces touch.
-    COLUMN_GAP = 16,               -- Gap between columns (was 20)
     BLOCK_PADDING = 8,             -- Padding inside a category block, all sides.
                                    -- Was LEFT_MARGIN_EXTRA (4) and treated as a
                                    -- clipping guard; it is real padding and is
@@ -167,24 +166,20 @@ local SIZING = {
     Layout breakdown (left to right):
     - 10px: scroll container left margin
     - 4px: scroll content left inset
-    - categoryPadding: left padding inside content
-    - [column 1]: paddingSmall + (itemSize * itemsPerRow) + (paddingSmall gaps)
-    - columnGap: gap between columns
-    - [column 2]: same as column 1
-    - categoryPadding: right padding inside content
+    - categoryPadding: outer padding
+    - blockPadding: inset before the first item
+    - itemsPerRow items, with itemGap between them
+    - blockPadding + categoryPadding: matching right side
     - 18px: scrollbar area (10 width + margins)
     - 10px: scroll container right margin
 ]]
 function BagUI:CalculateRequiredWidth()
     local settings = self:GetSettings()
     local iconSize = settings.iconSize or 20
-    local columns = settings.columns or 2
-    local itemsPerRow = settings.itemsPerRow or 6
+    local itemsPerRow = settings.itemsPerRow or 8
 
-    -- Use our own tighter spacing constants
     local itemGap = SIZING.ITEM_GAP
     local categoryPadding = SIZING.CATEGORY_PADDING
-    local columnGap = SIZING.COLUMN_GAP
     local blockPadding = SIZING.BLOCK_PADDING
 
     -- Item button total size (icon + border/padding from template)
@@ -193,23 +188,17 @@ function BagUI:CalculateRequiredWidth()
     -- Width of items in one row: N items + (N-1) gaps between them
     local itemRowWidth = (itemSize * itemsPerRow) + (itemGap * (itemsPerRow - 1))
 
-    -- Each column content: left margin + item row
-    -- Padding sits on BOTH sides of the item area, so the frame must be wide
-    -- enough for two of them, not one
-    local columnContentWidth = (blockPadding * 2) + itemRowWidth
-
-    -- Total content area: outer padding + columns + gaps between columns + outer padding
-    local contentAreaWidth = categoryPadding + (columnContentWidth * columns) + (columnGap * (columns - 1)) + categoryPadding
+    -- One full-width section: outer padding, the item row inset on both sides
+    local contentAreaWidth = (categoryPadding * 2) + (blockPadding * 2) + itemRowWidth
 
     -- Frame width = content + scroll container margins (both sides) + scrollbar area
     local scrollbarArea = SIZING.SCROLLBAR_WIDTH + SIZING.SCROLLBAR_MARGIN
     local frameWidth = contentAreaWidth + (SIZING.SCROLL_CONTAINER_MARGIN * 2) + scrollbarArea + 4
 
-    -- Clamp to bounds
     frameWidth = math.max(SIZING.MIN_FRAME_WIDTH, math.min(SIZING.MAX_FRAME_WIDTH, frameWidth))
 
-    IM:Debug(string.format("[BagUI] CalculateRequiredWidth: %d (icon=%d, cols=%d, items/row=%d, itemSize=%d, rowWidth=%d, colWidth=%d, content=%d)",
-        frameWidth, iconSize, columns, itemsPerRow, itemSize, itemRowWidth, columnContentWidth, contentAreaWidth))
+    IM:Debug(string.format("[BagUI] CalculateRequiredWidth: %d (icon=%d, items/row=%d, itemSize=%d, rowWidth=%d, content=%d)",
+        frameWidth, iconSize, itemsPerRow, itemSize, itemRowWidth, contentAreaWidth))
 
     return frameWidth
 end
@@ -912,13 +901,12 @@ function BagUI:InitializeSettings()
         end
         
         -- Calculate reasonable default: ~8 items per row for normal bags, scale up for larger
-        local defaultItemsPerRow = math.min(math.ceil(totalSlots / 15), 12)
-        defaultItemsPerRow = math.max(defaultItemsPerRow, 6)  -- Minimum 6, maximum 12
+        local defaultItemsPerRow = math.min(math.ceil(totalSlots / 12), 14)
+        defaultItemsPerRow = math.max(defaultItemsPerRow, 8)
         
         IM.db.global.bagUI = {
             enabled = true,  -- Enabled by default
-            columns = 2,  -- Default to 2 columns
-            itemsPerRow = 6,  -- Default to 6 items per row
+            itemsPerRow = 10,  -- Items before wrapping; also sets the window width
             viewMode = "category",  -- see BagUI.VIEW_MODE_BUTTONS for valid modes
             showItemSets = true,
             height = 500,  -- Default height

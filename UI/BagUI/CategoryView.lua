@@ -18,119 +18,6 @@ local CategoryView = BagUI.CategoryView
 local _headerPool = {}
 local _activeHeaders = {}
 
--- Category surface pool. These are TEXTURES, not frames: textures in the
--- BACKGROUND draw layer always render beneath child frames, so the item
--- buttons can never end up hidden behind a category block.
-local _surfacePool = {}
-local _activeSurfaces = {}
-local _emptyStateText = nil
-
--- Equipment slot order (for subcategory mode)
-local EQUIPMENT_SLOT_ORDER = {
-    "INVTYPE_HEAD",
-    "INVTYPE_NECK",
-    "INVTYPE_SHOULDER",
-    "INVTYPE_CHEST",
-    "INVTYPE_ROBE",
-    "INVTYPE_CLOAK",
-    "INVTYPE_WRIST",
-    "INVTYPE_HAND",
-    "INVTYPE_WAIST",
-    "INVTYPE_LEGS",
-    "INVTYPE_FEET",
-    "INVTYPE_FINGER",
-    "INVTYPE_TRINKET",
-    "INVTYPE_WEAPON",
-    "INVTYPE_SHIELD",
-    "INVTYPE_2HWEAPON",
-    "INVTYPE_WEAPONMAINHAND",
-    "INVTYPE_WEAPONOFFHAND",
-    "INVTYPE_HOLDABLE",
-    "INVTYPE_RANGED",
-    "INVTYPE_RANGEDRIGHT",
-    "INVTYPE_THROWN",
-}
-
--- Build lookup table for slot order
-local SLOT_ORDER_MAP = {}
-for i, slot in ipairs(EQUIPMENT_SLOT_ORDER) do
-    SLOT_ORDER_MAP[slot] = i
-end
-
--- ============================================================================
--- HEADER POOL
--- ============================================================================
-
-local function _AcquireHeader(scrollContent)
-    local header = table.remove(_headerPool)
-    if not header then
-        header = CreateFrame("Frame", nil, scrollContent)
-        header._imCategoryHeader = true
-    else
-        header:SetParent(scrollContent)
-    end
-    header:ClearAllPoints()
-    header:Show()
-    table.insert(_activeHeaders, header)
-    return header
-end
-
-local function _AcquireSurface(scrollContent, texturePath, l, r, t, b)
-    local tex = table.remove(_surfacePool)
-    if not tex then
-        tex = scrollContent:CreateTexture(nil, "BACKGROUND")
-    end
-    tex:SetTexture(texturePath or "Interface\\Buttons\\WHITE8X8")
-    tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
-    tex:ClearAllPoints()
-    tex:Show()
-    table.insert(_activeSurfaces, tex)
-    return tex
-end
-
---[[
-    Draw a rounded filled rectangle into the scroll content.
-
-    Same four-corners-plus-three-fills construction as UI:AttachRoundedSurface,
-    but positioned by offset rather than anchored to a frame, because category
-    blocks are drawn as pooled textures on the shared scroll content - a frame
-    per block risks the item buttons ending up behind it.
-]]
-local function _DrawRoundedBlock(scrollContent, x, y, w, h, color, radius)
-    if w <= radius * 2 or h <= radius * 2 then
-        radius = math.max(math.floor(math.min(w, h) / 2) - 1, 0)
-    end
-
-    local CORNER = UI.ROUNDED_CORNER
-
-    local function Place(tex, px, py, pw, ph)
-        tex:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", px, py)
-        tex:SetSize(pw, ph)
-        tex:SetVertexColor(unpack(color))
-    end
-
-    if radius > 0 then
-        Place(_AcquireSurface(scrollContent, CORNER, 0, 1, 0, 1), x, y, radius, radius)
-        Place(_AcquireSurface(scrollContent, CORNER, 1, 0, 0, 1), x + w - radius, y, radius, radius)
-        Place(_AcquireSurface(scrollContent, CORNER, 0, 1, 1, 0), x, y - h + radius, radius, radius)
-        Place(_AcquireSurface(scrollContent, CORNER, 1, 0, 1, 0), x + w - radius, y - h + radius, radius, radius)
-
-        Place(_AcquireSurface(scrollContent), x + radius, y, w - radius * 2, radius)
-        Place(_AcquireSurface(scrollContent), x + radius, y - h + radius, w - radius * 2, radius)
-    end
-
-    Place(_AcquireSurface(scrollContent), x, y - radius, w, h - radius * 2)
-end
-
-local function _ReleaseAllSurfaces()
-    for _, tex in ipairs(_activeSurfaces) do
-        tex:Hide()
-        tex:ClearAllPoints()
-        table.insert(_surfacePool, tex)
-    end
-    wipe(_activeSurfaces)
-end
-
 local function _ReleaseAllHeaders()
     for _, header in ipairs(_activeHeaders) do
         header:Hide()
@@ -152,9 +39,8 @@ function CategoryView:Refresh(scrollContent)
         BagUI.ItemButton:ReleaseAll()
     end
 
-    -- Release all category headers and surfaces back to their pools
+    -- Release all category headers back to pool
     _ReleaseAllHeaders()
-    _ReleaseAllSurfaces()
 
     -- Hide empty state from previous render
     if _emptyStateText then
@@ -749,28 +635,10 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     -- shadow: the block sits a few percent above the window ground, with a
     -- lighter hairline on its top edge and a darker one beneath, which reads
     -- as light falling from above.
-    local blockHeight = categoryData.height or 0
-    if blockHeight > 0 then
-        local pad = 2  -- must stay under half of SIZING.CATEGORY_GAP
-        local radius = UI.layout.radiusBlock
-        local bx, by = x - pad, y + pad
-        local bw = width + (pad * 2)
-        local bh = blockHeight + (pad * 2)
-
-        _DrawRoundedBlock(scrollContent, bx, by, bw, bh, UI.colors.backgroundLight, radius)
-
-        -- Rims are inset by the radius so they stop where the arc begins,
-        -- instead of poking out past the rounded corners.
-        local rimTop = _AcquireSurface(scrollContent)
-        rimTop:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx + radius, by)
-        rimTop:SetSize(math.max(bw - radius * 2, 1), 1)
-        rimTop:SetVertexColor(unpack(UI.colors.rimTop))
-
-        local rimBottom = _AcquireSurface(scrollContent)
-        rimBottom:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx + radius, by - bh + 1)
-        rimBottom:SetSize(math.max(bw - radius * 2, 1), 1)
-        rimBottom:SetVertexColor(unpack(UI.colors.rimBottom))
-    end
+    -- Sections are not cards. A card promises its contents fill a rectangle,
+    -- and these do not - a one-item category bought a whole box of dead space.
+    -- Grouping is carried by the header and a hairline rule instead, which is
+    -- also what lets every section share one item grid.
 
     -- Acquire category header from pool
     local header = _AcquireHeader(scrollContent)
@@ -783,8 +651,8 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
         header:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", x, y)
     end
 
-    -- Header carries the hierarchy now: near-white and heavier, instead of a
-    -- small amber label competing with every other amber thing in the window.
+    -- Header carries the hierarchy: near-white and heavier, with the count
+    -- beside it and a rule running out to the section's right edge.
     if not header._imHeaderText then
         local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         headerText:SetPoint("LEFT", UI.layout.paddingSmall, 0)
@@ -793,7 +661,6 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     header._imHeaderText:SetText(string.upper(category.name))
     header._imHeaderText:SetTextColor(unpack(UI.colors.text))
 
-    -- Item count reads as a quiet chip beside the name
     if not header._imHeaderCount then
         local countText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         countText:SetPoint("LEFT", header._imHeaderText, "RIGHT", UI.layout.paddingSmall + 2, 0)
@@ -801,4 +668,14 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     end
     header._imHeaderCount:SetText(tostring(#category.items))
     header._imHeaderCount:SetTextColor(unpack(UI.colors.textDisabled))
+
+    if not header._imHeaderRule then
+        local rule = header:CreateTexture(nil, "ARTWORK")
+        rule:SetTexture("Interface\\Buttons\\WHITE8X8")
+        rule:SetHeight(1)
+        rule:SetPoint("LEFT", header._imHeaderCount, "RIGHT", UI.layout.paddingSmall * 2, 0)
+        rule:SetPoint("RIGHT", header, "RIGHT", -UI.layout.paddingSmall, 0)
+        rule:SetVertexColor(unpack(UI.colors.border))
+        header._imHeaderRule = rule
+    end
 end

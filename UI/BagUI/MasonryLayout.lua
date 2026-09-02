@@ -29,7 +29,6 @@ local function _GetSizing()
         ITEM_GAP = 4,
         CATEGORY_PADDING = 6,
         CATEGORY_GAP = 12,
-        COLUMN_GAP = 16,
         BLOCK_PADDING = 8,
     }
 end
@@ -45,11 +44,6 @@ end
 function MasonryLayout:GetCategoryPadding()
     local sizing = _GetSizing()
     return sizing.CATEGORY_PADDING
-end
-
-function MasonryLayout:GetColumnGap()
-    local sizing = _GetSizing()
-    return sizing.COLUMN_GAP
 end
 
 function MasonryLayout:GetItemGap()
@@ -114,14 +108,24 @@ end
     @param itemsPerRow: Max items before wrapping within a category
     @return layout: Array of column data with positioned categories
 ]]
+--[[
+    Sections are full width and stacked, one per row.
+
+    Categories used to be packed two-per-row into multiple columns so small
+    ones did not each cost a whole row. That packing is what stopped items
+    lining up: every category started its grid at its own x, so icons in one
+    section never aligned with the section above it. A single full-width column
+    puts every item on one shared grid, which is the alignment that reads as
+    tidy. Width is set by itemsPerRow instead of a column count.
+]]
 function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRow)
-    columns = columns or 1
+    columns = 1
     itemsPerRow = itemsPerRow or 8
 
     -- Get dynamic sizing from single source of truth
     local itemSize = self:GetItemSize()
     local categoryPadding = self:GetCategoryPadding()
-    local columnGap = self:GetColumnGap()
+    local columnGap = 0  -- single column
     local rowPadding = self:GetRowPadding()
 
     -- Debug: Verify we got valid values
@@ -157,35 +161,10 @@ function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRo
         columnData[i] = {}
     end
     
-    -- Group categories that can share rows (max 2 per row, total items <= itemsPerRow)
+    -- One category per row, full width. No packing: see the note on Calculate.
     local groups = {}
-    local currentGroup = {}
-    local currentGroupItemCount = 0
-    
     for _, category in ipairs(categories) do
-        local itemCount = #category.items
-        
-        -- Can we add this category to current group?
-        local canAddToGroup = #currentGroup < 2 and 
-                              (currentGroupItemCount + itemCount) <= itemsPerRow
-        
-        if canAddToGroup and #currentGroup > 0 then
-            -- Add to current group
-            table.insert(currentGroup, category)
-            currentGroupItemCount = currentGroupItemCount + itemCount
-        else
-            -- Start new group
-            if #currentGroup > 0 then
-                table.insert(groups, currentGroup)
-            end
-            currentGroup = {category}
-            currentGroupItemCount = itemCount
-        end
-    end
-    
-    -- Don't forget the last group
-    if #currentGroup > 0 then
-        table.insert(groups, currentGroup)
+        table.insert(groups, { category })
     end
     
     IM:Debug(string.format("[MasonryLayout] Created %d groups from %d categories", #groups, #categories))

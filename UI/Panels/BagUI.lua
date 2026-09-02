@@ -134,28 +134,10 @@ function BagUIPanel:Create(parent)
         end
     end
 
-    -- Number of columns
-    local columnsY = layoutCard:AddContent(50)
-    local columnsSlider = UI:CreateSlider(layoutCard, "Number of columns", 1, 4, 1, IM.db.global.bagUI and IM.db.global.bagUI.columns or 2)
-    columnsSlider:SetPoint("TOPLEFT", layoutCard, "TOPLEFT", layoutCard._leftPadding, columnsY)
-    columnsSlider.OnValueChanged = function(self, value)
-        if not IM.db.global.bagUI then
-            IM.UI.BagUI:InitializeSettings()
-        end
-        IM.db.global.bagUI.columns = value
-
-        -- Debounce expensive layout work while dragging
-        ScheduleLayoutRefresh()
-    end
-    if columnsSlider.slider then
-        columnsSlider.slider:HookScript("OnMouseUp", function()
-            ApplyLayoutNow()
-        end)
-    end
-
-    -- Items per row
+    -- Items per row. Sections are full width, so this is what sets the window
+    -- width as well as where a row wraps - there is no column count any more.
     local itemsY = layoutCard:AddContent(50)
-    local itemsSlider = UI:CreateSlider(layoutCard, "Items per row", 4, 12, 1, IM.db.global.bagUI and IM.db.global.bagUI.itemsPerRow or 6)
+    local itemsSlider = UI:CreateSlider(layoutCard, "Items per row", 6, 18, 1, IM.db.global.bagUI and IM.db.global.bagUI.itemsPerRow or 10)
     itemsSlider:SetPoint("TOPLEFT", layoutCard, "TOPLEFT", layoutCard._leftPadding, itemsY)
     itemsSlider.OnValueChanged = function(self, value)
         if not IM.db.global.bagUI then
