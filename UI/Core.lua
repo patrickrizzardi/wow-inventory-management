@@ -169,6 +169,10 @@ UI.fonts = {
 -- a rounded rectangle has to be built from pieces: four corner tiles carrying
 -- the arc, plus three plain fills covering everything between them. The corner
 -- art is a single quarter-round tile reused four times via texcoord flips.
+-- Icon art ships with ~7% of dead bevelled border on each edge; these
+-- texcoords crop it so the artwork fills its slot.
+UI.ICON_CROP = { 0.07, 0.93, 0.07, 0.93 }
+
 UI.ROUNDED_CORNER = "Interface\\AddOns\\InventoryManager\\Textures\\rounded-corner.tga"
 
 --[[

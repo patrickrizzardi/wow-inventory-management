@@ -249,6 +249,10 @@ function ItemButton:SetItem(button, bagID, slotID)
         local texture = itemInfo.iconFileID
         if button.icon then
             button.icon:SetTexture(texture)
+            -- Blizzard bakes a dead bevelled edge into every icon file. Cropping
+            -- it lets the art fill the slot and sit flush inside the quality
+            -- border, instead of floating in a frame it does not need.
+            button.icon:SetTexCoord(unpack(UI.ICON_CROP))
             button.icon:Show()
         end
         
