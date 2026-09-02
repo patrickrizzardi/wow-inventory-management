@@ -183,6 +183,99 @@ UI.ROUNDED_CORNER = "Interface\\AddOns\\InventoryManager\\Textures\\rounded-corn
                   by stacking a smaller fill on top of a larger one)
     @return surface: table with :SetColor(r,g,b,a), :Show(), :Hide()
 ]]
+--[[
+    Build a rounded ring (border outline) over a frame.
+
+    Four corner arcs plus four straight runs, with nothing in the middle - a
+    ring, not a filled surface, so whatever sits underneath shows through. Used
+    for item quality borders and for every overlay state, so those cannot drift
+    apart.
+
+    @param opts.thickness: stroke width
+    @param opts.offset: inset from the frame edge
+    @param opts.layer / opts.sublayer: draw layer for the pieces
+    @param opts.color: initial colour
+    @return set: table with :SetColor(r,g,b,a), :Show(), :Hide()
+]]
+UI.CORNER_RING = "Interface\\AddOns\\InventoryManager\\Textures\\rounded-corner-ring.tga"
+
+-- The arc tile's stroke is half its radius, so drawing it at twice the stroke
+-- width makes the arc meet the straight runs exactly, at any thickness.
+UI.CORNER_RING_RATIO = 2
+
+function UI:AttachRing(frame, opts)
+    opts = opts or {}
+    local thickness = opts.thickness or 1
+    local offset = opts.offset or 0
+    local layer = opts.layer or "OVERLAY"
+    local sublayer = opts.sublayer
+    local color = opts.color or self.colors.border
+    local radius = thickness * self.CORNER_RING_RATIO
+
+    local set = { pieces = {} }
+
+    local function Strip()
+        local tex = frame:CreateTexture(nil, layer, nil, sublayer)
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+        table.insert(set.pieces, tex)
+        return tex
+    end
+
+    local function Corner(l, r, t, b)
+        local tex = frame:CreateTexture(nil, layer, nil, sublayer)
+        tex:SetTexture(UI.CORNER_RING)
+        tex:SetTexCoord(l, r, t, b)
+        tex:SetSize(radius, radius)
+        table.insert(set.pieces, tex)
+        return tex
+    end
+
+    set.TopLeft = Corner(0, 1, 0, 1)
+    set.TopLeft:SetPoint("TOPLEFT", frame, "TOPLEFT", offset, -offset)
+    set.TopRight = Corner(1, 0, 0, 1)
+    set.TopRight:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -offset, -offset)
+    set.BottomLeft = Corner(0, 1, 1, 0)
+    set.BottomLeft:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", offset, offset)
+    set.BottomRight = Corner(1, 0, 1, 0)
+    set.BottomRight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -offset, offset)
+
+    set.Top = Strip()
+    set.Top:SetHeight(thickness)
+    set.Top:SetPoint("TOPLEFT", set.TopLeft, "TOPRIGHT")
+    set.Top:SetPoint("TOPRIGHT", set.TopRight, "TOPLEFT")
+
+    set.Bottom = Strip()
+    set.Bottom:SetHeight(thickness)
+    set.Bottom:SetPoint("BOTTOMLEFT", set.BottomLeft, "BOTTOMRIGHT")
+    set.Bottom:SetPoint("BOTTOMRIGHT", set.BottomRight, "BOTTOMLEFT")
+
+    set.Left = Strip()
+    set.Left:SetWidth(thickness)
+    set.Left:SetPoint("TOPLEFT", set.TopLeft, "BOTTOMLEFT")
+    set.Left:SetPoint("BOTTOMLEFT", set.BottomLeft, "TOPLEFT")
+
+    set.Right = Strip()
+    set.Right:SetWidth(thickness)
+    set.Right:SetPoint("TOPRIGHT", set.TopRight, "BOTTOMRIGHT")
+    set.Right:SetPoint("BOTTOMRIGHT", set.BottomRight, "TOPRIGHT")
+
+    function set:SetColor(r, g, b, a)
+        if not r then return end
+        for _, tex in ipairs(self.pieces) do tex:SetVertexColor(r, g, b, a or 1) end
+    end
+
+    function set:Show()
+        for _, tex in ipairs(self.pieces) do tex:Show() end
+    end
+
+    function set:Hide()
+        for _, tex in ipairs(self.pieces) do tex:Hide() end
+    end
+
+    set:SetColor(unpack(color))
+    return set
+end
+
 function UI:AttachRoundedSurface(frame, layer, radius, inset)
     layer = layer or "BACKGROUND"
     radius = radius or self.layout.radius

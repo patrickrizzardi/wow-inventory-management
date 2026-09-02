@@ -33,11 +33,6 @@ IM.UI.OverlayFactory = OverlayFactory
 local BORDER_THICKNESS = 2
 local GLOW_THICKNESS = 4
 
--- Corner arc tile: a quarter ring whose stroke is 50% of its radius, so drawing
--- it at (thickness * 2) yields a stroke exactly `thickness` wide and the corner
--- meets the straight edges cleanly at any thickness.
-local CORNER_RING = "Interface\\AddOns\\InventoryManager\\Textures\\rounded-corner-ring.tga"
-local CORNER_RADIUS_RATIO = 2
 
 -- Icon textures
 local LOCK_ICON = "Interface\\PetBattles\\PetBattle-LockIcon"
@@ -87,72 +82,17 @@ local _overlayCache = {}
     @returns table - Table with Top, Bottom, Left, Right texture references
 ]]
 local function _createBorderTextures(overlay, prefix, color, layer, thickness, offset)
-    offset = offset or 0
-    local radius = thickness * CORNER_RADIUS_RATIO
-    local textures = { pieces = {} }
-
-    local function Strip()
-        local tex = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
-        tex:SetColorTexture(unpack(color))
-        tex:Hide()
-        table.insert(textures.pieces, tex)
-        return tex
-    end
-
-    -- The tile is authored as a top-left corner; the others are texcoord flips
-    local function Corner(l, r, t, b)
-        local tex = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
-        tex:SetTexture(CORNER_RING)
-        tex:SetTexCoord(l, r, t, b)
-        tex:SetVertexColor(unpack(color))
-        tex:SetSize(radius, radius)
-        tex:Hide()
-        table.insert(textures.pieces, tex)
-        return tex
-    end
-
-    textures.TopLeft = Corner(0, 1, 0, 1)
-    textures.TopLeft:SetPoint("TOPLEFT", offset, -offset)
-    textures.TopRight = Corner(1, 0, 0, 1)
-    textures.TopRight:SetPoint("TOPRIGHT", -offset, -offset)
-    textures.BottomLeft = Corner(0, 1, 1, 0)
-    textures.BottomLeft:SetPoint("BOTTOMLEFT", offset, offset)
-    textures.BottomRight = Corner(1, 0, 1, 0)
-    textures.BottomRight:SetPoint("BOTTOMRIGHT", -offset, offset)
-
-    -- Straight runs stop where the arcs begin, or they would cut the corners off
-    textures.Top = Strip()
-    textures.Top:SetHeight(thickness)
-    textures.Top:SetPoint("TOPLEFT", textures.TopLeft, "TOPRIGHT")
-    textures.Top:SetPoint("TOPRIGHT", textures.TopRight, "TOPLEFT")
-
-    textures.Bottom = Strip()
-    textures.Bottom:SetHeight(thickness)
-    textures.Bottom:SetPoint("BOTTOMLEFT", textures.BottomLeft, "BOTTOMRIGHT")
-    textures.Bottom:SetPoint("BOTTOMRIGHT", textures.BottomRight, "BOTTOMLEFT")
-
-    textures.Left = Strip()
-    textures.Left:SetWidth(thickness)
-    textures.Left:SetPoint("TOPLEFT", textures.TopLeft, "BOTTOMLEFT")
-    textures.Left:SetPoint("BOTTOMLEFT", textures.BottomLeft, "TOPLEFT")
-
-    textures.Right = Strip()
-    textures.Right:SetWidth(thickness)
-    textures.Right:SetPoint("TOPRIGHT", textures.TopRight, "BOTTOMRIGHT")
-    textures.Right:SetPoint("BOTTOMRIGHT", textures.BottomRight, "TOPRIGHT")
-
-    -- Callers toggle the set, never the individual sides. Adding the corners
-    -- would otherwise have meant finding every one of the eight places that
-    -- showed and hid four named textures by hand.
-    function textures:Show()
-        for _, tex in ipairs(self.pieces) do tex:Show() end
-    end
-
-    function textures:Hide()
-        for _, tex in ipairs(self.pieces) do tex:Hide() end
-    end
-
-    return textures
+    -- Thin wrapper: the ring itself lives in UI:AttachRing so the item quality
+    -- border and these state overlays are drawn by the same code.
+    local set = IM.UI:AttachRing(overlay, {
+        thickness = thickness,
+        offset = offset or 0,
+        layer = "OVERLAY",
+        sublayer = layer,
+        color = color,
+    })
+    set:Hide()
+    return set
 end
 
 --[[

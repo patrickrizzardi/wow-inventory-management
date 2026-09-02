@@ -24,6 +24,9 @@ local BagUI = UI.BagUI
 BagUI.ItemButton = {}
 local ItemButton = BagUI.ItemButton
 
+-- Stroke width of the quality ring we draw in place of Blizzard's IconBorder
+local QUALITY_RING_THICKNESS = 2
+
 -- Button pool
 local _buttonPool = {}
 local _activeButtons = {}
@@ -101,6 +104,40 @@ function ItemButton:CreateButton(index)
         button.BattlepayItemTexture:Hide()
         button.BattlepayItemTexture:SetAlpha(0)
     end
+
+    -- Strip Blizzard's slot chrome. Three layers were stacking on every item:
+    -- the template's NormalTexture bevel OUTSIDE the quality colour, the
+    -- WhiteIconFrame quality border itself, and the dark inner line baked into
+    -- that frame - which read as a black gap between the art and the colour.
+    -- Its corners also shredded whenever iconSize made button:SetScale a
+    -- fraction. We draw the quality ring ourselves instead.
+    if button.SetNormalTexture then
+        button:SetNormalTexture(nil)
+    end
+    if button.GetNormalTexture and button:GetNormalTexture() then
+        button:GetNormalTexture():SetAlpha(0)
+    end
+    if button.IconBorder then
+        button.IconBorder:SetTexture(nil)
+        button.IconBorder:Hide()
+    end
+    if button.IconOverlay then
+        button.IconOverlay:Hide()
+    end
+
+    -- Art fills the slot right up to the ring, leaving no dead gap
+    if button.icon then
+        button.icon:ClearAllPoints()
+        button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", QUALITY_RING_THICKNESS, -QUALITY_RING_THICKNESS)
+        button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -QUALITY_RING_THICKNESS, QUALITY_RING_THICKNESS)
+    end
+
+    button._imQualityRing = UI:AttachRing(button, {
+        thickness = QUALITY_RING_THICKNESS,
+        layer = "OVERLAY",
+        sublayer = 0,
+    })
+    button._imQualityRing:Hide()
     
     -- Store reference to our bag/slot (for overlay system)
     button._imBagID = nil
@@ -322,19 +359,17 @@ function ItemButton:SetItem(button, bagID, slotID)
         
         -- Set quality border
         local quality = itemInfo.quality
+        local qualityColor = nil
         if quality and quality > 1 then  -- Show border for uncommon+
-            if button.IconBorder then
-                local color = _QUALITY_OVERRIDE[quality] or ITEM_QUALITY_COLORS[quality]
-                if color then
-                    button.IconBorder:SetVertexColor(color.r, color.g, color.b)
-                    button.IconBorder:Show()
-                else
-                    button.IconBorder:Hide()
-                end
-            end
-        else
-            if button.IconBorder then
-                button.IconBorder:Hide()
+            qualityColor = _QUALITY_OVERRIDE[quality] or ITEM_QUALITY_COLORS[quality]
+        end
+
+        if button._imQualityRing then
+            if qualityColor then
+                button._imQualityRing:SetColor(qualityColor.r, qualityColor.g, qualityColor.b)
+                button._imQualityRing:Show()
+            else
+                button._imQualityRing:Hide()
             end
         end
 
