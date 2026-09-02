@@ -18,10 +18,10 @@ UI.colors = {
     -- through the ground destroys the ramp. Each step is a visible increment;
     -- the ground is NOT the darkest value, or the blocks have nothing to rise
     -- above and the whole window reads black.
-    background = { 0.063, 0.063, 0.078, 1 },      -- #101014  window ground
-    backgroundLight = { 0.102, 0.102, 0.129, 1 }, -- #1A1A21  raised block
-    backgroundDark = { 0.031, 0.031, 0.039, 1 },  -- #08080A  inset well (search, pills)
-    surfaceRaised = { 0.141, 0.141, 0.176, 1 },   -- #24242D  hovered item
+    background = { 0.086, 0.086, 0.110, 1 },      -- #16161C  window ground
+    backgroundLight = { 0.125, 0.125, 0.157, 1 }, -- #202028  raised block
+    backgroundDark = { 0.047, 0.047, 0.063, 1 },  -- #0C0C10  inset well (search, pills)
+    surfaceRaised = { 0.165, 0.165, 0.204, 1 },   -- #2A2A34  hovered item
     border = { 0.137, 0.137, 0.188, 1 },          -- #232330  quieter, used rarely
     borderLight = { 0.20, 0.20, 0.25, 1 },
     borderDark = { 0.09, 0.09, 0.12, 1 },
@@ -886,13 +886,11 @@ function UI:CreateScrollFrame(parent, width, height, fill)
     else
         container:SetSize(w, h)
     end
-    container:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
-    container:SetBackdropColor(0.05, 0.05, 0.05, 0.3)
-    container:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
+    -- No fill and no outline. This container is a layout box, not a surface:
+    -- a translucent square drawn across the whole scroll area darkened the
+    -- panel ground beneath every card and left a stray rectangle inset from
+    -- the window edge. Depth here comes from the cards rising, not from the
+    -- area behind them sinking.
 
     -- The actual scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, container)
