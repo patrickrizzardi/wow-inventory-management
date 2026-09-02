@@ -88,6 +88,53 @@ local _debugDumped = false
 -- BUTTON CREATION (SECURE)
 -- ============================================================================
 
+--[[
+    Strip Blizzard's slot chrome so our own quality ring is the only border.
+
+    Three layers stacked on every item: the template's NormalTexture bevel
+    OUTSIDE the quality colour, the WhiteIconFrame quality border itself, and a
+    dark line baked into that frame which read as a black gap between the art
+    and the colour. Its corners also shredded whenever the icon-size setting
+    made button:SetScale a fraction.
+
+    Runs under pcall deliberately. These are another addon's template
+    internals, renamed and reshaped between patches; a failure here should cost
+    a slightly wrong border, never the whole button pool. Calling
+    SetNormalTexture(nil) on an ItemButton did exactly that - it errored during
+    pool creation, so no buttons existed and every category rendered empty.
+]]
+local function _StripBlizzardChrome(button)
+    local ok, err = pcall(function()
+        local normal = button.GetNormalTexture and button:GetNormalTexture()
+        if normal then
+            normal:SetTexture(nil)
+            normal:SetAlpha(0)
+        end
+
+        if button.IconBorder then
+            button.IconBorder:SetTexture(nil)
+            button.IconBorder:Hide()
+        end
+
+        if button.IconOverlay then
+            button.IconOverlay:Hide()
+        end
+
+        -- Art fills the slot right up to the ring, leaving no dead gap
+        if button.icon then
+            button.icon:ClearAllPoints()
+            button.icon:SetPoint("TOPLEFT", button, "TOPLEFT",
+                QUALITY_RING_THICKNESS, -QUALITY_RING_THICKNESS)
+            button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT",
+                -QUALITY_RING_THICKNESS, QUALITY_RING_THICKNESS)
+        end
+    end)
+
+    if not ok then
+        IM:Debug("[BagUI.ItemButton] Could not strip Blizzard chrome: " .. tostring(err))
+    end
+end
+
 function ItemButton:CreateButton(index)
     -- CRITICAL: Use ContainerFrameItemButtonTemplate for secure handling
     -- This template provides built-in support for right-click, equip, use, etc.
@@ -105,32 +152,7 @@ function ItemButton:CreateButton(index)
         button.BattlepayItemTexture:SetAlpha(0)
     end
 
-    -- Strip Blizzard's slot chrome. Three layers were stacking on every item:
-    -- the template's NormalTexture bevel OUTSIDE the quality colour, the
-    -- WhiteIconFrame quality border itself, and the dark inner line baked into
-    -- that frame - which read as a black gap between the art and the colour.
-    -- Its corners also shredded whenever iconSize made button:SetScale a
-    -- fraction. We draw the quality ring ourselves instead.
-    if button.SetNormalTexture then
-        button:SetNormalTexture(nil)
-    end
-    if button.GetNormalTexture and button:GetNormalTexture() then
-        button:GetNormalTexture():SetAlpha(0)
-    end
-    if button.IconBorder then
-        button.IconBorder:SetTexture(nil)
-        button.IconBorder:Hide()
-    end
-    if button.IconOverlay then
-        button.IconOverlay:Hide()
-    end
-
-    -- Art fills the slot right up to the ring, leaving no dead gap
-    if button.icon then
-        button.icon:ClearAllPoints()
-        button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", QUALITY_RING_THICKNESS, -QUALITY_RING_THICKNESS)
-        button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -QUALITY_RING_THICKNESS, QUALITY_RING_THICKNESS)
-    end
+    _StripBlizzardChrome(button)
 
     button._imQualityRing = UI:AttachRing(button, {
         thickness = QUALITY_RING_THICKNESS,
