@@ -101,7 +101,9 @@ function General:Create(parent)
 
         local scrollFrame = CreateFrame("ScrollFrame", nil, popup, "UIPanelScrollFrameTemplate")
         scrollFrame:SetPoint("TOPLEFT", UI.layout.cardSpacing, -UI.layout.cardSpacing)
-        scrollFrame:SetPoint("BOTTOMRIGHT", -UI.layout.bottomBarHeight, UI.layout.rowHeight + UI.layout.cardSpacing)
+        -- Right inset is scrollbar clearance; it was reading bottomBarHeight,
+        -- which only matched by coincidence and would move with it.
+        scrollFrame:SetPoint("BOTTOMRIGHT", -UI.layout.scrollbarInset, UI.layout.rowHeight + UI.layout.cardSpacing)
 
         local editBox = CreateFrame("EditBox", nil, scrollFrame)
         editBox:SetMultiLine(true)

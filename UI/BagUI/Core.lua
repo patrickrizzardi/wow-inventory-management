@@ -547,11 +547,11 @@ function BagUI:Create()
     end
 
     local bagMeter = CreateMeter("Bags")
-    bagMeter:SetPoint("RIGHT", footer, "RIGHT", -UI.layout.padding, 6)
+    bagMeter:SetPoint("RIGHT", footer, "RIGHT", -UI.layout.padding, 7)
     footer.bagMeter = bagMeter
 
     local reagentMeter = CreateMeter("Reagent")
-    reagentMeter:SetPoint("RIGHT", footer, "RIGHT", -UI.layout.padding, -6)
+    reagentMeter:SetPoint("RIGHT", footer, "RIGHT", -UI.layout.padding, -7)
     footer.reagentMeter = reagentMeter
 
     -- Resize grip (bottom-right corner) - HIDDEN (resizing via edges only)

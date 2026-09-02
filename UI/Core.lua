@@ -95,7 +95,8 @@ UI.layout = {
     
     -- Component heights
     titleBarHeight = 24,      -- window title bar
-    bottomBarHeight = 30,     -- window bottom bar
+    bottomBarHeight = 40,     -- window bottom bar
+    scrollbarInset = 30,      -- right clearance for a scrollbar
     buttonHeight = 26,        -- standard button
     buttonHeightSmall = 22,   -- compact button
     tabHeight = 28,           -- tab button height
