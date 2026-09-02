@@ -33,6 +33,12 @@ IM.UI.OverlayFactory = OverlayFactory
 local BORDER_THICKNESS = 2
 local GLOW_THICKNESS = 4
 
+-- Corner arc tile: a quarter ring whose stroke is 50% of its radius, so drawing
+-- it at (thickness * 2) yields a stroke exactly `thickness` wide and the corner
+-- meets the straight edges cleanly at any thickness.
+local CORNER_RING = "Interface\\AddOns\\InventoryManager\\Textures\\rounded-corner-ring.tga"
+local CORNER_RADIUS_RATIO = 2
+
 -- Icon textures
 local LOCK_ICON = "Interface\\PetBattles\\PetBattle-LockIcon"
 local SELL_ICON = "Interface\\MoneyFrame\\UI-GoldIcon"
@@ -82,39 +88,69 @@ local _overlayCache = {}
 ]]
 local function _createBorderTextures(overlay, prefix, color, layer, thickness, offset)
     offset = offset or 0
-    local textures = {}
+    local radius = thickness * CORNER_RADIUS_RATIO
+    local textures = { pieces = {} }
 
-    -- Top border
-    textures.Top = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
+    local function Strip()
+        local tex = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
+        tex:SetColorTexture(unpack(color))
+        tex:Hide()
+        table.insert(textures.pieces, tex)
+        return tex
+    end
+
+    -- The tile is authored as a top-left corner; the others are texcoord flips
+    local function Corner(l, r, t, b)
+        local tex = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
+        tex:SetTexture(CORNER_RING)
+        tex:SetTexCoord(l, r, t, b)
+        tex:SetVertexColor(unpack(color))
+        tex:SetSize(radius, radius)
+        tex:Hide()
+        table.insert(textures.pieces, tex)
+        return tex
+    end
+
+    textures.TopLeft = Corner(0, 1, 0, 1)
+    textures.TopLeft:SetPoint("TOPLEFT", offset, -offset)
+    textures.TopRight = Corner(1, 0, 0, 1)
+    textures.TopRight:SetPoint("TOPRIGHT", -offset, -offset)
+    textures.BottomLeft = Corner(0, 1, 1, 0)
+    textures.BottomLeft:SetPoint("BOTTOMLEFT", offset, offset)
+    textures.BottomRight = Corner(1, 0, 1, 0)
+    textures.BottomRight:SetPoint("BOTTOMRIGHT", -offset, offset)
+
+    -- Straight runs stop where the arcs begin, or they would cut the corners off
+    textures.Top = Strip()
     textures.Top:SetHeight(thickness)
-    textures.Top:SetPoint("TOPLEFT", offset, -offset)
-    textures.Top:SetPoint("TOPRIGHT", -offset, -offset)
-    textures.Top:SetColorTexture(unpack(color))
-    textures.Top:Hide()
+    textures.Top:SetPoint("TOPLEFT", textures.TopLeft, "TOPRIGHT")
+    textures.Top:SetPoint("TOPRIGHT", textures.TopRight, "TOPLEFT")
 
-    -- Bottom border
-    textures.Bottom = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
+    textures.Bottom = Strip()
     textures.Bottom:SetHeight(thickness)
-    textures.Bottom:SetPoint("BOTTOMLEFT", offset, offset)
-    textures.Bottom:SetPoint("BOTTOMRIGHT", -offset, offset)
-    textures.Bottom:SetColorTexture(unpack(color))
-    textures.Bottom:Hide()
+    textures.Bottom:SetPoint("BOTTOMLEFT", textures.BottomLeft, "BOTTOMRIGHT")
+    textures.Bottom:SetPoint("BOTTOMRIGHT", textures.BottomRight, "BOTTOMLEFT")
 
-    -- Left border
-    textures.Left = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
+    textures.Left = Strip()
     textures.Left:SetWidth(thickness)
-    textures.Left:SetPoint("TOPLEFT", offset, -offset)
-    textures.Left:SetPoint("BOTTOMLEFT", offset, offset)
-    textures.Left:SetColorTexture(unpack(color))
-    textures.Left:Hide()
+    textures.Left:SetPoint("TOPLEFT", textures.TopLeft, "BOTTOMLEFT")
+    textures.Left:SetPoint("BOTTOMLEFT", textures.BottomLeft, "TOPLEFT")
 
-    -- Right border
-    textures.Right = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
+    textures.Right = Strip()
     textures.Right:SetWidth(thickness)
-    textures.Right:SetPoint("TOPRIGHT", -offset, -offset)
-    textures.Right:SetPoint("BOTTOMRIGHT", -offset, offset)
-    textures.Right:SetColorTexture(unpack(color))
-    textures.Right:Hide()
+    textures.Right:SetPoint("TOPRIGHT", textures.TopRight, "BOTTOMRIGHT")
+    textures.Right:SetPoint("BOTTOMRIGHT", textures.BottomRight, "TOPRIGHT")
+
+    -- Callers toggle the set, never the individual sides. Adding the corners
+    -- would otherwise have meant finding every one of the eight places that
+    -- showed and hid four named textures by hand.
+    function textures:Show()
+        for _, tex in ipairs(self.pieces) do tex:Show() end
+    end
+
+    function textures:Hide()
+        for _, tex in ipairs(self.pieces) do tex:Hide() end
+    end
 
     return textures
 end
@@ -298,14 +334,8 @@ end
 function OverlayFactory:ShowLock(overlay, show)
     if show then
         overlay.lockShade:Show()
-        overlay.lockGlow.Top:Show()
-        overlay.lockGlow.Bottom:Show()
-        overlay.lockGlow.Left:Show()
-        overlay.lockGlow.Right:Show()
-        overlay.lockBorder.Top:Show()
-        overlay.lockBorder.Bottom:Show()
-        overlay.lockBorder.Left:Show()
-        overlay.lockBorder.Right:Show()
+        overlay.lockGlow:Show()
+        overlay.lockBorder:Show()
         overlay.lockIconSet.bg:Show()
         overlay.lockIconSet.icon:Show()
         if overlay.lockAnimGroup and not overlay.lockAnimGroup:IsPlaying() then
@@ -313,14 +343,8 @@ function OverlayFactory:ShowLock(overlay, show)
         end
     else
         overlay.lockShade:Hide()
-        overlay.lockGlow.Top:Hide()
-        overlay.lockGlow.Bottom:Hide()
-        overlay.lockGlow.Left:Hide()
-        overlay.lockGlow.Right:Hide()
-        overlay.lockBorder.Top:Hide()
-        overlay.lockBorder.Bottom:Hide()
-        overlay.lockBorder.Left:Hide()
-        overlay.lockBorder.Right:Hide()
+        overlay.lockGlow:Hide()
+        overlay.lockBorder:Hide()
         overlay.lockIconSet.bg:Hide()
         overlay.lockIconSet.icon:Hide()
         if overlay.lockAnimGroup then
@@ -338,14 +362,8 @@ end
 function OverlayFactory:ShowSell(overlay, show)
     if show then
         overlay.sellShade:Show()
-        overlay.sellGlow.Top:Show()
-        overlay.sellGlow.Bottom:Show()
-        overlay.sellGlow.Left:Show()
-        overlay.sellGlow.Right:Show()
-        overlay.sellBorder.Top:Show()
-        overlay.sellBorder.Bottom:Show()
-        overlay.sellBorder.Left:Show()
-        overlay.sellBorder.Right:Show()
+        overlay.sellGlow:Show()
+        overlay.sellBorder:Show()
         overlay.sellIconSet.bg:Show()
         overlay.sellIconSet.icon:Show()
         if overlay.sellAnimGroup and not overlay.sellAnimGroup:IsPlaying() then
@@ -353,14 +371,8 @@ function OverlayFactory:ShowSell(overlay, show)
         end
     else
         overlay.sellShade:Hide()
-        overlay.sellGlow.Top:Hide()
-        overlay.sellGlow.Bottom:Hide()
-        overlay.sellGlow.Left:Hide()
-        overlay.sellGlow.Right:Hide()
-        overlay.sellBorder.Top:Hide()
-        overlay.sellBorder.Bottom:Hide()
-        overlay.sellBorder.Left:Hide()
-        overlay.sellBorder.Right:Hide()
+        overlay.sellGlow:Hide()
+        overlay.sellBorder:Hide()
         overlay.sellIconSet.bg:Hide()
         overlay.sellIconSet.icon:Hide()
         if overlay.sellAnimGroup then
@@ -378,18 +390,12 @@ end
 function OverlayFactory:ShowUnsellable(overlay, show)
     if show then
         overlay.unsellableShade:Show()
-        overlay.unsellableBorder.Top:Show()
-        overlay.unsellableBorder.Bottom:Show()
-        overlay.unsellableBorder.Left:Show()
-        overlay.unsellableBorder.Right:Show()
+        overlay.unsellableBorder:Show()
         overlay.unsellableIconSet.bg:Show()
         overlay.unsellableIconSet.icon:Show()
     else
         overlay.unsellableShade:Hide()
-        overlay.unsellableBorder.Top:Hide()
-        overlay.unsellableBorder.Bottom:Hide()
-        overlay.unsellableBorder.Left:Hide()
-        overlay.unsellableBorder.Right:Hide()
+        overlay.unsellableBorder:Hide()
         overlay.unsellableIconSet.bg:Hide()
         overlay.unsellableIconSet.icon:Hide()
     end
@@ -404,14 +410,8 @@ end
 function OverlayFactory:ShowMail(overlay, show)
     if show then
         overlay.mailShade:Show()
-        overlay.mailGlow.Top:Show()
-        overlay.mailGlow.Bottom:Show()
-        overlay.mailGlow.Left:Show()
-        overlay.mailGlow.Right:Show()
-        overlay.mailBorder.Top:Show()
-        overlay.mailBorder.Bottom:Show()
-        overlay.mailBorder.Left:Show()
-        overlay.mailBorder.Right:Show()
+        overlay.mailGlow:Show()
+        overlay.mailBorder:Show()
         overlay.mailIconSet.bg:Show()
         overlay.mailIconSet.icon:Show()
         if overlay.mailAnimGroup and not overlay.mailAnimGroup:IsPlaying() then
@@ -419,14 +419,8 @@ function OverlayFactory:ShowMail(overlay, show)
         end
     else
         overlay.mailShade:Hide()
-        overlay.mailGlow.Top:Hide()
-        overlay.mailGlow.Bottom:Hide()
-        overlay.mailGlow.Left:Hide()
-        overlay.mailGlow.Right:Hide()
-        overlay.mailBorder.Top:Hide()
-        overlay.mailBorder.Bottom:Hide()
-        overlay.mailBorder.Left:Hide()
-        overlay.mailBorder.Right:Hide()
+        overlay.mailGlow:Hide()
+        overlay.mailBorder:Hide()
         overlay.mailIconSet.bg:Hide()
         overlay.mailIconSet.icon:Hide()
         if overlay.mailAnimGroup then
