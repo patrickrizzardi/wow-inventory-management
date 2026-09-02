@@ -197,6 +197,12 @@ function BagUI:CalculateRequiredWidth()
     local frameWidth = UI.layout.cardSpacing + SIZING.RAIL_WIDTH + contentAreaWidth
         + (SIZING.SCROLL_CONTAINER_MARGIN * 2) + scrollbarArea + 4
 
+    -- Round up and add a pixel of slack. The grid recomputes its column count
+    -- from the MEASURED width of the scroll content, which arrives as a float
+    -- once UI scale is applied; asking for the exact minimum leaves the
+    -- recomputation one sub-pixel away from losing a whole column.
+    frameWidth = math.ceil(frameWidth) + 1
+
     frameWidth = math.max(SIZING.MIN_FRAME_WIDTH, math.min(SIZING.MAX_FRAME_WIDTH, frameWidth))
 
     IM:Debug(string.format("[BagUI] CalculateRequiredWidth: %d (icon=%d, items/row=%d, itemSize=%d, rowWidth=%d, content=%d)",

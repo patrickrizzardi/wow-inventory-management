@@ -72,13 +72,22 @@ function MasonryLayout:GetItemAreaWidth(blockWidth)
     return blockWidth - (self:GetBlockPadding() * 2)
 end
 
+-- Sub-pixel tolerance. The window width is DERIVED from itemsPerRow, so the
+-- available area lands on an exact multiple of the item pitch - precisely where
+-- a bare floor() is most fragile. Widths come back from GetWidth() as floats
+-- (UI scale), so a measured 433.6 instead of 434 floors one pixel short and
+-- drops an entire column. That is the "set 10, get 9, set 11, get 11" case: at
+-- 11 the division had slack to absorb the error.
+local WIDTH_TOLERANCE = 1
+
 function MasonryLayout:GetItemsPerRow(blockWidth, maxPerRow)
     local itemSize = self:GetItemSize()
     local gap = self:GetItemGap()
 
     -- N items occupy N*size + (N-1)*gap, so solve for N including the gaps.
     -- The old floor(width / itemSize) ignored them and over-counted.
-    local fits = math.floor((self:GetItemAreaWidth(blockWidth) + gap) / (itemSize + gap))
+    local available = self:GetItemAreaWidth(blockWidth) + gap + WIDTH_TOLERANCE
+    local fits = math.floor(available / (itemSize + gap))
 
     return math.max(1, math.min(maxPerRow or 8, fits))
 end
