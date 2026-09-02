@@ -14,12 +14,14 @@ UI.colors = {
     -- shadow (a black shadow on a black ground is invisible). Each step up the
     -- stack is a lighter surface; the old palette spanned only 7% so every
     -- surface read as one flat plane.
-    background = { 0.039, 0.039, 0.047, 1 },      -- #0A0A0C  window ground (opaque:
-                                                 -- elevation is relative lightness, so the
-                                                 -- world showing through destroys the ramp)
-    backgroundLight = { 0.078, 0.078, 0.098, 1 }, -- #141419  raised block
-    backgroundDark = { 0.031, 0.031, 0.039, 1 },  -- #08080A  inset well
-    surfaceRaised = { 0.102, 0.102, 0.129, 1 },   -- #1A1A21  hovered item
+    -- Opaque throughout: elevation is relative lightness, so anything showing
+    -- through the ground destroys the ramp. Each step is a visible increment;
+    -- the ground is NOT the darkest value, or the blocks have nothing to rise
+    -- above and the whole window reads black.
+    background = { 0.063, 0.063, 0.078, 1 },      -- #101014  window ground
+    backgroundLight = { 0.102, 0.102, 0.129, 1 }, -- #1A1A21  raised block
+    backgroundDark = { 0.031, 0.031, 0.039, 1 },  -- #08080A  inset well (search, pills)
+    surfaceRaised = { 0.141, 0.141, 0.176, 1 },   -- #24242D  hovered item
     border = { 0.137, 0.137, 0.188, 1 },          -- #232330  quieter, used rarely
     borderLight = { 0.20, 0.20, 0.25, 1 },
     borderDark = { 0.09, 0.09, 0.12, 1 },
@@ -36,12 +38,14 @@ UI.colors = {
 
     -- Accent = STATE only: active filter, focus, selection. Cyan clears every
     -- item quality colour except Heirloom, which is overridden in ItemButton.
-    accent = { 0.220, 0.741, 0.973, 1 },    -- #38BDF8
-    accentHover = { 0.490, 0.827, 0.988, 1 },-- #7DD3FC  text on a wash
-    accentBright = { 0.647, 0.894, 0.992, 1 },-- #A5E4FD emphasis only
-    accentDim = { 0.145, 0.435, 0.573, 1 },
-    accentMuted = { 0.071, 0.169, 0.227, 1 },-- subtle selected-tab fill
-    accentWash = { 0.220, 0.741, 0.973, 0.13 },-- selected pill fill
+    accent = { 0.247, 0.663, 0.961, 1 },    -- #3FA9F5  pulled bluer, off cyan
+    accentHover = { 0.498, 0.788, 0.984, 1 },-- #7FC9FB  text on a wash
+    accentBright = { 0.659, 0.863, 0.992, 1 },-- #A8DCFD emphasis only
+    accentDim = { 0.145, 0.384, 0.573, 1 },  -- #256292  1px ring on a selected control
+    accentMuted = { 0.071, 0.145, 0.212, 1 },-- subtle selected-tab fill
+    -- Opaque, not alpha: see note above. Roughly the accent at 13% over the
+    -- inset-well colour, resolved once here instead of composited at draw time.
+    accentWash = { 0.055, 0.129, 0.184, 1 },-- #0E212F  selected pill fill
 
     -- Money = gold, and nothing else in the UI is gold any more. It is the
     -- currency colour, which makes it semantic rather than decorative.
@@ -116,8 +120,9 @@ UI.layout = {
     
     -- Borders
     borderSize = 1,
-    radius = 5,               -- panel corner radius
-    radiusSmall = 3,          -- buttons, pills, inputs
+    radius = 4,               -- panel corner radius
+    radiusSmall = 2,          -- buttons, pills, inputs
+    radiusBlock = 3,          -- category blocks
     borderSizeThick = 2,      -- emphasized border
 
     -- Bag item text offsets

@@ -752,7 +752,7 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     local blockHeight = categoryData.height or 0
     if blockHeight > 0 then
         local pad = 3
-        local radius = UI.layout.radius
+        local radius = UI.layout.radiusBlock
         local bx, by = x - pad, y + pad
         local bw = width + (pad * 2)
         local bh = blockHeight + (pad * 2)
