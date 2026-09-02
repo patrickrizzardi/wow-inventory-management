@@ -267,6 +267,11 @@ function BagUI:Create()
     normalTex:SetTexCoord(0, 1, 0, 1)
     normalTex:SetVertexColor(unpack(UI.colors.textDim))
     gearBtn:SetNormalTexture(normalTex)
+    -- SetNormalTexture swaps the button's texture object, discarding the tint
+    -- set above, so re-apply it to the texture the button is actually using.
+    if gearBtn:GetNormalTexture() then
+        gearBtn:GetNormalTexture():SetVertexColor(unpack(UI.colors.textDim))
+    end
     
     local highlightTex = gearBtn:CreateTexture(nil, "HIGHLIGHT")
     highlightTex:SetAllPoints()
@@ -293,12 +298,8 @@ function BagUI:Create()
     searchBar:SetHeight(UI.layout.buttonHeight)
     searchBar:SetPoint("TOPLEFT", header, "BOTTOMLEFT", UI.layout.cardSpacing, -UI.layout.paddingSmall)
     searchBar:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", -UI.layout.cardSpacing, -UI.layout.paddingSmall)
-    searchBar:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    searchBar:SetBackdropColor(0.06, 0.06, 0.06, 1)
+    UI:MakeRounded(searchBar, UI.layout.radiusSmall)
+    searchBar:SetBackdropColor(unpack(UI.colors.backgroundDark))
     searchBar:SetBackdropBorderColor(unpack(UI.colors.border))
     frame.searchBar = searchBar
 
@@ -475,13 +476,14 @@ function BagUI:Create()
     footer:SetHeight(UI.layout.bottomBarHeight)
     footer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
     footer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-    footer:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    footer:SetBackdropColor(unpack(UI.colors.headerBar))
-    footer:SetBackdropBorderColor(unpack(UI.colors.border))
+    -- No fill: a square footer bar would overhang the panel's rounded bottom
+    -- corners. A hairline does the separating instead.
+    local footerRule = footer:CreateTexture(nil, "ARTWORK")
+    footerRule:SetTexture("Interface\\Buttons\\WHITE8X8")
+    footerRule:SetHeight(1)
+    footerRule:SetPoint("TOPLEFT", footer, "TOPLEFT", UI.layout.padding, 0)
+    footerRule:SetPoint("TOPRIGHT", footer, "TOPRIGHT", -UI.layout.padding, 0)
+    footerRule:SetVertexColor(unpack(UI.colors.border))
     frame.footer = footer
 
     -- Gold display (clickable to open dashboard). This is the number the

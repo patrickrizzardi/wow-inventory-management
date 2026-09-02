@@ -75,16 +75,51 @@ local function _AcquireHeader(scrollContent)
     return header
 end
 
-local function _AcquireSurface(scrollContent)
+local function _AcquireSurface(scrollContent, texturePath, l, r, t, b)
     local tex = table.remove(_surfacePool)
     if not tex then
         tex = scrollContent:CreateTexture(nil, "BACKGROUND")
-        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
     end
+    tex:SetTexture(texturePath or "Interface\\Buttons\\WHITE8X8")
+    tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
     tex:ClearAllPoints()
     tex:Show()
     table.insert(_activeSurfaces, tex)
     return tex
+end
+
+--[[
+    Draw a rounded filled rectangle into the scroll content.
+
+    Same four-corners-plus-three-fills construction as UI:AttachRoundedSurface,
+    but positioned by offset rather than anchored to a frame, because category
+    blocks are drawn as pooled textures on the shared scroll content - a frame
+    per block risks the item buttons ending up behind it.
+]]
+local function _DrawRoundedBlock(scrollContent, x, y, w, h, color, radius)
+    if w <= radius * 2 or h <= radius * 2 then
+        radius = math.max(math.floor(math.min(w, h) / 2) - 1, 0)
+    end
+
+    local CORNER = UI.ROUNDED_CORNER
+
+    local function Place(tex, px, py, pw, ph)
+        tex:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", px, py)
+        tex:SetSize(pw, ph)
+        tex:SetVertexColor(unpack(color))
+    end
+
+    if radius > 0 then
+        Place(_AcquireSurface(scrollContent, CORNER, 0, 1, 0, 1), x, y, radius, radius)
+        Place(_AcquireSurface(scrollContent, CORNER, 1, 0, 0, 1), x + w - radius, y, radius, radius)
+        Place(_AcquireSurface(scrollContent, CORNER, 0, 1, 1, 0), x, y - h + radius, radius, radius)
+        Place(_AcquireSurface(scrollContent, CORNER, 1, 0, 1, 0), x + w - radius, y - h + radius, radius, radius)
+
+        Place(_AcquireSurface(scrollContent), x + radius, y, w - radius * 2, radius)
+        Place(_AcquireSurface(scrollContent), x + radius, y - h + radius, w - radius * 2, radius)
+    end
+
+    Place(_AcquireSurface(scrollContent), x, y - radius, w, h - radius * 2)
 end
 
 local function _ReleaseAllSurfaces()
@@ -717,23 +752,23 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     local blockHeight = categoryData.height or 0
     if blockHeight > 0 then
         local pad = 3
+        local radius = UI.layout.radius
         local bx, by = x - pad, y + pad
         local bw = width + (pad * 2)
         local bh = blockHeight + (pad * 2)
 
-        local bg = _AcquireSurface(scrollContent)
-        bg:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx, by)
-        bg:SetSize(bw, bh)
-        bg:SetVertexColor(unpack(UI.colors.backgroundLight))
+        _DrawRoundedBlock(scrollContent, bx, by, bw, bh, UI.colors.backgroundLight, radius)
 
+        -- Rims are inset by the radius so they stop where the arc begins,
+        -- instead of poking out past the rounded corners.
         local rimTop = _AcquireSurface(scrollContent)
-        rimTop:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx, by)
-        rimTop:SetSize(bw, 1)
+        rimTop:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx + radius, by)
+        rimTop:SetSize(math.max(bw - radius * 2, 1), 1)
         rimTop:SetVertexColor(unpack(UI.colors.rimTop))
 
         local rimBottom = _AcquireSurface(scrollContent)
-        rimBottom:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx, by - bh + 1)
-        rimBottom:SetSize(bw, 1)
+        rimBottom:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx + radius, by - bh + 1)
+        rimBottom:SetSize(math.max(bw - radius * 2, 1), 1)
         rimBottom:SetVertexColor(unpack(UI.colors.rimBottom))
     end
 

@@ -115,7 +115,9 @@ UI.layout = {
     buttonWidthLarge = 120,   -- wide button
     
     -- Borders
-    borderSize = 1,           -- standard border thickness
+    borderSize = 1,
+    radius = 5,               -- panel corner radius
+    radiusSmall = 3,          -- buttons, pills, inputs
     borderSizeThick = 2,      -- emphasized border
 
     -- Bag item text offsets
@@ -152,16 +154,131 @@ UI.fonts = {
 }
 
 -- Create a dark-themed panel frame
+
+-- ============================================================================
+-- ROUNDED SURFACES
+-- ============================================================================
+
+-- WoW backdrops are square by construction - there is no radius property - so
+-- a rounded rectangle has to be built from pieces: four corner tiles carrying
+-- the arc, plus three plain fills covering everything between them. The corner
+-- art is a single quarter-round tile reused four times via texcoord flips.
+UI.ROUNDED_CORNER = "Interface\\AddOns\\InventoryManager\\Textures\\rounded-corner.tga"
+
+--[[
+    Paint a rounded filled rectangle over `frame`.
+    @param layer: draw layer for the pieces
+    @param radius: corner radius in pixels
+    @param inset: pixels to pull every edge in by (used to fake a 1px border
+                  by stacking a smaller fill on top of a larger one)
+    @return surface: table with :SetColor(r,g,b,a), :Show(), :Hide()
+]]
+function UI:AttachRoundedSurface(frame, layer, radius, inset)
+    layer = layer or "BACKGROUND"
+    radius = radius or self.layout.radius
+    inset = inset or 0
+
+    local pieces = {}
+
+    local function Fill()
+        local tex = frame:CreateTexture(nil, layer)
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+        table.insert(pieces, tex)
+        return tex
+    end
+
+    local function Corner(l, r, t, b)
+        local tex = frame:CreateTexture(nil, layer)
+        tex:SetTexture(UI.ROUNDED_CORNER)
+        tex:SetTexCoord(l, r, t, b)
+        tex:SetSize(radius, radius)
+        table.insert(pieces, tex)
+        return tex
+    end
+
+    -- The tile is authored as a top-left corner; the other three are flips
+    local tl = Corner(0, 1, 0, 1)
+    tl:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
+    local tr = Corner(1, 0, 0, 1)
+    tr:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -inset, -inset)
+    local bl = Corner(0, 1, 1, 0)
+    bl:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", inset, inset)
+    local br = Corner(1, 0, 1, 0)
+    br:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
+
+    local top = Fill()
+    top:SetPoint("TOPLEFT", tl, "TOPRIGHT")
+    top:SetPoint("BOTTOMRIGHT", tr, "BOTTOMLEFT")
+
+    local bottom = Fill()
+    bottom:SetPoint("TOPLEFT", bl, "TOPRIGHT")
+    bottom:SetPoint("BOTTOMRIGHT", br, "BOTTOMLEFT")
+
+    local middle = Fill()
+    middle:SetPoint("TOPLEFT", tl, "BOTTOMLEFT")
+    middle:SetPoint("BOTTOMRIGHT", br, "TOPRIGHT")
+
+    local surface = { pieces = pieces }
+
+    function surface:SetColor(r, g, b, a)
+        if not r then return end
+        for _, tex in ipairs(self.pieces) do
+            tex:SetVertexColor(r, g, b, a or 1)
+        end
+    end
+
+    function surface:Show()
+        for _, tex in ipairs(self.pieces) do tex:Show() end
+    end
+
+    function surface:Hide()
+        for _, tex in ipairs(self.pieces) do tex:Hide() end
+    end
+
+    return surface
+end
+
+--[[
+    Convert a frame from a square backdrop to a rounded surface.
+
+    SetBackdropColor and SetBackdropBorderColor are shimmed onto the frame so
+    every existing call site keeps working untouched - this is deliberately a
+    drop-in swap rather than a rewrite of every caller.
+
+    @param borderless: skip the 1px border layer (used for small controls)
+]]
+function UI:MakeRounded(frame, radius, borderless)
+    radius = radius or self.layout.radius
+
+    if frame.SetBackdrop then
+        frame:SetBackdrop(nil)
+    end
+
+    local border = nil
+    if not borderless then
+        border = self:AttachRoundedSurface(frame, "BACKGROUND", radius, 0)
+    end
+    local fill = self:AttachRoundedSurface(frame, "BORDER", radius, border and 1 or 0)
+
+    frame._imFill = fill
+    frame._imBorder = border
+
+    frame.SetBackdropColor = function(_, r, g, b, a)
+        fill:SetColor(r, g, b, a)
+    end
+    frame.SetBackdropBorderColor = function(_, r, g, b, a)
+        if border then border:SetColor(r, g, b, a) end
+    end
+
+    return frame
+end
+
 function UI:CreatePanel(name, parent, width, height)
     local frame = CreateFrame("Frame", name, parent or UIParent, "BackdropTemplate")
     frame:SetSize(width or 400, height or 500)
 
-    -- Dark background with thin border
-    frame:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    -- Rounded dark surface with a 1px border
+    self:MakeRounded(frame, self.layout.radius)
     frame:SetBackdropColor(unpack(self.colors.background))
     frame:SetBackdropBorderColor(unpack(self.colors.border))
 
@@ -195,13 +312,10 @@ function UI:CreateHeader(parent, title)
     header:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
     header:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
 
-    header:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
-    header:SetBackdropColor(unpack(self.colors.headerBar))
-    header:SetBackdropBorderColor(unpack(self.colors.border))
+    -- No fill: a square header bar would overhang the panel's rounded top
+    -- corners, and the design gives the title weight rather than a bar.
+    header.SetBackdropColor = function() end
+    header.SetBackdropBorderColor = function() end
 
     -- Title carries weight, not colour. The accent is reserved for state.
     header.title = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -215,7 +329,7 @@ function UI:CreateHeader(parent, title)
     closeBtn:SetPoint("RIGHT", header, "RIGHT", -self.layout.paddingSmall, 0)
     closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     closeBtn.text:SetPoint("CENTER")
-    closeBtn.text:SetText("✕")
+    closeBtn.text:SetText("X")
     closeBtn.text:SetTextColor(unpack(self.colors.textDim))
     closeBtn:SetScript("OnClick", function()
         parent:Hide()
@@ -236,12 +350,8 @@ function UI:CreateButton(parent, text, width, height)
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetSize(width or self.layout.buttonWidth, height or self.layout.buttonHeightSmall)
 
-    button:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
-    button:SetBackdropColor(0.15, 0.15, 0.15, 1)
+    self:MakeRounded(button, self.layout.radiusSmall)
+    button:SetBackdropColor(unpack(self.colors.backgroundDark))
     button:SetBackdropBorderColor(unpack(self.colors.border))
 
     button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
