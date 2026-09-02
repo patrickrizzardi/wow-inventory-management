@@ -111,13 +111,13 @@ function BagUI:UpdateFilterButtons(frame)
         btn._imActive = isActive
 
         if isActive then
-            btn:SetBackdropColor(0.18, 0.14, 0.04, 1)
-            btn:SetBackdropBorderColor(unpack(UI.colors.accent))
-            btn.text:SetTextColor(unpack(UI.colors.accent))
+            btn:SetBackdropColor(unpack(UI.colors.accentWash))
+            btn:SetBackdropBorderColor(unpack(UI.colors.accentDim))
+            btn.text:SetTextColor(unpack(UI.colors.accentHover))
         else
-            btn:SetBackdropColor(0.15, 0.15, 0.15, 1)
+            btn:SetBackdropColor(unpack(UI.colors.backgroundDark))
             btn:SetBackdropBorderColor(unpack(UI.colors.border))
-            btn.text:SetTextColor(unpack(UI.colors.textDim or UI.colors.text))
+            btn.text:SetTextColor(unpack(UI.colors.textDim))
         end
     end
 end
@@ -390,7 +390,7 @@ function BagUI:Create()
         -- here to keep the active mode visibly selected on mouse-out.
         btn:SetScript("OnEnter", function(self)
             if not self._imActive then
-                self:SetBackdropColor(0.25, 0.25, 0.25, 1)
+                self:SetBackdropColor(unpack(UI.colors.surfaceRaised))
                 self:SetBackdropBorderColor(unpack(UI.colors.borderLight))
             end
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -403,14 +403,14 @@ function BagUI:Create()
             BagUI:UpdateFilterButtons()
         end)
         btn:SetScript("OnMouseDown", function(self)
-            self:SetBackdropColor(0.1, 0.1, 0.1, 1)
+            self:SetBackdropColor(unpack(UI.colors.backgroundDark))
         end)
         btn:SetScript("OnMouseUp", function(self)
             -- Re-clicking the already-active mode is a no-op in SetViewMode,
             -- so repaint here or the button stays stuck in its pressed shade.
             BagUI:UpdateFilterButtons()
             if not self._imActive then
-                self:SetBackdropColor(0.25, 0.25, 0.25, 1)
+                self:SetBackdropColor(unpack(UI.colors.surfaceRaised))
             end
         end)
         btn:SetScript("OnClick", function(self)
@@ -483,10 +483,12 @@ function BagUI:Create()
     footer:SetBackdropBorderColor(unpack(UI.colors.border))
     frame.footer = footer
 
-    -- Gold display (clickable to open dashboard)
-    local goldText = footer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    -- Gold display (clickable to open dashboard). This is the number the
+    -- footer exists for, so it is the largest thing in it, and gold is now
+    -- reserved for money alone.
+    local goldText = footer:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     goldText:SetPoint("LEFT", UI.layout.padding, 0)
-    goldText:SetTextColor(unpack(UI.colors.accent))
+    goldText:SetTextColor(unpack(UI.colors.money))
     footer.goldText = goldText
 
     -- Make gold clickable
@@ -503,11 +505,48 @@ function BagUI:Create()
     end)
     footer:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Bag space display
-    local bagSpaceText = footer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    bagSpaceText:SetPoint("RIGHT", -UI.layout.padding, 0)
-    bagSpaceText:SetTextColor(0.7, 0.7, 0.7)
-    footer.bagSpaceText = bagSpaceText
+    -- Capacity meters. "How full am I" is a shape, not arithmetic - a fill bar
+    -- answers it before the digits have been read. Total is deliberately gone:
+    -- it is just Bags + Reagent, which both bars already show.
+    local function CreateMeter(label)
+        local meter = CreateFrame("Frame", nil, footer)
+        meter:SetSize(150, 10)
+
+        local tag = meter:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tag:SetPoint("LEFT", 0, 0)
+        tag:SetText(label)
+        tag:SetTextColor(unpack(UI.colors.textDisabled))
+        meter.tag = tag
+
+        local value = meter:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        value:SetPoint("LEFT", tag, "RIGHT", UI.layout.paddingSmall, 0)
+        value:SetTextColor(unpack(UI.colors.textDim))
+        meter.value = value
+
+        local track = meter:CreateTexture(nil, "ARTWORK")
+        track:SetTexture("Interface\\Buttons\\WHITE8X8")
+        track:SetSize(58, 4)
+        track:SetPoint("RIGHT", meter, "RIGHT", 0, 0)
+        track:SetVertexColor(unpack(UI.colors.backgroundDark))
+        meter.track = track
+
+        local fill = meter:CreateTexture(nil, "OVERLAY")
+        fill:SetTexture("Interface\\Buttons\\WHITE8X8")
+        fill:SetHeight(4)
+        fill:SetPoint("LEFT", track, "LEFT", 0, 0)
+        fill:SetVertexColor(unpack(UI.colors.textDisabled))
+        meter.fill = fill
+
+        return meter
+    end
+
+    local bagMeter = CreateMeter("Bags")
+    bagMeter:SetPoint("RIGHT", footer, "RIGHT", -UI.layout.padding, 6)
+    footer.bagMeter = bagMeter
+
+    local reagentMeter = CreateMeter("Reagent")
+    reagentMeter:SetPoint("RIGHT", footer, "RIGHT", -UI.layout.padding, -6)
+    footer.reagentMeter = reagentMeter
 
     -- Resize grip (bottom-right corner) - HIDDEN (resizing via edges only)
     local resizeGrip = CreateFrame("Button", nil, frame)
@@ -665,27 +704,32 @@ function BagUI:UpdateBagSpace()
     local totalFree = regularFree + reagentFree
     local totalUsed = regularUsed + reagentUsed
     
-    -- Format text with all three counts
-    local text
-    if reagentTotal > 0 then
-        -- Show: Bags x/x | Reagent x/x | Total x/x
-        text = string.format(
-            "Bags: %d/%d  |  Reagent: %d/%d  |  Total: %d/%d",
-            regularUsed, regularTotal,
-            reagentUsed, reagentTotal,
-            totalUsed, totalSlots
-        )
-    else
-        -- Just show regular bags if no reagent bag
-        text = string.format("Bags: %d/%d", regularUsed, regularTotal)
-    end
-    
     -- Dynamic threshold: warn when less than 10% free or less than 5 slots
     local threshold = math.max(math.floor(totalSlots * 0.1), 5)
-    local color = totalFree < threshold and UI.colors.error or UI.colors.textDim
-    
-    _bagFrame.footer.bagSpaceText:SetTextColor(unpack(color))
-    _bagFrame.footer.bagSpaceText:SetText(text)
+    local isTight = totalFree < threshold
+    local fillColor = isTight and UI.colors.error or UI.colors.textDisabled
+
+    local function ApplyMeter(meter, used, total)
+        if not meter then return end
+
+        if total <= 0 then
+            meter:Hide()
+            return
+        end
+        meter:Show()
+
+        meter.value:SetText(string.format("%d/%d", used, total))
+        meter.value:SetTextColor(unpack(isTight and UI.colors.error or UI.colors.textDim))
+
+        local trackWidth = meter.track:GetWidth()
+        local ratio = math.min(used / total, 1)
+        -- Keep a hairline visible at 0% so the meter never looks broken
+        meter.fill:SetWidth(math.max(trackWidth * ratio, 1))
+        meter.fill:SetVertexColor(unpack(fillColor))
+    end
+
+    ApplyMeter(_bagFrame.footer.bagMeter, regularUsed, regularTotal)
+    ApplyMeter(_bagFrame.footer.reagentMeter, reagentUsed, reagentTotal)
 end
 
 function BagUI:OnResize()

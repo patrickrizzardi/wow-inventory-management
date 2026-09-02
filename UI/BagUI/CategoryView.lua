@@ -17,6 +17,12 @@ local CategoryView = BagUI.CategoryView
 -- Header frame pool (prevents frame leak that causes stack overflow)
 local _headerPool = {}
 local _activeHeaders = {}
+
+-- Category surface pool. These are TEXTURES, not frames: textures in the
+-- BACKGROUND draw layer always render beneath child frames, so the item
+-- buttons can never end up hidden behind a category block.
+local _surfacePool = {}
+local _activeSurfaces = {}
 local _emptyStateText = nil
 
 -- Equipment slot order (for subcategory mode)
@@ -69,6 +75,27 @@ local function _AcquireHeader(scrollContent)
     return header
 end
 
+local function _AcquireSurface(scrollContent)
+    local tex = table.remove(_surfacePool)
+    if not tex then
+        tex = scrollContent:CreateTexture(nil, "BACKGROUND")
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+    end
+    tex:ClearAllPoints()
+    tex:Show()
+    table.insert(_activeSurfaces, tex)
+    return tex
+end
+
+local function _ReleaseAllSurfaces()
+    for _, tex in ipairs(_activeSurfaces) do
+        tex:Hide()
+        tex:ClearAllPoints()
+        table.insert(_surfacePool, tex)
+    end
+    wipe(_activeSurfaces)
+end
+
 local function _ReleaseAllHeaders()
     for _, header in ipairs(_activeHeaders) do
         header:Hide()
@@ -90,8 +117,9 @@ function CategoryView:Refresh(scrollContent)
         BagUI.ItemButton:ReleaseAll()
     end
 
-    -- Release all category headers back to pool
+    -- Release all category headers and surfaces back to their pools
     _ReleaseAllHeaders()
+    _ReleaseAllSurfaces()
 
     -- Hide empty state from previous render
     if _emptyStateText then
@@ -682,6 +710,33 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
         end
     end
 
+    -- Raised surface behind the category. Elevation here is lightness, not a
+    -- shadow: the block sits a few percent above the window ground, with a
+    -- lighter hairline on its top edge and a darker one beneath, which reads
+    -- as light falling from above.
+    local blockHeight = categoryData.height or 0
+    if blockHeight > 0 then
+        local pad = 3
+        local bx, by = x - pad, y + pad
+        local bw = width + (pad * 2)
+        local bh = blockHeight + (pad * 2)
+
+        local bg = _AcquireSurface(scrollContent)
+        bg:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx, by)
+        bg:SetSize(bw, bh)
+        bg:SetVertexColor(unpack(UI.colors.backgroundLight))
+
+        local rimTop = _AcquireSurface(scrollContent)
+        rimTop:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx, by)
+        rimTop:SetSize(bw, 1)
+        rimTop:SetVertexColor(unpack(UI.colors.rimTop))
+
+        local rimBottom = _AcquireSurface(scrollContent)
+        rimBottom:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", bx, by - bh + 1)
+        rimBottom:SetSize(bw, 1)
+        rimBottom:SetVertexColor(unpack(UI.colors.rimBottom))
+    end
+
     -- Acquire category header from pool
     local header = _AcquireHeader(scrollContent)
     header:SetSize(width, UI.layout.rowHeightSmall)
@@ -693,12 +748,22 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
         header:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", x, y)
     end
 
-    -- Reuse or create header text
+    -- Header carries the hierarchy now: near-white and heavier, instead of a
+    -- small amber label competing with every other amber thing in the window.
     if not header._imHeaderText then
-        local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         headerText:SetPoint("LEFT", UI.layout.paddingSmall, 0)
         header._imHeaderText = headerText
     end
-    header._imHeaderText:SetText(category.name)
-    header._imHeaderText:SetTextColor(unpack(UI.colors.accent))
+    header._imHeaderText:SetText(string.upper(category.name))
+    header._imHeaderText:SetTextColor(unpack(UI.colors.text))
+
+    -- Item count reads as a quiet chip beside the name
+    if not header._imHeaderCount then
+        local countText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        countText:SetPoint("LEFT", header._imHeaderText, "RIGHT", UI.layout.paddingSmall + 2, 0)
+        header._imHeaderCount = countText
+    end
+    header._imHeaderCount:SetText(tostring(#category.items))
+    header._imHeaderCount:SetTextColor(unpack(UI.colors.textDisabled))
 end

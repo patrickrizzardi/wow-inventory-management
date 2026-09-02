@@ -5,6 +5,16 @@
 ]]
 
 local addonName, IM = ...
+
+-- Quality colours are Blizzard's (ITEM_QUALITY_COLORS), but this bag chooses
+-- which colour to paint. Heirloom ships as #00CCFF, the same cyan the UI accent
+-- now uses for selection state; it is shifted lighter here so an item border can
+-- never be mistaken for chrome. Blizzard's own tooltips and chat links are
+-- untouched - this override is local to this window.
+local _HEIRLOOM_QUALITY = (Enum and Enum.ItemQuality and Enum.ItemQuality.Heirloom) or 7
+local _QUALITY_OVERRIDE = {
+    [_HEIRLOOM_QUALITY] = { r = 0.604, g = 0.902, b = 0.961 },  -- #9AE6F5
+}
 local UI = IM.UI
 
 -- Ensure BagUI namespace exists
@@ -310,7 +320,7 @@ function ItemButton:SetItem(button, bagID, slotID)
         local quality = itemInfo.quality
         if quality and quality > 1 then  -- Show border for uncommon+
             if button.IconBorder then
-                local color = ITEM_QUALITY_COLORS[quality]
+                local color = _QUALITY_OVERRIDE[quality] or ITEM_QUALITY_COLORS[quality]
                 if color then
                     button.IconBorder:SetVertexColor(color.r, color.g, color.b)
                     button.IconBorder:Show()

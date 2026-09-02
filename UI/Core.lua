@@ -10,48 +10,66 @@ IM.UI = UI
 
 -- Theme colors (dark theme with cheddar/golden accents)
 UI.colors = {
-    -- Base colors (dark theme)
-    background = { 0.08, 0.08, 0.08, 0.95 },
-    backgroundLight = { 0.12, 0.12, 0.12, 0.95 },
-    backgroundDark = { 0.05, 0.05, 0.05, 0.95 },
-    border = { 0.3, 0.3, 0.3, 1 },
-    borderLight = { 0.5, 0.5, 0.5, 1 },
-    borderDark = { 0.2, 0.2, 0.2, 1 },
-    text = { 1, 1, 1, 1 },
-    textDim = { 0.7, 0.7, 0.7, 1 },
-    textDisabled = { 0.4, 0.4, 0.4, 1 },
+    -- Surface ramp. In a dark theme elevation is expressed as lightness, not
+    -- shadow (a black shadow on a black ground is invisible). Each step up the
+    -- stack is a lighter surface; the old palette spanned only 7% so every
+    -- surface read as one flat plane.
+    background = { 0.039, 0.039, 0.047, 0.97 },   -- #0A0A0C  window ground
+    backgroundLight = { 0.078, 0.078, 0.098, 1 }, -- #141419  raised block
+    backgroundDark = { 0.031, 0.031, 0.039, 1 },  -- #08080A  inset well
+    surfaceRaised = { 0.102, 0.102, 0.129, 1 },   -- #1A1A21  hovered item
+    border = { 0.137, 0.137, 0.188, 1 },          -- #232330  quieter, used rarely
+    borderLight = { 0.20, 0.20, 0.25, 1 },
+    borderDark = { 0.09, 0.09, 0.12, 1 },
 
-    -- Refined gold palette (darker, less saturated to match emblem)
-    accent = { 0.85, 0.60, 0.10, 1 },       -- #D9991A darker gold
-    accentHover = { 0.95, 0.70, 0.15, 1 },  -- slightly brighter on hover
-    accentBright = { 1.0, 0.75, 0.20, 1 },  -- for emphasis only
-    accentDim = { 0.6, 0.45, 0.10, 1 },     -- muted for backgrounds
-    accentMuted = { 0.35, 0.28, 0.10, 1 },  -- very subtle for selected tabs
+    -- Fake a light source from above: 1px lighter along a surface's top edge,
+    -- 1px darker along its bottom. This is what reads as "raised" on near-black.
+    rimTop = { 1, 1, 1, 0.07 },
+    rimTopStrong = { 1, 1, 1, 0.11 },
+    rimBottom = { 0, 0, 0, 0.55 },
+
+    text = { 0.925, 0.925, 0.945, 1 },      -- #ECECF1
+    textDim = { 0.549, 0.549, 0.608, 1 },   -- #8C8C9B  dimmed harder than before
+    textDisabled = { 0.353, 0.353, 0.412, 1 },
+
+    -- Accent = STATE only: active filter, focus, selection. Cyan clears every
+    -- item quality colour except Heirloom, which is overridden in ItemButton.
+    accent = { 0.220, 0.741, 0.973, 1 },    -- #38BDF8
+    accentHover = { 0.490, 0.827, 0.988, 1 },-- #7DD3FC  text on a wash
+    accentBright = { 0.647, 0.894, 0.992, 1 },-- #A5E4FD emphasis only
+    accentDim = { 0.145, 0.435, 0.573, 1 },
+    accentMuted = { 0.071, 0.169, 0.227, 1 },-- subtle selected-tab fill
+    accentWash = { 0.220, 0.741, 0.973, 0.13 },-- selected pill fill
+
+    -- Money = gold, and nothing else in the UI is gold any more. It is the
+    -- currency colour, which makes it semantic rather than decorative.
+    money = { 0.941, 0.698, 0.227, 1 },     -- #F0B23A
 
     -- Semantic colors
     success = { 0.3, 0.75, 0.3, 1 },        -- green for positive
-    warning = { 0.85, 0.60, 0.10, 1 },      -- match accent
+    warning = { 0.85, 0.60, 0.10, 1 },      -- amber; deliberately NOT the accent
     error = { 0.85, 0.30, 0.30, 1 },        -- red for errors
-    itemLevel = { 1, 1, 0, 1 },             -- bright yellow for ilvl text
+    itemLevel = { 0.780, 0.780, 0.824, 1 }, -- #C7C7D2 neutral, stops fighting the icon
 
     -- UI element colors (neutral, no brown tint)
-    headerBar = { 0.12, 0.12, 0.12, 1 },        -- neutral dark gray
-    headerBarHover = { 0.16, 0.15, 0.12, 1 },   -- subtle warm tint on hover
-    rowAlt = { 0.10, 0.10, 0.10, 0.5 },         -- alternating row background
-    rowHover = { 0.18, 0.16, 0.10, 0.8 },       -- warm hover for rows
-    tabSelected = { 0.25, 0.22, 0.12, 1 },      -- selected tab background
-    tabSelectedText = { 1.0, 0.85, 0.40, 1 },   -- selected tab text (light gold)
+    headerBar = { 0.063, 0.063, 0.078, 1 },      -- #101014
+    headerBarHover = { 0.098, 0.098, 0.125, 1 }, -- cool tint on hover
+    rowAlt = { 0.078, 0.078, 0.098, 0.5 },       -- alternating row background
+    rowHover = { 0.133, 0.133, 0.165, 0.85 },    -- neutral raise, no hue
+    tabSelected = { 0.071, 0.169, 0.227, 1 },    -- selected tab background
+    tabSelectedText = { 0.490, 0.827, 0.988, 1 },-- selected tab text
 }
 
 -- Hex color codes for inline WoW text formatting
 UI.hexColors = {
-    accent = "d9991a",        -- darker gold (matches UI.colors.accent)
-    accentBright = "f2b833",  -- slightly brighter gold
+    accent = "38bdf8",        -- cyan state (matches UI.colors.accent)
+    accentBright = "7dd3fc",  -- lighter cyan
+    money = "f0b23a",         -- gold, currency only
     success = "4dcc4d",       -- green
     error = "d94d4d",         -- red
-    warning = "d9991a",       -- match accent
+    warning = "d9991a",       -- amber, deliberately not the accent
     info = "88ccff",          -- light blue for informational
-    dim = "888888",           -- gray for muted text
+    dim = "8c8c9b",           -- gray for muted text
 }
 
 -- Layout constants for consistent spacing
