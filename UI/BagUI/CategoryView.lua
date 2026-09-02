@@ -703,11 +703,11 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     local width = categoryData.width
 
     -- Get sizing from MasonryLayout (single source of truth)
-    local leftMarginExtra = BagUI.MasonryLayout:GetLeftMarginExtra()
+    local blockPadding = BagUI.MasonryLayout:GetBlockPadding()
 
     -- Calculate item positions FIRST so we can anchor header to first item
     local itemStartY = y - (IM.UI.layout.rowHeightSmall or 24) - (IM.UI.layout.elementSpacing or 6)
-    local itemStartX = x + leftMarginExtra
+    local itemStartX = x + blockPadding
 
     IM:Debug(string.format("[CategoryView] Rendering '%s': headerY=%d, itemStartY=%d, itemStartX=%d",
         category.name, y, itemStartY, itemStartX))
@@ -778,7 +778,7 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
 
     if firstButton then
         local headerGap = IM.UI.layout.elementSpacing or 6
-        header:SetPoint("BOTTOMLEFT", firstButton, "TOPLEFT", -leftMarginExtra, headerGap)
+        header:SetPoint("BOTTOMLEFT", firstButton, "TOPLEFT", -blockPadding, headerGap)
     else
         header:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", x, y)
     end

@@ -144,13 +144,16 @@ local SIZING = {
     MAX_FRAME_WIDTH = 1200,
     MIN_FRAME_HEIGHT = 300,        -- floor for content-fitted height
     -- Layout tweaks (tighter spacing)
-    ITEM_GAP = 2,                  -- Gap between items (was 4, reduced for tighter packing)
+    ITEM_GAP = 4,                  -- Gap between item icons
     CATEGORY_PADDING = 6,          -- Padding around category content (was 10)
     CATEGORY_GAP = 12,             -- Gap BETWEEN category blocks, horizontally and
                                    -- vertically. Must exceed twice the block's draw
                                    -- inflation or the raised surfaces touch.
     COLUMN_GAP = 16,               -- Gap between columns (was 20)
-    LEFT_MARGIN_EXTRA = 4,         -- Extra left margin to prevent border clipping
+    BLOCK_PADDING = 8,             -- Padding inside a category block, all sides.
+                                   -- Was LEFT_MARGIN_EXTRA (4) and treated as a
+                                   -- clipping guard; it is real padding and is
+                                   -- mirrored on every edge.
 }
 
 -- ============================================================================
@@ -182,7 +185,7 @@ function BagUI:CalculateRequiredWidth()
     local itemGap = SIZING.ITEM_GAP
     local categoryPadding = SIZING.CATEGORY_PADDING
     local columnGap = SIZING.COLUMN_GAP
-    local leftMarginExtra = SIZING.LEFT_MARGIN_EXTRA
+    local blockPadding = SIZING.BLOCK_PADDING
 
     -- Item button total size (icon + border/padding from template)
     local itemSize = iconSize + SIZING.BUTTON_BORDER_PADDING
@@ -191,7 +194,9 @@ function BagUI:CalculateRequiredWidth()
     local itemRowWidth = (itemSize * itemsPerRow) + (itemGap * (itemsPerRow - 1))
 
     -- Each column content: left margin + item row
-    local columnContentWidth = leftMarginExtra + itemRowWidth
+    -- Padding sits on BOTH sides of the item area, so the frame must be wide
+    -- enough for two of them, not one
+    local columnContentWidth = (blockPadding * 2) + itemRowWidth
 
     -- Total content area: outer padding + columns + gaps between columns + outer padding
     local contentAreaWidth = categoryPadding + (columnContentWidth * columns) + (columnGap * (columns - 1)) + categoryPadding

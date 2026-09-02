@@ -26,11 +26,11 @@ local function _GetSizing()
     -- Fallback if not available yet
     return {
         BUTTON_BORDER_PADDING = 17,
-        ITEM_GAP = 2,
+        ITEM_GAP = 4,
         CATEGORY_PADDING = 6,
         CATEGORY_GAP = 12,
         COLUMN_GAP = 16,
-        LEFT_MARGIN_EXTRA = 4,
+        BLOCK_PADDING = 8,
     }
 end
 
@@ -57,9 +57,9 @@ function MasonryLayout:GetItemGap()
     return sizing.ITEM_GAP
 end
 
-function MasonryLayout:GetLeftMarginExtra()
+function MasonryLayout:GetBlockPadding()
     local sizing = _GetSizing()
-    return sizing.LEFT_MARGIN_EXTRA
+    return sizing.BLOCK_PADDING
 end
 
 --[[
@@ -75,7 +75,7 @@ end
 ]]
 function MasonryLayout:GetItemAreaWidth(blockWidth)
     -- Items are inset by the left margin; mirror it on the right
-    return blockWidth - (self:GetLeftMarginExtra() * 2)
+    return blockWidth - (self:GetBlockPadding() * 2)
 end
 
 function MasonryLayout:GetItemsPerRow(blockWidth, maxPerRow)
@@ -293,7 +293,7 @@ function MasonryLayout:CalculateCategoryHeight(category, availableWidth, itemsPe
     local itemsHeight = numRows * itemSize + (numRows - 1) * itemGap
 
     -- Total height with bottom padding
-    return headerHeight + itemsHeight + 4  -- Reduced bottom padding
+    return headerHeight + itemsHeight + self:GetBlockPadding()
 end
 
 -- ============================================================================
