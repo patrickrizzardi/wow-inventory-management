@@ -62,6 +62,33 @@ function MasonryLayout:GetLeftMarginExtra()
     return sizing.LEFT_MARGIN_EXTRA
 end
 
+--[[
+    How many items fit across one category block, and how wide their area is.
+
+    THE single answer to that question. It was previously computed twice - once
+    in CalculateCategoryHeight from the block width, once in
+    CalculateItemPositions from (block width - 4) - so the two could disagree
+    by a column. When they did, the renderer wrapped an extra row that the
+    reserved height knew nothing about, and the items hung outside the block.
+
+    Both callers now go through here, so they cannot drift again.
+]]
+function MasonryLayout:GetItemAreaWidth(blockWidth)
+    -- Items are inset by the left margin; mirror it on the right
+    return blockWidth - (self:GetLeftMarginExtra() * 2)
+end
+
+function MasonryLayout:GetItemsPerRow(blockWidth, maxPerRow)
+    local itemSize = self:GetItemSize()
+    local gap = self:GetItemGap()
+
+    -- N items occupy N*size + (N-1)*gap, so solve for N including the gaps.
+    -- The old floor(width / itemSize) ignored them and over-counted.
+    local fits = math.floor((self:GetItemAreaWidth(blockWidth) + gap) / (itemSize + gap))
+
+    return math.max(1, math.min(maxPerRow or 8, fits))
+end
+
 function MasonryLayout:GetCategoryGap()
     local sizing = _GetSizing()
     return sizing.CATEGORY_GAP or 12
@@ -256,9 +283,8 @@ function MasonryLayout:CalculateCategoryHeight(category, availableWidth, itemsPe
     -- Header height (category name)
     local headerHeight = (IM.UI.layout.rowHeightSmall or 24) + (IM.UI.layout.elementSpacing or 6)
 
-    -- Calculate how many items fit per row
-    local itemsPerRowActual = math.min(itemsPerRow, math.floor(availableWidth / itemSize))
-    if itemsPerRowActual < 1 then itemsPerRowActual = 1 end
+    -- Same answer the renderer will use; see GetItemsPerRow
+    local itemsPerRowActual = self:GetItemsPerRow(availableWidth, itemsPerRow)
 
     -- Calculate number of rows needed
     local numRows = math.ceil(itemCount / itemsPerRowActual)
@@ -291,8 +317,7 @@ function MasonryLayout:CalculateItemPositions(itemCount, startX, startY, availab
     local itemSize = self:GetItemSize()
     local itemGap = self:GetItemGap()
 
-    local itemsPerRowActual = math.min(itemsPerRow, math.floor(availableWidth / itemSize))
-    if itemsPerRowActual < 1 then itemsPerRowActual = 1 end
+    local itemsPerRowActual = self:GetItemsPerRow(availableWidth, itemsPerRow)
 
     local currentX = startX
     local currentY = startY

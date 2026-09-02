@@ -718,7 +718,7 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
         #category.items,
         itemStartX,
         itemStartY,
-        width - 4,  -- Reduced inner padding
+        width,  -- block width; MasonryLayout applies the inner inset itself
         settings.itemsPerRow or 8
     )
 
