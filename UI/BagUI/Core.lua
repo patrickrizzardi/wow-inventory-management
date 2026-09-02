@@ -61,6 +61,67 @@ function BagUI:GetSearchFilter()
     return _searchFilter
 end
 
+-- ============================================================================
+-- VIEW MODE
+-- ============================================================================
+
+-- Header filter buttons. "subcategory" keeps its legacy db value so existing
+-- saved settings keep working; the button just calls it what it is.
+BagUI.VIEW_MODE_BUTTONS = {
+    { mode = "category",   label = "Category",  tooltip = "Group by item class - Armor, Consumable, Quest, and so on." },
+    { mode = "subcategory", label = "Slot",     tooltip = "Group gear by equipment slot - Head, Neck, Trinket, and so on." },
+    { mode = "topstat",    label = "Top Stat",  tooltip = "Group gear by its highest secondary stat." },
+    { mode = "statcombo",  label = "Stat Pair", tooltip = "Group gear by its full secondary combination, e.g. Crit / Mastery." },
+}
+
+function BagUI:GetViewMode()
+    local mode = self:GetSettings().viewMode
+    if BagUI.CategoryView and BagUI.CategoryView.IsValidViewMode then
+        if not BagUI.CategoryView:IsValidViewMode(mode) then
+            return "category"
+        end
+    end
+    return mode or "category"
+end
+
+function BagUI:SetViewMode(mode)
+    if not mode then return end
+    if self:GetViewMode() == mode then return end
+
+    if not IM.db.global.bagUI then
+        self:InitializeSettings()
+    end
+    IM.db.global.bagUI.viewMode = mode
+
+    self:UpdateFilterButtons()
+
+    if self:IsShown() then
+        self:Refresh()
+    end
+end
+
+-- Paint the active mode's button; safe to call before the frame exists
+function BagUI:UpdateFilterButtons(frame)
+    frame = frame or _bagFrame
+    if not frame or not frame.filterButtons then return end
+
+    local active = self:GetViewMode()
+    for _, btn in ipairs(frame.filterButtons) do
+        local isActive = (btn._imViewMode == active)
+        btn._imActive = isActive
+
+        if isActive then
+            btn:SetBackdropColor(0.18, 0.14, 0.04, 1)
+            btn:SetBackdropBorderColor(unpack(UI.colors.accent))
+            btn.text:SetTextColor(unpack(UI.colors.accent))
+        else
+            btn:SetBackdropColor(0.15, 0.15, 0.15, 1)
+            btn:SetBackdropBorderColor(unpack(UI.colors.border))
+            btn.text:SetTextColor(unpack(UI.colors.textDim or UI.colors.text))
+        end
+    end
+end
+
 function BagUI:ClearSearchFilter()
     _searchFilter = ""
     if _bagFrame and _bagFrame.searchBox then
@@ -310,9 +371,80 @@ function BagUI:Create()
     end)
     clearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Content container (for categories and items) - below search bar
+    -- ============================================================
+    -- VIEW MODE FILTER BAR (below search)
+    -- ============================================================
+    local filterBar = CreateFrame("Frame", nil, frame)
+    filterBar:SetHeight(UI.layout.buttonHeightSmall)
+    filterBar:SetPoint("TOPLEFT", searchBar, "BOTTOMLEFT", 0, -UI.layout.paddingSmall)
+    filterBar:SetPoint("TOPRIGHT", searchBar, "BOTTOMRIGHT", 0, -UI.layout.paddingSmall)
+    frame.filterBar = filterBar
+
+    local filterButtons = {}
+    for _, def in ipairs(BagUI.VIEW_MODE_BUTTONS) do
+        local btn = UI:CreateButton(filterBar, def.label, 60, UI.layout.buttonHeightSmall)
+        btn._imViewMode = def.mode
+        btn._imActive = false
+
+        -- CreateButton's hover handlers reset the backdrop, so they are replaced
+        -- here to keep the active mode visibly selected on mouse-out.
+        btn:SetScript("OnEnter", function(self)
+            if not self._imActive then
+                self:SetBackdropColor(0.25, 0.25, 0.25, 1)
+                self:SetBackdropBorderColor(unpack(UI.colors.borderLight))
+            end
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine(def.label)
+            GameTooltip:AddLine(def.tooltip, 0.7, 0.7, 0.7, true)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function(self)
+            GameTooltip:Hide()
+            BagUI:UpdateFilterButtons()
+        end)
+        btn:SetScript("OnMouseDown", function(self)
+            self:SetBackdropColor(0.1, 0.1, 0.1, 1)
+        end)
+        btn:SetScript("OnMouseUp", function(self)
+            -- Re-clicking the already-active mode is a no-op in SetViewMode,
+            -- so repaint here or the button stays stuck in its pressed shade.
+            BagUI:UpdateFilterButtons()
+            if not self._imActive then
+                self:SetBackdropColor(0.25, 0.25, 0.25, 1)
+            end
+        end)
+        btn:SetScript("OnClick", function(self)
+            BagUI:SetViewMode(self._imViewMode)
+        end)
+
+        table.insert(filterButtons, btn)
+    end
+    frame.filterButtons = filterButtons
+
+    -- Split the bar evenly; recalculated on resize since the frame is resizable
+    local function LayoutFilterButtons()
+        local count = #filterButtons
+        if count == 0 then return end
+
+        local gap = UI.layout.paddingSmall
+        local available = filterBar:GetWidth() - (gap * (count - 1))
+        if available <= 0 then return end
+
+        local btnWidth = available / count
+        for i, btn in ipairs(filterButtons) do
+            btn:ClearAllPoints()
+            btn:SetSize(btnWidth, UI.layout.buttonHeightSmall)
+            btn:SetPoint("TOPLEFT", filterBar, "TOPLEFT", (i - 1) * (btnWidth + gap), 0)
+        end
+    end
+    filterBar:SetScript("OnSizeChanged", LayoutFilterButtons)
+    LayoutFilterButtons()
+
+    BagUI:UpdateFilterButtons(frame)
+
+    -- Content container (for categories and items) - below filter bar
     local contentContainer = CreateFrame("Frame", nil, frame)
-    contentContainer:SetPoint("TOPLEFT", searchBar, "BOTTOMLEFT", -UI.layout.cardSpacing, -UI.layout.paddingSmall)
+    contentContainer:SetPoint("TOPLEFT", filterBar, "BOTTOMLEFT", -UI.layout.cardSpacing, -UI.layout.paddingSmall)
     contentContainer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, UI.layout.bottomBarHeight + UI.layout.padding)
     frame.contentContainer = contentContainer
     
@@ -693,7 +825,7 @@ function BagUI:InitializeSettings()
             enabled = true,  -- Enabled by default
             columns = 2,  -- Default to 2 columns
             itemsPerRow = 6,  -- Default to 6 items per row
-            viewMode = "category",  -- "category" or "subcategory"
+            viewMode = "category",  -- see BagUI.VIEW_MODE_BUTTONS for valid modes
             showItemSets = true,
             height = 500,  -- Default height
             iconSize = 20,  -- Item icon size (16-32)
@@ -1112,6 +1244,18 @@ end
 
 IM:RegisterEvent("PLAYER_LOGIN", function()
     BagUI:InitializeSettings()
+
+    -- Stat grouping reads item data that often arrives after the bag is drawn;
+    -- re-render once it lands so gear leaves the "Loading..." bucket.
+    local ItemStats = IM:GetModule("ItemStats")
+    if ItemStats then
+        ItemStats:RegisterRefreshCallback(function()
+            local mode = BagUI:GetViewMode()
+            if (mode == "topstat" or mode == "statcombo") and BagUI:IsShown() then
+                BagUI:Refresh()
+            end
+        end)
+    end
 
     -- Pre-create the frame but don't show it
     BagUI:Create()

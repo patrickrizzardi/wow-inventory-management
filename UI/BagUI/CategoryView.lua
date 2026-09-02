@@ -123,14 +123,8 @@ function CategoryView:Refresh(scrollContent)
         return
     end
 
-    -- Organize into categories
-    local settings = BagUI:GetSettings()
-    local categories
-    if settings.viewMode == "subcategory" then
-        categories = self:OrganizeBySubcategory(items)
-    else
-        categories = self:OrganizeByCategory(items)
-    end
+    -- Organize into categories (GetViewMode sanitizes stale saved modes)
+    local categories = self:Organize(items, BagUI:GetViewMode())
 
     -- Filter out empty categories (shouldn't happen but safety check)
     local nonEmptyCategories = {}
@@ -276,6 +270,24 @@ local function _ItemMatchesFilter(item, filter)
         return true
     end
 
+    -- Match secondary stats, so "haste" or "crit / mastery" filters gear directly
+    local ItemStats = IM:GetModule("ItemStats")
+    if ItemStats and ItemStats:IsEquippable(item.itemID) then
+        local combo = ItemStats:GetSecondaryCombo(item.hyperlink)
+        if combo and combo:lower():find(filterLower, 1, true) then
+            return true
+        end
+
+        local stats = ItemStats:GetSecondaries(item.hyperlink)
+        if stats then
+            for _, stat in ipairs(stats) do
+                if stat.name:lower():find(filterLower, 1, true) then
+                    return true
+                end
+            end
+        end
+    end
+
     return false
 end
 
@@ -342,146 +354,103 @@ function CategoryView:GatherItems()
 end
 
 -- ============================================================================
--- CATEGORIZATION
+-- VIEW MODES
 -- ============================================================================
 
-function CategoryView:OrganizeByCategory(items)
-    local categories = {}
-    local categoryMap = {}
-    local settings = BagUI:GetSettings()
-    
-    -- Separate equipment set items if enabled
-    local equipmentSetsByName = {}  -- Maps set name -> items
-    if settings.showItemSets then
-        IM:Debug("[CategoryView] showItemSets is enabled, checking " .. #items .. " items")
-        for _, item in ipairs(items) do
-            if IM.Filters and IM.Filters.GetEquipmentSets then
-                local sets = IM.Filters:GetEquipmentSets(item.itemID)
-                if sets then
-                    -- Item can be in multiple sets, add to each
-                    for _, setName in ipairs(sets) do
-                        if not equipmentSetsByName[setName] then
-                            equipmentSetsByName[setName] = {}
-                        end
-                        table.insert(equipmentSetsByName[setName], item)
-                        IM:Debug("[CategoryView] Found equipment set item: " .. (item.itemID or "unknown") .. " in set '" .. setName .. "'")
-                    end
-                end
-            end
-        end
-        
-        local totalSets = 0
-        local totalItems = 0
-        for setName, setItems in pairs(equipmentSetsByName) do
-            totalSets = totalSets + 1
-            totalItems = totalItems + #setItems
-        end
-        IM:Debug("[CategoryView] Found " .. totalItems .. " equipment set items across " .. totalSets .. " sets")
-    else
-        IM:Debug("[CategoryView] showItemSets is DISABLED")
-    end
-    
-    -- Create separate categories for each equipment set
-    -- Sort items within each set by equipment slot
-    local setIndex = 0
-    for setName, setItems in pairs(equipmentSetsByName) do
-        -- Sort items by equipment slot order
-        table.sort(setItems, function(a, b)
-            local _, _, _, equipLocA = C_Item.GetItemInfoInstant(a.itemID)
-            local _, _, _, equipLocB = C_Item.GetItemInfoInstant(b.itemID)
-            local orderA = (equipLocA and SLOT_ORDER_MAP[equipLocA]) or 999
-            local orderB = (equipLocB and SLOT_ORDER_MAP[equipLocB]) or 999
-            return orderA < orderB
-        end)
-        
-        local category = {
-            name = "Set: " .. setName,
-            items = setItems,
-            order = setIndex,  -- Sets always first, ordered by discovery
-        }
-        table.insert(categories, category)
-        categoryMap["Set: " .. setName] = category
-        setIndex = setIndex + 1
-        IM:Debug("[CategoryView] Created equipment set category '" .. setName .. "' with " .. #setItems .. " items")
-    end
-    
-    -- Categorize remaining items
-    for _, item in ipairs(items) do
-        -- Skip if already in equipment set category
-        local skipItem = false
-        if settings.showItemSets and IM.Filters and IM.Filters.GetEquipmentSets then
-            local sets = IM.Filters:GetEquipmentSets(item.itemID)
-            if sets and #sets > 0 then
-                skipItem = true
-            end
-        end
-        
-        if not skipItem then
-            local categoryName = self:GetItemCategory(item)
-            
-            if not categoryMap[categoryName] then
-                local category = {
-                    name = categoryName,
-                    items = {},
-                    order = self:GetCategoryOrder(categoryName) + 100,  -- Regular categories after sets
-                }
-                table.insert(categories, category)
-                categoryMap[categoryName] = category
-            end
-            
-            table.insert(categoryMap[categoryName].items, item)
-        end
-    end
-    
-    -- Sort categories by order
-    table.sort(categories, function(a, b)
-        return a.order < b.order
-    end)
-    
-    return categories
+--[[
+    Each view mode classifies one item into a group label plus that group's sort
+    weight. Stat modes reclassify EQUIPPABLE GEAR ONLY - consumables, reagents and
+    the rest keep their normal category and render below the stat groups, so the
+    bag never hides items just because they have no secondaries.
+
+    Group order convention:
+      0-99    stat groups (canonical stat order)
+      100+    normal categories in category/subcategory mode
+      500+    normal categories rendered underneath a stat view
+]]
+
+local STAT_FALLBACK_ORDER = 500
+
+-- Resolve a stat group label for gear, or nil when the item is not gear
+local function _StatGroupFor(item, resolve)
+    local ItemStats = IM:GetModule("ItemStats")
+    if not ItemStats then return nil end
+    if not ItemStats:IsEquippable(item.itemID) then return nil end
+
+    -- nil means the client has not cached this item yet; ItemStats fires a
+    -- refresh once the data lands, so bucket it visibly rather than silently
+    return resolve(ItemStats, item.hyperlink) or ItemStats.UNKNOWN
 end
 
-function CategoryView:OrganizeBySubcategory(items)
-    local categories = {}
-    local categoryMap = {}
+local function _ClassifyByStat(view, item, resolve)
+    local label = _StatGroupFor(item, resolve)
+    if label then
+        local ItemStats = IM:GetModule("ItemStats")
+        return label, ItemStats:GetGroupOrder(label)
+    end
+
+    -- Not gear: keep its normal category, ranked below every stat group
+    local categoryName = view:GetItemCategory(item)
+    return categoryName, STAT_FALLBACK_ORDER + view:GetCategoryOrder(categoryName)
+end
+
+local VIEW_MODES = {
+    category = function(view, item)
+        local name = view:GetItemCategory(item)
+        return name, 100 + view:GetCategoryOrder(name)
+    end,
+
+    subcategory = function(view, item)
+        local name = view:GetItemSubcategory(item)
+        return name, 100 + view:GetSubcategoryOrder(name, item)
+    end,
+
+    topstat = function(view, item)
+        return _ClassifyByStat(view, item, function(ItemStats, link)
+            return ItemStats:GetTopSecondary(link)
+        end)
+    end,
+
+    statcombo = function(view, item)
+        return _ClassifyByStat(view, item, function(ItemStats, link)
+            return ItemStats:GetSecondaryCombo(link)
+        end)
+    end,
+}
+
+CategoryView.VIEW_MODES = VIEW_MODES
+
+function CategoryView:IsValidViewMode(modeName)
+    return modeName ~= nil and VIEW_MODES[modeName] ~= nil
+end
+
+-- ============================================================================
+-- ORGANIZATION
+-- ============================================================================
+
+-- Pull equipment-set items into their own categories. Returns the set categories
+-- and a lookup of which items were consumed by them.
+local function _ExtractEquipmentSets(items)
+    local categories, claimed = {}, {}
+
     local settings = BagUI:GetSettings()
-    
-    -- Separate equipment set items if enabled
-    local equipmentSetsByName = {}  -- Maps set name -> items
-    if settings.showItemSets then
-        IM:Debug("[CategoryView:Subcategory] showItemSets is enabled, checking " .. #items .. " items")
-        for _, item in ipairs(items) do
-            if IM.Filters and IM.Filters.GetEquipmentSets then
-                local sets = IM.Filters:GetEquipmentSets(item.itemID)
-                if sets then
-                    -- Item can be in multiple sets, add to each
-                    for _, setName in ipairs(sets) do
-                        if not equipmentSetsByName[setName] then
-                            equipmentSetsByName[setName] = {}
-                        end
-                        table.insert(equipmentSetsByName[setName], item)
-                        IM:Debug("[CategoryView:Subcategory] Found equipment set item: " .. (item.itemID or "unknown") .. " in set '" .. setName .. "'")
-                    end
-                end
+    if not settings.showItemSets then return categories, claimed end
+    if not (IM.Filters and IM.Filters.GetEquipmentSets) then return categories, claimed end
+
+    local byName = {}
+    for _, item in ipairs(items) do
+        local sets = IM.Filters:GetEquipmentSets(item.itemID)
+        if sets and #sets > 0 then
+            claimed[item] = true
+            for _, setName in ipairs(sets) do
+                byName[setName] = byName[setName] or {}
+                table.insert(byName[setName], item)
             end
         end
-        
-        local totalSets = 0
-        local totalItems = 0
-        for setName, setItems in pairs(equipmentSetsByName) do
-            totalSets = totalSets + 1
-            totalItems = totalItems + #setItems
-        end
-        IM:Debug("[CategoryView:Subcategory] Found " .. totalItems .. " equipment set items across " .. totalSets .. " sets")
-    else
-        IM:Debug("[CategoryView:Subcategory] showItemSets is DISABLED")
     end
-    
-    -- Create separate categories for each equipment set
-    -- Sort items within each set by equipment slot
+
     local setIndex = 0
-    for setName, setItems in pairs(equipmentSetsByName) do
-        -- Sort items by equipment slot order
+    for setName, setItems in pairs(byName) do
         table.sort(setItems, function(a, b)
             local _, _, _, equipLocA = C_Item.GetItemInfoInstant(a.itemID)
             local _, _, _, equipLocB = C_Item.GetItemInfoInstant(b.itemID)
@@ -489,51 +458,49 @@ function CategoryView:OrganizeBySubcategory(items)
             local orderB = (equipLocB and SLOT_ORDER_MAP[equipLocB]) or 999
             return orderA < orderB
         end)
-        
-        local category = {
+
+        table.insert(categories, {
             name = "Set: " .. setName,
             items = setItems,
-            order = setIndex,  -- Sets always first, ordered by discovery
-        }
-        table.insert(categories, category)
-        categoryMap["Set: " .. setName] = category
+            order = setIndex,  -- sets always render first
+        })
         setIndex = setIndex + 1
-        IM:Debug("[CategoryView:Subcategory] Created equipment set category '" .. setName .. "' with " .. #setItems .. " items")
     end
-    
-    -- Categorize remaining items
+
+    return categories, claimed
+end
+
+-- Group items for a view mode. One organizer for every mode - adding a mode means
+-- adding a VIEW_MODES entry, never another copy of this function.
+function CategoryView:Organize(items, modeName)
+    local classify = VIEW_MODES[modeName] or VIEW_MODES.category
+
+    local categories, claimed = _ExtractEquipmentSets(items)
+    local categoryMap = {}
+
     for _, item in ipairs(items) do
-        -- Skip if already in equipment set category
-        local skipItem = false
-        if settings.showItemSets and IM.Filters and IM.Filters.GetEquipmentSets then
-            local sets = IM.Filters:GetEquipmentSets(item.itemID)
-            if sets and #sets > 0 then
-                skipItem = true
-            end
-        end
-        
-        if not skipItem then
-            local categoryName = self:GetItemSubcategory(item)
-            
-            if not categoryMap[categoryName] then
-                local category = {
-                    name = categoryName,
-                    items = {},
-                    order = self:GetSubcategoryOrder(categoryName, item) + 100,  -- Regular categories after sets
-                }
+        if not claimed[item] then
+            local name, order = classify(self, item)
+            name = name or "Other"
+
+            local category = categoryMap[name]
+            if not category then
+                category = { name = name, items = {}, order = order or 999 }
                 table.insert(categories, category)
-                categoryMap[categoryName] = category
+                categoryMap[name] = category
             end
-            
-            table.insert(categoryMap[categoryName].items, item)
+
+            table.insert(category.items, item)
         end
     end
-    
-    -- Sort categories by order
+
     table.sort(categories, function(a, b)
-        return a.order < b.order
+        if a.order ~= b.order then
+            return a.order < b.order
+        end
+        return a.name < b.name
     end)
-    
+
     return categories
 end
 

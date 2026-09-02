@@ -172,20 +172,6 @@ function BagUIPanel:Create(parent)
         end)
     end
 
-    -- View mode dropdown
-    local viewModeY = layoutCard:AddContent(40)
-    local viewModeDropdown = UI:CreateDropdown(layoutCard, "View mode", {"Category", "Subcategory"}, IM.db.global.bagUI and IM.db.global.bagUI.viewMode == "subcategory" and 2 or 1)
-    viewModeDropdown:SetPoint("TOPLEFT", layoutCard, "TOPLEFT", layoutCard._leftPadding, viewModeY)
-    viewModeDropdown.OnValueChanged = function(self, index, value)
-        if not IM.db.global.bagUI then
-            IM.UI.BagUI:InitializeSettings()
-        end
-        IM.db.global.bagUI.viewMode = index == 2 and "subcategory" or "category"
-        if IM.UI.BagUI and IM.UI.BagUI.Refresh then
-            IM.UI.BagUI:Refresh()
-        end
-    end
-
     -- Set items checkbox
     local setsY = layoutCard:AddContent(35)
     local setsCheck = layoutCard:AddCheckbox(
@@ -251,6 +237,8 @@ function BagUIPanel:Create(parent)
     tipsCard:AddText("- Press B to toggle bags (same as Blizzard)")
     tipsCard:AddText("- Click gold to open Tracker Dashboard")
     tipsCard:AddText("- Click gear icon to open Settings")
+    tipsCard:AddText("- Grouping is set by the |cffffb000filter buttons|r in the bag window, not here")
+    tipsCard:AddText("- |cffffb000Top Stat|r / |cffffb000Stat Pair|r group gear by secondary stats")
     tipsCard:AddText("- |cffffb000Alt+Click|r item to add to whitelist (lock/protect)")
     tipsCard:AddText("- |cffffb000Ctrl+Alt+Click|r item to add to junk list (force sell)")
 

@@ -15,6 +15,7 @@ Filters.lua
 # Modules
 Modules\BagData.lua
 Modules\CustomCategories.lua
+Modules\ItemStats.lua
 Modules\ItemLock.lua
 Modules\JunkList.lua
 Modules\CategoryExclusions.lua
