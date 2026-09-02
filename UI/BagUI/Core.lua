@@ -142,6 +142,7 @@ local SIZING = {
     SCROLL_CONTENT_INSET = 22,     -- Scroll content is inset from container (4 left + 18 scrollbar area)
     MIN_FRAME_WIDTH = 480,
     MAX_FRAME_WIDTH = 1200,
+    MIN_FRAME_HEIGHT = 300,        -- floor for content-fitted height
     -- Layout tweaks (tighter spacing)
     ITEM_GAP = 2,                  -- Gap between items (was 4, reduced for tighter packing)
     CATEGORY_PADDING = 6,          -- Padding around category content (was 10)
@@ -249,7 +250,7 @@ function BagUI:Create()
 
     -- Make it resizable
     frame:SetResizable(true)
-    frame:SetResizeBounds(480, 400, 1200, 900)
+    frame:SetResizeBounds(SIZING.MIN_FRAME_WIDTH, SIZING.MIN_FRAME_HEIGHT, SIZING.MAX_FRAME_WIDTH, 900)
 
     -- Header using DRY CreateHeader
     local header = UI:CreateHeader(frame, "InventoryManager Bags")
@@ -525,16 +526,16 @@ function BagUI:Create()
 
         local track = meter:CreateTexture(nil, "ARTWORK")
         track:SetTexture("Interface\\Buttons\\WHITE8X8")
-        track:SetSize(58, 4)
+        track:SetSize(64, 5)
         track:SetPoint("RIGHT", meter, "RIGHT", 0, 0)
-        track:SetVertexColor(unpack(UI.colors.backgroundDark))
+        track:SetVertexColor(unpack(UI.colors.border))
         meter.track = track
 
         local fill = meter:CreateTexture(nil, "OVERLAY")
         fill:SetTexture("Interface\\Buttons\\WHITE8X8")
-        fill:SetHeight(4)
+        fill:SetHeight(5)
         fill:SetPoint("LEFT", track, "LEFT", 0, 0)
-        fill:SetVertexColor(unpack(UI.colors.textDisabled))
+        fill:SetVertexColor(unpack(UI.colors.textDim))
         meter.fill = fill
 
         return meter
@@ -663,6 +664,38 @@ function BagUI:Refresh()
     if BagUI.CategoryView then
         BagUI.CategoryView:Refresh(_bagFrame.scrollContent)
     end
+
+    -- Content height is only known once the view has laid itself out
+    self:FitHeightToContent()
+end
+
+--[[
+    Shrink the window to the height its content actually needs.
+
+    The height slider stops being a fixed size and becomes a CEILING: a bag
+    holding six categories no longer leaves two thirds of the frame empty, but
+    a full bag still grows to whatever the user allowed. Chrome height is
+    measured off the live frame rather than summed from constants, so it stays
+    correct if the header, search bar or filter row ever change size.
+]]
+function BagUI:FitHeightToContent()
+    if not _bagFrame then return end
+
+    local container = _bagFrame.contentContainer
+    local content = _bagFrame.scrollContent
+    if not container or not content then return end
+
+    local chrome = _bagFrame:GetHeight() - container:GetHeight()
+    if chrome <= 0 then return end  -- layout not settled yet
+
+    local maxHeight = self:GetSettings().height or 500
+    local needed = chrome + content:GetHeight() + UI.layout.padding
+    local target = math.max(SIZING.MIN_FRAME_HEIGHT, math.min(maxHeight, needed))
+
+    -- Sub-pixel churn would fight the layout every refresh
+    if math.abs(_bagFrame:GetHeight() - target) < 1 then return end
+
+    _bagFrame:SetHeight(target)
 end
 
 function BagUI:UpdateGoldDisplay()
@@ -707,7 +740,7 @@ function BagUI:UpdateBagSpace()
     -- Dynamic threshold: warn when less than 10% free or less than 5 slots
     local threshold = math.max(math.floor(totalSlots * 0.1), 5)
     local isTight = totalFree < threshold
-    local fillColor = isTight and UI.colors.error or UI.colors.textDisabled
+    local fillColor = isTight and UI.colors.error or UI.colors.textDim
 
     local function ApplyMeter(meter, used, total)
         if not meter then return end
@@ -723,8 +756,8 @@ function BagUI:UpdateBagSpace()
 
         local trackWidth = meter.track:GetWidth()
         local ratio = math.min(used / total, 1)
-        -- Keep a hairline visible at 0% so the meter never looks broken
-        meter.fill:SetWidth(math.max(trackWidth * ratio, 1))
+        -- A nearly-empty bag still needs a visible nub, or the meter reads as broken
+        meter.fill:SetWidth(math.max(trackWidth * ratio, 3))
         meter.fill:SetVertexColor(unpack(fillColor))
     end
 
@@ -735,8 +768,15 @@ end
 function BagUI:OnResize()
     if not _bagFrame then return end
 
-    -- Save size and position
+    -- Save size and position. Persisting the dragged height matters now that
+    -- FitHeightToContent treats settings.height as its ceiling: without this a
+    -- manual resize would be undone by the next refresh.
     self:SavePosition()
+
+    if not IM.db.global.bagUI then
+        self:InitializeSettings()
+    end
+    IM.db.global.bagUI.height = math.floor(_bagFrame:GetHeight() + 0.5)
 
     -- Trigger category view to reflow
     if BagUI.CategoryView then
