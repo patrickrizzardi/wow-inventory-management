@@ -414,6 +414,10 @@ end
 
 local STAT_FALLBACK_ORDER = 500
 
+-- Recent sorts above equipment sets (0+) and every normal category (100+),
+-- in every grouping mode.
+local RECENT_ORDER = -1000
+
 -- Resolve a stat group label for gear, or nil when the item is not gear
 local function _StatGroupFor(item, resolve)
     local ItemStats = IM:GetModule("ItemStats")
@@ -473,8 +477,9 @@ end
 
 -- Pull equipment-set items into their own categories. Returns the set categories
 -- and a lookup of which items were consumed by them.
-local function _ExtractEquipmentSets(items)
-    local categories, claimed = {}, {}
+local function _ExtractEquipmentSets(items, claimed)
+    local categories = {}
+    claimed = claimed or {}
 
     local settings = BagUI:GetSettings()
     if not settings.showItemSets then return categories, claimed end
@@ -482,7 +487,7 @@ local function _ExtractEquipmentSets(items)
 
     local byName = {}
     for _, item in ipairs(items) do
-        local sets = IM.Filters:GetEquipmentSets(item.itemID)
+        local sets = (not claimed[item]) and IM.Filters:GetEquipmentSets(item.itemID) or nil
         if sets and #sets > 0 then
             claimed[item] = true
             for _, setName in ipairs(sets) do
@@ -518,7 +523,31 @@ end
 function CategoryView:Organize(items, modeName)
     local classify = VIEW_MODES[modeName] or VIEW_MODES.category
 
-    local categories, claimed = _ExtractEquipmentSets(items)
+    -- Recent is claimed FIRST so a newly looted set piece appears under Recent
+    -- rather than being absorbed into its equipment set.
+    local claimed = {}
+    local categories = {}
+
+    local Recent = IM:GetModule("RecentItems")
+    if Recent and Recent:IsEnabled() then
+        local recent = {}
+        for _, item in ipairs(items) do
+            if Recent:IsRecent(item.bagID, item.slotID) then
+                claimed[item] = true
+                table.insert(recent, item)
+            end
+        end
+
+        if #recent > 0 then
+            table.insert(categories, { name = "Recent", items = recent, order = RECENT_ORDER })
+        end
+    end
+
+    local setCategories = _ExtractEquipmentSets(items, claimed)
+    for _, category in ipairs(setCategories) do
+        table.insert(categories, category)
+    end
+
     local categoryMap = {}
 
     for _, item in ipairs(items) do

@@ -27,6 +27,11 @@ local ItemButton = BagUI.ItemButton
 -- Stroke width of the quality ring we draw in place of Blizzard's IconBorder
 local QUALITY_RING_THICKNESS = 2
 
+-- Recent marker sits OUTSIDE the quality ring (negative offset) so the two
+-- read as separate signals rather than one thick border.
+local RECENT_RING_THICKNESS = 2
+local RECENT_RING_OFFSET = -2
+
 -- Button pool
 local _buttonPool = {}
 local _activeButtons = {}
@@ -103,6 +108,25 @@ local _debugDumped = false
     SetNormalTexture(nil) on an ItemButton did exactly that - it errored during
     pool creation, so no buttons existed and every category rendered empty.
 ]]
+-- Pulse for the recent marker. Alpha only: the ring sits outside the icon, so
+-- scaling it would push it into the neighbouring slot.
+--
+-- The group is created on the ring's OWN frame, not on the button: an
+-- animation group animates the region it belongs to, so putting it on the
+-- button would fade the item icon along with the marker.
+local function _CreateRecentPulse(host)
+    local group = host:CreateAnimationGroup()
+    group:SetLooping("BOUNCE")
+
+    local fade = group:CreateAnimation("Alpha")
+    fade:SetFromAlpha(1)
+    fade:SetToAlpha(0.25)
+    fade:SetDuration(0.9)
+    fade:SetSmoothing("IN_OUT")
+
+    return group
+end
+
 local function _StripBlizzardChrome(button)
     local ok, err = pcall(function()
         local normal = button.GetNormalTexture and button:GetNormalTexture()
@@ -160,6 +184,25 @@ function ItemButton:CreateButton(index)
         sublayer = 0,
     })
     button._imQualityRing:Hide()
+
+    -- Recent marker. Deliberately NOT an OverlayFactory state: those are
+    -- mutually exclusive by priority, and "recently acquired" is orthogonal to
+    -- locked / sellable / mail-routed - an item can be any of those AND new.
+    local recentHost = CreateFrame("Frame", nil, button)
+    recentHost:SetAllPoints(button)
+    recentHost:SetFrameLevel(button:GetFrameLevel() + 1)
+    button._imRecentHost = recentHost
+
+    button._imRecentRing = UI:AttachRing(recentHost, {
+        thickness = RECENT_RING_THICKNESS,
+        offset = RECENT_RING_OFFSET,
+        layer = "OVERLAY",
+        sublayer = 1,
+        color = UI.colors.accentBright,
+    })
+    button._imRecentRing:Hide()
+
+    button._imRecentPulse = _CreateRecentPulse(recentHost)
     
     -- Store reference to our bag/slot (for overlay system)
     button._imBagID = nil
@@ -392,6 +435,28 @@ function ItemButton:SetItem(button, bagID, slotID)
                 button._imQualityRing:Show()
             else
                 button._imQualityRing:Hide()
+            end
+        end
+
+        -- Recent marker
+        local Recent = IM:GetModule("RecentItems")
+        local isRecent = Recent and Recent:IsEnabled() and Recent:IsRecent(bagID, slotID)
+
+        if button._imRecentRing then
+            if isRecent then
+                button._imRecentRing:Show()
+                if button._imRecentPulse and not button._imRecentPulse:IsPlaying() then
+                    button._imRecentPulse:Play()
+                end
+            else
+                button._imRecentRing:Hide()
+                if button._imRecentPulse and button._imRecentPulse:IsPlaying() then
+                    button._imRecentPulse:Stop()
+                end
+                -- Stop leaves the host at whatever alpha the pulse reached
+                if button._imRecentHost then
+                    button._imRecentHost:SetAlpha(1)
+                end
             end
         end
 

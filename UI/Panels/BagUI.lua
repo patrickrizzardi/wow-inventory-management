@@ -172,6 +172,24 @@ function BagUIPanel:Create(parent)
         end
     end
 
+    -- Recent section toggle
+    local recentY = layoutCard:AddContent(35)
+    local recentCheck = layoutCard:AddCheckbox(
+        "Pin a Recent section to the top",
+        IM.db.global.bagUI and IM.db.global.bagUI.showRecentSection ~= false,
+        "Newly looted, mailed or withdrawn items appear at the top with a pulsing marker until you close the bag"
+    )
+    recentCheck:SetPoint("TOPLEFT", layoutCard, "TOPLEFT", layoutCard._leftPadding, recentY)
+    recentCheck.checkbox.OnValueChanged = function(self, value)
+        if not IM.db.global.bagUI then
+            IM.UI.BagUI:InitializeSettings()
+        end
+        IM.db.global.bagUI.showRecentSection = value
+        if IM.UI.BagUI and IM.UI.BagUI.Refresh then
+            IM.UI.BagUI:Refresh()
+        end
+    end
+
     -- Height slider
     local heightY = layoutCard:AddContent(50)
     local heightSlider = UI:CreateSlider(layoutCard, "Window height", 400, 900, 50, IM.db.global.bagUI and IM.db.global.bagUI.height or 500)
@@ -223,6 +241,7 @@ function BagUIPanel:Create(parent)
     tipsCard:AddText("- |cffffb000Top Stat|r / |cffffb000Stat Pair|r group gear by secondary stats")
     tipsCard:AddText("- |cffffb000Alt+Click|r item to add to whitelist (lock/protect)")
     tipsCard:AddText("- |cffffb000Ctrl+Alt+Click|r item to add to junk list (force sell)")
+    tipsCard:AddText("- |cffffb000Recent|r clears when you close the bag, not on a timer")
 
     content:AdvanceY(tipsCard:GetContentHeight() + UI.layout.cardSpacing)
 
