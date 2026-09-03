@@ -18,11 +18,7 @@ function MailPopup:Create()
     local popup = CreateFrame("Frame", "InventoryManagerMailPopup", UIParent, "BackdropTemplate")
     popup:SetSize(280, 200)
     popup:SetPoint("TOPLEFT", MailFrame or UIParent, "TOPRIGHT", UI.layout.cardSpacing, 0)
-    popup:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
+    UI:MakeRounded(popup, UI.layout.radius)
     popup:SetBackdropColor(unpack(UI.colors.background))
     popup:SetBackdropBorderColor(unpack(UI.colors.border))
     popup:SetFrameStrata("DIALOG")
@@ -37,35 +33,12 @@ function MailPopup:Create()
     -- Register for Escape key closing (standard WoW pattern)
     tinsert(UISpecialFrames, "InventoryManagerMailPopup")
 
-    -- Title bar (inset by 1px for border)
-    local titleBar = CreateFrame("Frame", nil, popup, "BackdropTemplate")
-    titleBar:SetHeight(UI.layout.iconSize)
-    titleBar:SetPoint("TOPLEFT", UI.layout.borderSize, -UI.layout.borderSize)
-    titleBar:SetPoint("TOPRIGHT", -UI.layout.borderSize, -UI.layout.borderSize)
-    titleBar:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
-    titleBar:SetBackdropColor(unpack(UI.colors.headerBar))
-
-    local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    title:SetPoint("LEFT", UI.layout.elementSpacing, 0)
-    title:SetText(UI:ColorText("Mail Helper", "accent"))
-
-    -- Close button
-    local closeBtnSize = UI.layout.iconSizeSmall
-    local closeBtn = CreateFrame("Button", nil, titleBar)
-    closeBtn:SetSize(closeBtnSize, closeBtnSize)
-    closeBtn:SetPoint("RIGHT", -2, 0)
-    closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    closeBtn.text:SetPoint("CENTER")
-    closeBtn.text:SetText("|cffff6666X|r")
-    closeBtn:SetScript("OnClick", function() popup:Hide() end)
-    closeBtn:SetScript("OnEnter", function(self) self.text:SetText("|cffff0000X|r") end)
-    closeBtn:SetScript("OnLeave", function(self) self.text:SetText("|cffff6666X|r") end)
+    -- Title bar
+    local header = UI:CreateHeader(popup, "Mail Helper")
 
     -- Content area
     local content = CreateFrame("Frame", nil, popup)
-    content:SetPoint("TOPLEFT", UI.layout.elementSpacing, -(UI.layout.iconSize + UI.layout.paddingSmall))
+    content:SetPoint("TOPLEFT", header, "BOTTOMLEFT", UI.layout.elementSpacing, -UI.layout.paddingSmall)
     content:SetPoint("BOTTOMRIGHT", -UI.layout.elementSpacing, UI.layout.bottomBarHeight)
     popup.content = content
 
@@ -127,7 +100,7 @@ function MailPopup:Create()
     -- Loot status text (shows progress during looting)
     local lootStatus = bottomBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     lootStatus:SetPoint("LEFT", lootAllBtn, "RIGHT", 6, 0)
-    lootStatus:SetTextColor(0.7, 0.7, 0.7, 1)
+    lootStatus:SetTextColor(unpack(UI.colors.textDim))
     lootStatus:Hide()
     popup.lootStatus = lootStatus
 
@@ -160,7 +133,7 @@ function MailPopup:Refresh()
     end
 
     if not summary or summary.totalItems == 0 then
-        _popup.statusText:SetText("|cff888888No items queued.\nAdd rules in Settings > Mail Helper.|r")
+        _popup.statusText:SetText(UI:ColorText("No items queued.\nAdd rules in Settings > Mail Helper.", "dim"))
         _popup.sendAllBtn:Hide()
         _popup.scrollFrame:Hide()
         _popup:SetHeight(100)
@@ -170,7 +143,7 @@ function MailPopup:Refresh()
     _popup.scrollFrame:Show()
 
     -- Show summary
-    _popup.statusText:SetText("|cff00ff00" .. summary.totalItems .. " items|r queued for |cffffff00" .. summary.totalAlts .. " alt(s)|r")
+    _popup.statusText:SetText(UI:ColorText(summary.totalItems .. " items", "success") .. " queued for " .. UI:ColorText(summary.totalAlts .. " alt(s)", "info"))
 
     -- Build detailed list per alt
     local yOffset = 0
@@ -185,12 +158,12 @@ function MailPopup:Refresh()
             altHeader:SetHeight(UI.layout.buttonHeightSmall)
             altHeader:SetPoint("TOPLEFT", 0, yOffset)
             altHeader:SetPoint("RIGHT", 0, 0)
-            altHeader:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
-            altHeader:SetBackdropColor(0.15, 0.12, 0.05, 1) -- warm amber tint
+            UI:MakeRounded(altHeader, UI.layout.radiusSmall, true)
+            altHeader:SetBackdropColor(unpack(UI.colors.backgroundLight)) -- neutral surface: this groups an alt's items, not a selection state or a money value
 
             local altLabel = altHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             altLabel:SetPoint("LEFT", UI.layout.paddingSmall, 0)
-            altLabel:SetText("|cffffff00" .. altName .. "|r |cff888888(" .. #queueData.items .. " items)|r")
+            altLabel:SetText(UI:ColorText(altName, "info") .. " " .. UI:ColorText("(" .. #queueData.items .. " items)", "dim"))
 
             -- Send button for this alt
             local sendBtn = UI:CreateButton(altHeader, "Send", 40, UI.layout.iconSize - 2)

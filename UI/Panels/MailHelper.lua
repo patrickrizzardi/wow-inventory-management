@@ -28,7 +28,7 @@ function MailHelperPanel:Create(parent)
     local enableCheck = configCard:AddCheckbox(
         "Enable Mail Helper",
         IM.db.global.mailHelper.enabled,
-        "|cff666666Shows popup with matched items when you open a mailbox|r"
+        UI:ColorText("Shows popup with matched items when you open a mailbox", "dim")
     )
     enableCheck.checkbox.OnValueChanged = function(self, checked)
         IM.db.global.mailHelper.enabled = checked
@@ -54,7 +54,7 @@ function MailHelperPanel:Create(parent)
     local autoLootCheck = lootCard:AddCheckbox(
         "Auto-loot mail when mailbox opens",
         IM.db.global.mailHelper.autoLootOnOpen,
-        "|cff666666Starts looting all mail automatically when you open a mailbox|r"
+        UI:ColorText("Starts looting all mail automatically when you open a mailbox", "dim")
     )
     autoLootCheck.checkbox.OnValueChanged = function(self, checked)
         IM.db.global.mailHelper.autoLootOnOpen = checked
@@ -63,7 +63,7 @@ function MailHelperPanel:Create(parent)
     local skipCODCheck = lootCard:AddCheckbox(
         "Skip COD mail when looting",
         IM.db.global.mailHelper.skipCOD,
-        "|cff666666Prevents accidentally paying for Cash-On-Delivery mail|r"
+        UI:ColorText("Prevents accidentally paying for Cash-On-Delivery mail", "dim")
     )
     skipCODCheck.checkbox.OnValueChanged = function(self, checked)
         IM.db.global.mailHelper.skipCOD = checked
@@ -88,12 +88,8 @@ function MailHelperPanel:Create(parent)
     nameInput:SetFontObject("GameFontNormalSmall")
     nameInput:SetAutoFocus(false)
     nameInput:SetMaxLetters(20)
-    nameInput:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    nameInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
+    UI:MakeRounded(nameInput, UI.layout.radiusSmall)
+    nameInput:SetBackdropColor(unpack(UI.colors.backgroundDark))
     nameInput:SetBackdropBorderColor(unpack(UI.colors.border))
     nameInput:SetTextInsets(6, 6, 0, 0)
     nameInput:SetTextColor(unpack(UI.colors.text))
@@ -101,7 +97,7 @@ function MailHelperPanel:Create(parent)
     local namePlaceholder = nameInput:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     namePlaceholder:SetPoint("LEFT", 6, 0)
     namePlaceholder:SetText("Rule Name...")
-    namePlaceholder:SetTextColor(0.4, 0.4, 0.4, 1)
+    namePlaceholder:SetTextColor(unpack(UI.colors.textDisabled))
 
     nameInput:SetScript("OnEditFocusGained", function(self)
         namePlaceholder:Hide()
@@ -120,12 +116,8 @@ function MailHelperPanel:Create(parent)
     filterInput:SetFontObject("GameFontNormalSmall")
     filterInput:SetAutoFocus(false)
     filterInput:SetMaxLetters(10)
-    filterInput:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    filterInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
+    UI:MakeRounded(filterInput, UI.layout.radiusSmall)
+    filterInput:SetBackdropColor(unpack(UI.colors.backgroundDark))
     filterInput:SetBackdropBorderColor(unpack(UI.colors.border))
     filterInput:SetTextInsets(6, 6, 0, 0)
     filterInput:SetTextColor(unpack(UI.colors.text))
@@ -133,7 +125,7 @@ function MailHelperPanel:Create(parent)
     local filterPlaceholder = filterInput:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     filterPlaceholder:SetPoint("LEFT", 6, 0)
     filterPlaceholder:SetText("7 or 7_8")
-    filterPlaceholder:SetTextColor(0.4, 0.4, 0.4, 1)
+    filterPlaceholder:SetTextColor(unpack(UI.colors.textDisabled))
 
     filterInput:SetScript("OnEditFocusGained", function(self)
         filterPlaceholder:Hide()
@@ -154,12 +146,8 @@ function MailHelperPanel:Create(parent)
     recipientInput:SetFontObject("GameFontNormalSmall")
     recipientInput:SetAutoFocus(false)
     recipientInput:SetMaxLetters(30)
-    recipientInput:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    recipientInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
+    UI:MakeRounded(recipientInput, UI.layout.radiusSmall)
+    recipientInput:SetBackdropColor(unpack(UI.colors.backgroundDark))
     recipientInput:SetBackdropBorderColor(unpack(UI.colors.border))
     recipientInput:SetTextInsets(6, 6, 0, 0)
     recipientInput:SetTextColor(unpack(UI.colors.text))
@@ -167,18 +155,14 @@ function MailHelperPanel:Create(parent)
     local recipientPlaceholder = recipientInput:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     recipientPlaceholder:SetPoint("LEFT", 6, 0)
     recipientPlaceholder:SetText("Recipient Alt Name")
-    recipientPlaceholder:SetTextColor(0.4, 0.4, 0.4, 1)
+    recipientPlaceholder:SetTextColor(unpack(UI.colors.textDisabled))
 
     -- Dropdown button
     local dropdownBtn = CreateFrame("Button", nil, rulesCard, "BackdropTemplate")
     dropdownBtn:SetSize(UI.layout.rowHeightSmall, UI.layout.rowHeightSmall)
     dropdownBtn:SetPoint("LEFT", recipientInput, "RIGHT", 2, 0)
-    dropdownBtn:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    dropdownBtn:SetBackdropColor(0.15, 0.15, 0.15, 1)
+    UI:MakeRounded(dropdownBtn, UI.layout.radiusSmall)
+    dropdownBtn:SetBackdropColor(unpack(UI.colors.backgroundLight))
     dropdownBtn:SetBackdropBorderColor(unpack(UI.colors.border))
 
     local dropdownArrow = dropdownBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -192,12 +176,8 @@ function MailHelperPanel:Create(parent)
         if not dropdownMenu then
             dropdownMenu = CreateFrame("Frame", nil, rulesCard, "BackdropTemplate")
             dropdownMenu:SetFrameStrata("TOOLTIP")
-            dropdownMenu:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = UI.layout.borderSize,
-            })
-            dropdownMenu:SetBackdropColor(0.1, 0.1, 0.1, 0.98)
+            UI:MakeRounded(dropdownMenu, UI.layout.radiusSmall)
+            dropdownMenu:SetBackdropColor(UI.colors.backgroundDark[1], UI.colors.backgroundDark[2], UI.colors.backgroundDark[3], 0.98)
             dropdownMenu:SetBackdropBorderColor(unpack(UI.colors.accent))
             dropdownMenu:SetPoint("TOP", recipientInput, "BOTTOM", 0, -2)
             dropdownMenu.buttons = {}
@@ -256,11 +236,11 @@ function MailHelperPanel:Create(parent)
         else ShowAltDropdown("") end
     end)
     dropdownBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(0.25, 0.25, 0.25, 1)
+        self:SetBackdropColor(unpack(UI.colors.surfaceRaised))
         self:SetBackdropBorderColor(unpack(UI.colors.accent))
     end)
     dropdownBtn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(0.15, 0.15, 0.15, 1)
+        self:SetBackdropColor(unpack(UI.colors.backgroundLight))
         self:SetBackdropBorderColor(unpack(UI.colors.border))
     end)
 
@@ -304,7 +284,7 @@ function MailHelperPanel:Create(parent)
 
     local noRulesLabel = rulesContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     noRulesLabel:SetPoint("TOPLEFT", 0, 0)
-    noRulesLabel:SetText("|cff888888No rules configured. Add one above.|r")
+    noRulesLabel:SetText(UI:ColorText("No rules configured. Add one above.", "dim"))
     noRulesLabel:Hide()
 
     local function RefreshRulesList()
@@ -323,23 +303,15 @@ function MailHelperPanel:Create(parent)
             row:SetHeight(ROW_HEIGHT)
             row:SetPoint("TOPLEFT", 0, listY)
             row:SetPoint("RIGHT", rulesContainer, "RIGHT", 0, 0)
-            row:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = UI.layout.borderSize,
-            })
-            row:SetBackdropColor(0.12, 0.12, 0.12, 1)
-            row:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
+            UI:MakeRounded(row, UI.layout.radiusSmall)
+            row:SetBackdropColor(unpack(UI.colors.background))
+            row:SetBackdropBorderColor(unpack(UI.colors.borderLight))
 
             local enableBox = CreateFrame("CheckButton", nil, row, "BackdropTemplate")
             enableBox:SetSize(UI.layout.iconSizeSmall, UI.layout.iconSizeSmall)
             enableBox:SetPoint("LEFT", 4, 0)
-            enableBox:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = UI.layout.borderSize,
-            })
-            enableBox:SetBackdropColor(0.1, 0.1, 0.1, 1)
+            UI:MakeRounded(enableBox, UI.layout.radiusSmall)
+            enableBox:SetBackdropColor(unpack(UI.colors.backgroundDark))
             enableBox:SetBackdropBorderColor(unpack(UI.colors.border))
             enableBox.check = enableBox:CreateTexture(nil, "OVERLAY")
             enableBox.check:SetSize(UI.layout.iconSizeSmall - 4, UI.layout.iconSizeSmall - 4)
@@ -377,27 +349,27 @@ function MailHelperPanel:Create(parent)
             label:SetPoint("RIGHT", row, "RIGHT", -30, 0)
             label:SetJustifyH("LEFT")
             label:SetWordWrap(false)
-            label:SetText((rule.name or "Unnamed") .. " |cff888888→ " .. altName .. " | " .. filterText .. "|r")
+            label:SetText((rule.name or "Unnamed") .. " " .. UI:ColorText("→ " .. altName .. " | " .. filterText, "dim"))
 
             local removeBtn = CreateFrame("Button", nil, row, "BackdropTemplate")
             removeBtn:SetSize(UI.layout.buttonHeightSmall, UI.layout.buttonHeightSmall)
             removeBtn:SetPoint("RIGHT", -2, 0)
-            removeBtn:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
-            removeBtn:SetBackdropColor(0.3, 0.1, 0.1, 1)
+            UI:MakeRounded(removeBtn, UI.layout.radiusSmall, true)
+            removeBtn:SetBackdropColor(UI.colors.error[1], UI.colors.error[2], UI.colors.error[3], 0.35)
             removeBtn.text = removeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             removeBtn.text:SetPoint("CENTER")
-            removeBtn.text:SetText("|cffff6666X|r")
+            removeBtn.text:SetText(UI:ColorText("X", "error"))
             removeBtn:SetScript("OnClick", function()
                 if IM.modules.MailHelper then IM.modules.MailHelper:RemoveRule(i) end
                 IM:RefreshAllUI()
             end)
             removeBtn:SetScript("OnEnter", function(self)
-                self:SetBackdropColor(0.5, 0.1, 0.1, 1)
-                self.text:SetText("|cffff0000X|r")
+                self:SetBackdropColor(UI.colors.error[1], UI.colors.error[2], UI.colors.error[3], 0.75)
+                self.text:SetText(UI:ColorText("X", "error"))
             end)
             removeBtn:SetScript("OnLeave", function(self)
-                self:SetBackdropColor(0.3, 0.1, 0.1, 1)
-                self.text:SetText("|cffff6666X|r")
+                self:SetBackdropColor(UI.colors.error[1], UI.colors.error[2], UI.colors.error[3], 0.35)
+                self.text:SetText(UI:ColorText("X", "error"))
             end)
 
             listY = listY - (ROW_HEIGHT + 2)

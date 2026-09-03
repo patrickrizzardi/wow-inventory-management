@@ -27,11 +27,7 @@ function AutoSellPopup:Create()
     local popup = CreateFrame("Frame", "InventoryManagerAutoSellPopup", UIParent, "BackdropTemplate")
     popup:SetSize(280, 260)
     popup:SetPoint("TOPLEFT", MerchantFrame or UIParent, "TOPRIGHT", UI.layout.cardSpacing, 0)
-    popup:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
+    UI:MakeRounded(popup, UI.layout.radius)
     popup:SetBackdropColor(unpack(UI.colors.background))
     popup:SetBackdropBorderColor(unpack(UI.colors.border))
     popup:SetFrameStrata("DIALOG")
@@ -46,41 +42,16 @@ function AutoSellPopup:Create()
     -- Register for Escape key closing
     tinsert(UISpecialFrames, "InventoryManagerAutoSellPopup")
 
-    -- Title bar (inset by 1px for border, match content padding on sides)
-    local titleBar = CreateFrame("Frame", nil, popup, "BackdropTemplate")
-    titleBar:SetHeight(UI.layout.iconSize)
-    titleBar:SetPoint("TOPLEFT", UI.layout.borderSize, -UI.layout.borderSize)
-    titleBar:SetPoint("TOPRIGHT", -UI.layout.borderSize, -UI.layout.borderSize)
-    titleBar:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
-    titleBar:SetBackdropColor(unpack(UI.colors.headerBar))
-
-    local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    title:SetPoint("LEFT", UI.layout.elementSpacing, 0)
-    title:SetText(UI:ColorText("Auto-Sell", "accent"))
-
-    -- Close button
-    local closeBtnSize = UI.layout.iconSizeSmall
-    local closeBtn = CreateFrame("Button", nil, titleBar)
-    closeBtn:SetSize(closeBtnSize, closeBtnSize)
-    closeBtn:SetPoint("RIGHT", -2, 0)
-    closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    closeBtn.text:SetPoint("CENTER")
-    closeBtn.text:SetText("|cffff6666X|r")
-    closeBtn:SetScript("OnClick", function() popup:Hide() end)
-    closeBtn:SetScript("OnEnter", function(self) self.text:SetText("|cffff0000X|r") end)
-    closeBtn:SetScript("OnLeave", function(self) self.text:SetText("|cffff6666X|r") end)
+    -- Title bar
+    local header = UI:CreateHeader(popup, "Auto-Sell")
 
     -- Summary section
     local summaryBox = CreateFrame("Frame", nil, popup, "BackdropTemplate")
     summaryBox:SetHeight(50)
-    summaryBox:SetPoint("TOPLEFT", UI.layout.elementSpacing, -(UI.layout.iconSize + UI.layout.paddingSmall))
+    summaryBox:SetPoint("TOPLEFT", header, "BOTTOMLEFT", UI.layout.elementSpacing, -UI.layout.paddingSmall)
     summaryBox:SetPoint("RIGHT", -UI.layout.elementSpacing, 0)
-    summaryBox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
-    summaryBox:SetBackdropColor(0.12, 0.12, 0.12, 1)
+    UI:MakeRounded(summaryBox, UI.layout.radius, true)
+    summaryBox:SetBackdropColor(unpack(UI.colors.background))
 
     local itemCountLabel = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     itemCountLabel:SetPoint("TOPLEFT", UI.layout.cardSpacing, -UI.layout.padding)
@@ -88,7 +59,7 @@ function AutoSellPopup:Create()
 
     local totalValueLabel = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     totalValueLabel:SetPoint("TOPLEFT", UI.layout.cardSpacing, -(UI.layout.rowHeightSmall + 2))
-    totalValueLabel:SetTextColor(1, 0.84, 0, 1)
+    totalValueLabel:SetTextColor(unpack(UI.colors.money))
     popup.totalValueLabel = totalValueLabel
 
     -- Sell button (prominent)
@@ -112,10 +83,8 @@ function AutoSellPopup:Create()
     itemsBox:SetPoint("TOPLEFT", UI.layout.elementSpacing, -(UI.layout.buttonWidth + UI.layout.iconSizeSmall))
     itemsBox:SetPoint("RIGHT", -UI.layout.elementSpacing, 0)
     itemsBox:SetPoint("BOTTOM", 0, 55)
-    itemsBox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
-    itemsBox:SetBackdropColor(0.08, 0.08, 0.08, 0.8)
+    UI:MakeRounded(itemsBox, UI.layout.radiusSmall, true)
+    itemsBox:SetBackdropColor(UI.colors.backgroundDark[1], UI.colors.backgroundDark[2], UI.colors.backgroundDark[3], 0.8)
 
     -- Scroll frame for items list
     local scrollFrame = CreateFrame("ScrollFrame", nil, itemsBox, "UIPanelScrollFrameTemplate")
@@ -184,7 +153,7 @@ function AutoSellPopup:Refresh()
         _popup.totalValueLabel:SetText("Worth: " .. IM:FormatMoney(totalValue))
         _popup.sellBtn:Enable()
     else
-        _popup.itemCountLabel:SetText("|cff888888No sellable items|r")
+        _popup.itemCountLabel:SetText(UI:ColorText("No sellable items", "dim"))
         _popup.totalValueLabel:SetText("")
         _popup.sellBtn:Disable()
     end
@@ -251,7 +220,7 @@ function AutoSellPopup:RefreshItems(sellableItems)
         -- Value
         local valueLabel = itemRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         valueLabel:SetPoint("RIGHT", -UI.layout.paddingSmall, 0)
-        valueLabel:SetTextColor(1, 0.84, 0, 1)
+        valueLabel:SetTextColor(unpack(UI.colors.money))
         if item.totalValue and item.totalValue > 0 then
             valueLabel:SetText(IM:FormatMoney(item.totalValue))
         end
@@ -263,7 +232,7 @@ function AutoSellPopup:RefreshItems(sellableItems)
     if #sellableItems > maxItems then
         local moreLabel = scrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         moreLabel:SetPoint("TOPLEFT", UI.layout.paddingSmall, yOffset)
-        moreLabel:SetText("|cff888888... and " .. (#sellableItems - maxItems) .. " more|r")
+        moreLabel:SetText(UI:ColorText("... and " .. (#sellableItems - maxItems) .. " more", "dim"))
         yOffset = yOffset - rowHeight
     end
 
@@ -273,7 +242,7 @@ function AutoSellPopup:RefreshItems(sellableItems)
             scrollContent.noDataLabel = scrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             scrollContent.noDataLabel:SetPoint("TOPLEFT", UI.layout.paddingSmall, 0)
         end
-        scrollContent.noDataLabel:SetText("|cff888888All items are protected or excluded|r")
+        scrollContent.noDataLabel:SetText(UI:ColorText("All items are protected or excluded", "dim"))
         scrollContent.noDataLabel:Show()
         yOffset = -rowHeight
         scrollContent:SetHeight(math.max(math.abs(yOffset), 1))
