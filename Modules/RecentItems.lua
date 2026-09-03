@@ -19,6 +19,15 @@
     called when the bag closes: open the bag, see what is new, close it, and
     the items return to their normal categories.
 
+    Blizzard's flags only cover items that arrived while you were NOT looking.
+    Anything that lands while the bag is already open - dungeon loot with bags
+    up - is never flagged, and a stack top-up is never flagged either because
+    the slot already held that item. Both showed up as Recent "randomly
+    missing" things. BagData already diffs bag contents, so those two gaps are
+    closed by listening to it and keeping our own session-local flags
+    alongside Blizzard's. Still no timestamps, no GUIDs and no persistence -
+    "recent until you close the bag" needs none of it.
+
     Public Methods:
     - RecentItems:IsEnabled() - whether the Recent section should be built
     - RecentItems:IsRecent(bagID, slotID) - true if the slot holds a new item
@@ -48,8 +57,78 @@ local function _Available()
     return C_NewItems and C_NewItems.IsNewItem ~= nil
 end
 
+-- Our own flags, filling the two gaps in Blizzard's: [bagID][slotID] = true.
+-- Session-local by design; they are cleared when the bag closes.
+local _ownFlags = {}
+
+-- A move is a remove followed immediately by an add of the same item, and it
+-- must not read as an arrival or reorganising your bags lights every slot up.
+local _recentlyRemoved = {}
+local MOVE_WINDOW = 0.5
+
+local function _SetOwnFlag(bagID, slotID, value)
+    if bagID == nil or slotID == nil then return end
+    _ownFlags[bagID] = _ownFlags[bagID] or {}
+    _ownFlags[bagID][slotID] = value or nil
+end
+
+local function _GetOwnFlag(bagID, slotID)
+    return _ownFlags[bagID] and _ownFlags[bagID][slotID] or false
+end
+
+local function _WasJustMoved(itemID)
+    if not itemID then return false end
+    local at = _recentlyRemoved[itemID]
+    return at ~= nil and (GetTime() - at) < MOVE_WINDOW
+end
+
+function RecentItems:OnInitialize()
+    wipe(_ownFlags)
+    wipe(_recentlyRemoved)
+end
+
+function RecentItems:OnEnable()
+    local module = self
+
+    local BagData = IM:GetModule("BagData")
+    if not BagData or not BagData.RegisterCallback then return end
+
+    BagData:RegisterCallback("OnBagItemAdded", function(bagID, slotID, data)
+        -- The first scan reports the entire inventory as added
+        if not BagData:IsInitialScanComplete() then return end
+        if data and _WasJustMoved(data.itemID) then return end
+
+        _SetOwnFlag(bagID, slotID, true)
+    end)
+
+    BagData:RegisterCallback("OnBagItemChanged", function(bagID, slotID, oldData, newData)
+        if not BagData:IsInitialScanComplete() then return end
+        if not oldData or not newData then return end
+
+        -- Stack grew: Blizzard does not flag this, but it IS an acquisition
+        if newData.itemID == oldData.itemID
+            and (newData.count or 0) > (oldData.count or 0) then
+            _SetOwnFlag(bagID, slotID, true)
+        elseif newData.itemID ~= oldData.itemID then
+            -- A different item occupies the slot now: an arrival unless what
+            -- landed is something that just left another slot (a move)
+            if _WasJustMoved(newData.itemID) then
+                _SetOwnFlag(bagID, slotID, nil)
+            else
+                _SetOwnFlag(bagID, slotID, true)
+            end
+        end
+    end)
+
+    BagData:RegisterCallback("OnBagItemRemoved", function(bagID, slotID, data)
+        _SetOwnFlag(bagID, slotID, nil)
+        if data and data.itemID then
+            _recentlyRemoved[data.itemID] = GetTime()
+        end
+    end)
+end
+
 function RecentItems:IsEnabled()
-    if not _Available() then return false end
 
     local settings = IM.db and IM.db.global and IM.db.global.bagUI
     if not settings then return true end
@@ -59,23 +138,30 @@ function RecentItems:IsEnabled()
 end
 
 function RecentItems:IsRecent(bagID, slotID)
-    if not _Available() then return false end
     if bagID == nil or slotID == nil then return false end
 
+    if _GetOwnFlag(bagID, slotID) then return true end
+
+    if not _Available() then return false end
     local ok, isNew = pcall(C_NewItems.IsNewItem, bagID, slotID)
     return ok and isNew == true
 end
 
 function RecentItems:MarkSeen(bagID, slotID)
-    if not _Available() or not C_NewItems.RemoveNewItem then return end
     if bagID == nil or slotID == nil then return end
 
+    _SetOwnFlag(bagID, slotID, nil)
+
+    if not _Available() or not C_NewItems.RemoveNewItem then return end
     pcall(C_NewItems.RemoveNewItem, bagID, slotID)
 end
 
 -- Clear every flag. Called when the bag window closes: the user has now seen
 -- what arrived, so the items belong back in their normal categories.
 function RecentItems:MarkAllSeen()
+    wipe(_ownFlags)
+    wipe(_recentlyRemoved)
+
     if not _Available() then return end
 
     if C_NewItems.ClearAll then
@@ -102,28 +188,36 @@ function RecentItems:Diagnose()
         return
     end
 
-    local flagged, scanned = 0, 0
+    local scanned, byBlizzard, byUs = 0, 0, 0
     for _, bagID in ipairs(_TrackedBags()) do
         local slots = C_Container.GetContainerNumSlots(bagID) or 0
         for slotID = 1, slots do
             local info = C_Container.GetContainerItemInfo(bagID, slotID)
             if info and info.itemID then
                 scanned = scanned + 1
-                if self:IsRecent(bagID, slotID) then
-                    flagged = flagged + 1
-                    IM:Print(string.format("  new: bag %d slot %d - %s",
+
+                local ours = _GetOwnFlag(bagID, slotID)
+                local ok, theirs = pcall(C_NewItems.IsNewItem, bagID, slotID)
+                theirs = ok and theirs == true
+
+                if ours then byUs = byUs + 1 end
+                if theirs then byBlizzard = byBlizzard + 1 end
+
+                if ours or theirs then
+                    IM:Print(string.format("  new (%s): bag %d slot %d - %s",
+                        (ours and theirs and "both") or (ours and "tracked") or "blizzard",
                         bagID, slotID, tostring(info.hyperlink or info.itemID)))
                 end
             end
         end
     end
 
-    IM:Print(string.format("Recent: %d of %d occupied slots flagged new (section %s)",
-        flagged, scanned, self:IsEnabled() and "enabled" or "disabled"))
-
-    if flagged == 0 then
-        IM:Print("If you just looted something with bags CLOSED and this says 0, the client is not setting the flags and we need our own tracking.")
-    end
+    local BagData = IM:GetModule("BagData")
+    IM:Print(string.format(
+        "Recent: %d occupied slots | blizzard-flagged %d | our-tracked %d | section %s | bagdata %s",
+        scanned, byBlizzard, byUs,
+        self:IsEnabled() and "on" or "off",
+        (BagData and BagData:IsInitialScanComplete()) and "ready" or "NOT READY"))
 end
 
 function RecentItems:HasAny()
