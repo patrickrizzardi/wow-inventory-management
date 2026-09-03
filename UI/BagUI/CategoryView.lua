@@ -18,6 +18,40 @@ local CategoryView = BagUI.CategoryView
 local _headerPool = {}
 local _activeHeaders = {}
 
+local _emptyStateText = nil
+
+-- Equipment slot order (for subcategory mode)
+local EQUIPMENT_SLOT_ORDER = {
+    "INVTYPE_HEAD",
+    "INVTYPE_NECK",
+    "INVTYPE_SHOULDER",
+    "INVTYPE_CHEST",
+    "INVTYPE_ROBE",
+    "INVTYPE_CLOAK",
+    "INVTYPE_WRIST",
+    "INVTYPE_HAND",
+    "INVTYPE_WAIST",
+    "INVTYPE_LEGS",
+    "INVTYPE_FEET",
+    "INVTYPE_FINGER",
+    "INVTYPE_TRINKET",
+    "INVTYPE_WEAPON",
+    "INVTYPE_SHIELD",
+    "INVTYPE_2HWEAPON",
+    "INVTYPE_WEAPONMAINHAND",
+    "INVTYPE_WEAPONOFFHAND",
+    "INVTYPE_HOLDABLE",
+    "INVTYPE_RANGED",
+    "INVTYPE_RANGEDRIGHT",
+    "INVTYPE_THROWN",
+}
+
+-- Build lookup table for slot order
+local SLOT_ORDER_MAP = {}
+for i, slot in ipairs(EQUIPMENT_SLOT_ORDER) do
+    SLOT_ORDER_MAP[slot] = i
+end
+
 -- Empty-slot placeholders. Deliberately pooled TEXTURES, not ItemButtons: the
 -- button pool is sized to the character's actual bag slots, so drawing a
 -- placeholder per partial row would exhaust it and real items would vanish.
