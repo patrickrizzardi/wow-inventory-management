@@ -92,6 +92,40 @@ function RecentItems:MarkAllSeen()
     end
 end
 
+-- Diagnostic: report what the client currently considers new, and whether the
+-- API is even present. "No Recent section" has two very different causes -
+-- nothing is flagged, or flagging works and our display path is broken - and
+-- they are indistinguishable from the outside.
+function RecentItems:Diagnose()
+    if not _Available() then
+        IM:PrintError("C_NewItems.IsNewItem is unavailable on this client build")
+        return
+    end
+
+    local flagged, scanned = 0, 0
+    for _, bagID in ipairs(_TrackedBags()) do
+        local slots = C_Container.GetContainerNumSlots(bagID) or 0
+        for slotID = 1, slots do
+            local info = C_Container.GetContainerItemInfo(bagID, slotID)
+            if info and info.itemID then
+                scanned = scanned + 1
+                if self:IsRecent(bagID, slotID) then
+                    flagged = flagged + 1
+                    IM:Print(string.format("  new: bag %d slot %d - %s",
+                        bagID, slotID, tostring(info.hyperlink or info.itemID)))
+                end
+            end
+        end
+    end
+
+    IM:Print(string.format("Recent: %d of %d occupied slots flagged new (section %s)",
+        flagged, scanned, self:IsEnabled() and "enabled" or "disabled"))
+
+    if flagged == 0 then
+        IM:Print("If you just looted something with bags CLOSED and this says 0, the client is not setting the flags and we need our own tracking.")
+    end
+end
+
 function RecentItems:HasAny()
     if not _Available() then return false end
 
