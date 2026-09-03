@@ -5,6 +5,16 @@
 ]]
 
 local addonName, IM = ...
+
+-- Quality colours are Blizzard's (ITEM_QUALITY_COLORS), but this bag chooses
+-- which colour to paint. Heirloom ships as #00CCFF, the same cyan the UI accent
+-- now uses for selection state; it is shifted lighter here so an item border can
+-- never be mistaken for chrome. Blizzard's own tooltips and chat links are
+-- untouched - this override is local to this window.
+local _HEIRLOOM_QUALITY = (Enum and Enum.ItemQuality and Enum.ItemQuality.Heirloom) or 7
+local _QUALITY_OVERRIDE = {
+    [_HEIRLOOM_QUALITY] = { r = 0.604, g = 0.902, b = 0.961 },  -- #9AE6F5
+}
 local UI = IM.UI
 
 -- Ensure BagUI namespace exists
@@ -13,6 +23,9 @@ local BagUI = UI.BagUI
 
 BagUI.ItemButton = {}
 local ItemButton = BagUI.ItemButton
+
+-- Stroke width of the quality ring we draw in place of Blizzard's IconBorder
+local QUALITY_RING_THICKNESS = 2
 
 -- Button pool
 local _buttonPool = {}
@@ -75,6 +88,53 @@ local _debugDumped = false
 -- BUTTON CREATION (SECURE)
 -- ============================================================================
 
+--[[
+    Strip Blizzard's slot chrome so our own quality ring is the only border.
+
+    Three layers stacked on every item: the template's NormalTexture bevel
+    OUTSIDE the quality colour, the WhiteIconFrame quality border itself, and a
+    dark line baked into that frame which read as a black gap between the art
+    and the colour. Its corners also shredded whenever the icon-size setting
+    made button:SetScale a fraction.
+
+    Runs under pcall deliberately. These are another addon's template
+    internals, renamed and reshaped between patches; a failure here should cost
+    a slightly wrong border, never the whole button pool. Calling
+    SetNormalTexture(nil) on an ItemButton did exactly that - it errored during
+    pool creation, so no buttons existed and every category rendered empty.
+]]
+local function _StripBlizzardChrome(button)
+    local ok, err = pcall(function()
+        local normal = button.GetNormalTexture and button:GetNormalTexture()
+        if normal then
+            normal:SetTexture(nil)
+            normal:SetAlpha(0)
+        end
+
+        if button.IconBorder then
+            button.IconBorder:SetTexture(nil)
+            button.IconBorder:Hide()
+        end
+
+        if button.IconOverlay then
+            button.IconOverlay:Hide()
+        end
+
+        -- Art fills the slot right up to the ring, leaving no dead gap
+        if button.icon then
+            button.icon:ClearAllPoints()
+            button.icon:SetPoint("TOPLEFT", button, "TOPLEFT",
+                QUALITY_RING_THICKNESS, -QUALITY_RING_THICKNESS)
+            button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT",
+                -QUALITY_RING_THICKNESS, QUALITY_RING_THICKNESS)
+        end
+    end)
+
+    if not ok then
+        IM:Debug("[BagUI.ItemButton] Could not strip Blizzard chrome: " .. tostring(err))
+    end
+end
+
 function ItemButton:CreateButton(index)
     -- CRITICAL: Use ContainerFrameItemButtonTemplate for secure handling
     -- This template provides built-in support for right-click, equip, use, etc.
@@ -91,6 +151,15 @@ function ItemButton:CreateButton(index)
         button.BattlepayItemTexture:Hide()
         button.BattlepayItemTexture:SetAlpha(0)
     end
+
+    _StripBlizzardChrome(button)
+
+    button._imQualityRing = UI:AttachRing(button, {
+        thickness = QUALITY_RING_THICKNESS,
+        layer = "OVERLAY",
+        sublayer = 0,
+    })
+    button._imQualityRing:Hide()
     
     -- Store reference to our bag/slot (for overlay system)
     button._imBagID = nil
@@ -239,6 +308,10 @@ function ItemButton:SetItem(button, bagID, slotID)
         local texture = itemInfo.iconFileID
         if button.icon then
             button.icon:SetTexture(texture)
+            -- Blizzard bakes a dead bevelled edge into every icon file. Cropping
+            -- it lets the art fill the slot and sit flush inside the quality
+            -- border, instead of floating in a frame it does not need.
+            button.icon:SetTexCoord(unpack(UI.ICON_CROP))
             button.icon:Show()
         end
         
@@ -308,19 +381,17 @@ function ItemButton:SetItem(button, bagID, slotID)
         
         -- Set quality border
         local quality = itemInfo.quality
+        local qualityColor = nil
         if quality and quality > 1 then  -- Show border for uncommon+
-            if button.IconBorder then
-                local color = ITEM_QUALITY_COLORS[quality]
-                if color then
-                    button.IconBorder:SetVertexColor(color.r, color.g, color.b)
-                    button.IconBorder:Show()
-                else
-                    button.IconBorder:Hide()
-                end
-            end
-        else
-            if button.IconBorder then
-                button.IconBorder:Hide()
+            qualityColor = _QUALITY_OVERRIDE[quality] or ITEM_QUALITY_COLORS[quality]
+        end
+
+        if button._imQualityRing then
+            if qualityColor then
+                button._imQualityRing:SetColor(qualityColor.r, qualityColor.g, qualityColor.b)
+                button._imQualityRing:Show()
+            else
+                button._imQualityRing:Hide()
             end
         end
 

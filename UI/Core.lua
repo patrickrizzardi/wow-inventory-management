@@ -10,48 +10,72 @@ IM.UI = UI
 
 -- Theme colors (dark theme with cheddar/golden accents)
 UI.colors = {
-    -- Base colors (dark theme)
-    background = { 0.08, 0.08, 0.08, 0.95 },
-    backgroundLight = { 0.12, 0.12, 0.12, 0.95 },
-    backgroundDark = { 0.05, 0.05, 0.05, 0.95 },
-    border = { 0.3, 0.3, 0.3, 1 },
-    borderLight = { 0.5, 0.5, 0.5, 1 },
-    borderDark = { 0.2, 0.2, 0.2, 1 },
-    text = { 1, 1, 1, 1 },
-    textDim = { 0.7, 0.7, 0.7, 1 },
-    textDisabled = { 0.4, 0.4, 0.4, 1 },
+    -- Surface ramp. In a dark theme elevation is expressed as lightness, not
+    -- shadow (a black shadow on a black ground is invisible). Each step up the
+    -- stack is a lighter surface; the old palette spanned only 7% so every
+    -- surface read as one flat plane.
+    -- Opaque throughout: elevation is relative lightness, so anything showing
+    -- through the ground destroys the ramp. Each step is a visible increment;
+    -- the ground is NOT the darkest value, or the blocks have nothing to rise
+    -- above and the whole window reads black.
+    background = { 0.086, 0.086, 0.110, 1 },      -- #16161C  window ground
+    backgroundLight = { 0.125, 0.125, 0.157, 1 }, -- #202028  raised block
+    backgroundDark = { 0.047, 0.047, 0.063, 1 },  -- #0C0C10  inset well (search, pills)
+    surfaceRaised = { 0.165, 0.165, 0.204, 1 },   -- #2A2A34  hovered item
+    border = { 0.137, 0.137, 0.188, 1 },          -- #232330  quieter, used rarely
+    borderLight = { 0.20, 0.20, 0.25, 1 },
+    borderDark = { 0.09, 0.09, 0.12, 1 },
 
-    -- Refined gold palette (darker, less saturated to match emblem)
-    accent = { 0.85, 0.60, 0.10, 1 },       -- #D9991A darker gold
-    accentHover = { 0.95, 0.70, 0.15, 1 },  -- slightly brighter on hover
-    accentBright = { 1.0, 0.75, 0.20, 1 },  -- for emphasis only
-    accentDim = { 0.6, 0.45, 0.10, 1 },     -- muted for backgrounds
-    accentMuted = { 0.35, 0.28, 0.10, 1 },  -- very subtle for selected tabs
+    -- Fake a light source from above: 1px lighter along a surface's top edge,
+    -- 1px darker along its bottom. This is what reads as "raised" on near-black.
+    rimTop = { 1, 1, 1, 0.07 },
+    rimTopStrong = { 1, 1, 1, 0.11 },
+    rimBottom = { 0, 0, 0, 0.55 },
+
+    text = { 0.925, 0.925, 0.945, 1 },      -- #ECECF1
+    textDim = { 0.549, 0.549, 0.608, 1 },   -- #8C8C9B  dimmed harder than before
+    textDisabled = { 0.353, 0.353, 0.412, 1 },
+
+    -- Accent = STATE only: active filter, focus, selection. Cyan clears every
+    -- item quality colour except Heirloom, which is overridden in ItemButton.
+    accent = { 0.247, 0.663, 0.961, 1 },    -- #3FA9F5  pulled bluer, off cyan
+    accentHover = { 0.498, 0.788, 0.984, 1 },-- #7FC9FB  text on a wash
+    accentBright = { 0.659, 0.863, 0.992, 1 },-- #A8DCFD emphasis only
+    accentDim = { 0.145, 0.384, 0.573, 1 },  -- #256292  1px ring on a selected control
+    accentMuted = { 0.071, 0.145, 0.212, 1 },-- subtle selected-tab fill
+    -- Opaque, not alpha: see note above. Roughly the accent at 13% over the
+    -- inset-well colour, resolved once here instead of composited at draw time.
+    accentWash = { 0.055, 0.129, 0.184, 1 },-- #0E212F  selected pill fill
+
+    -- Money = gold, and nothing else in the UI is gold any more. It is the
+    -- currency colour, which makes it semantic rather than decorative.
+    money = { 0.941, 0.698, 0.227, 1 },     -- #F0B23A
 
     -- Semantic colors
     success = { 0.3, 0.75, 0.3, 1 },        -- green for positive
-    warning = { 0.85, 0.60, 0.10, 1 },      -- match accent
+    warning = { 0.85, 0.60, 0.10, 1 },      -- amber; deliberately NOT the accent
     error = { 0.85, 0.30, 0.30, 1 },        -- red for errors
-    itemLevel = { 1, 1, 0, 1 },             -- bright yellow for ilvl text
+    itemLevel = { 0.780, 0.780, 0.824, 1 }, -- #C7C7D2 neutral, stops fighting the icon
 
     -- UI element colors (neutral, no brown tint)
-    headerBar = { 0.12, 0.12, 0.12, 1 },        -- neutral dark gray
-    headerBarHover = { 0.16, 0.15, 0.12, 1 },   -- subtle warm tint on hover
-    rowAlt = { 0.10, 0.10, 0.10, 0.5 },         -- alternating row background
-    rowHover = { 0.18, 0.16, 0.10, 0.8 },       -- warm hover for rows
-    tabSelected = { 0.25, 0.22, 0.12, 1 },      -- selected tab background
-    tabSelectedText = { 1.0, 0.85, 0.40, 1 },   -- selected tab text (light gold)
+    headerBar = { 0.063, 0.063, 0.078, 1 },      -- #101014
+    headerBarHover = { 0.098, 0.098, 0.125, 1 }, -- cool tint on hover
+    rowAlt = { 0.078, 0.078, 0.098, 0.5 },       -- alternating row background
+    rowHover = { 0.133, 0.133, 0.165, 0.85 },    -- neutral raise, no hue
+    tabSelected = { 0.071, 0.169, 0.227, 1 },    -- selected tab background
+    tabSelectedText = { 0.490, 0.827, 0.988, 1 },-- selected tab text
 }
 
 -- Hex color codes for inline WoW text formatting
 UI.hexColors = {
-    accent = "d9991a",        -- darker gold (matches UI.colors.accent)
-    accentBright = "f2b833",  -- slightly brighter gold
+    accent = "38bdf8",        -- cyan state (matches UI.colors.accent)
+    accentBright = "7dd3fc",  -- lighter cyan
+    money = "f0b23a",         -- gold, currency only
     success = "4dcc4d",       -- green
     error = "d94d4d",         -- red
-    warning = "d9991a",       -- match accent
+    warning = "d9991a",       -- amber, deliberately not the accent
     info = "88ccff",          -- light blue for informational
-    dim = "888888",           -- gray for muted text
+    dim = "8c8c9b",           -- gray for muted text
 }
 
 -- Layout constants for consistent spacing
@@ -71,7 +95,8 @@ UI.layout = {
     
     -- Component heights
     titleBarHeight = 24,      -- window title bar
-    bottomBarHeight = 30,     -- window bottom bar
+    bottomBarHeight = 40,     -- window bottom bar
+    scrollbarInset = 30,      -- right clearance for a scrollbar
     buttonHeight = 26,        -- standard button
     buttonHeightSmall = 22,   -- compact button
     tabHeight = 28,           -- tab button height
@@ -95,7 +120,10 @@ UI.layout = {
     buttonWidthLarge = 120,   -- wide button
     
     -- Borders
-    borderSize = 1,           -- standard border thickness
+    borderSize = 1,
+    radius = 4,               -- panel corner radius
+    radiusSmall = 2,          -- buttons, pills, inputs
+    radiusBlock = 3,          -- category blocks
     borderSizeThick = 2,      -- emphasized border
 
     -- Bag item text offsets
@@ -132,16 +160,228 @@ UI.fonts = {
 }
 
 -- Create a dark-themed panel frame
+
+-- ============================================================================
+-- ROUNDED SURFACES
+-- ============================================================================
+
+-- WoW backdrops are square by construction - there is no radius property - so
+-- a rounded rectangle has to be built from pieces: four corner tiles carrying
+-- the arc, plus three plain fills covering everything between them. The corner
+-- art is a single quarter-round tile reused four times via texcoord flips.
+-- Icon art ships with ~7% of dead bevelled border on each edge; these
+-- texcoords crop it so the artwork fills its slot.
+UI.ICON_CROP = { 0.07, 0.93, 0.07, 0.93 }
+
+UI.ROUNDED_CORNER = "Interface\\AddOns\\InventoryManager\\Textures\\rounded-corner.tga"
+
+--[[
+    Paint a rounded filled rectangle over `frame`.
+    @param layer: draw layer for the pieces
+    @param radius: corner radius in pixels
+    @param inset: pixels to pull every edge in by (used to fake a 1px border
+                  by stacking a smaller fill on top of a larger one)
+    @return surface: table with :SetColor(r,g,b,a), :Show(), :Hide()
+]]
+--[[
+    Build a rounded ring (border outline) over a frame.
+
+    Four corner arcs plus four straight runs, with nothing in the middle - a
+    ring, not a filled surface, so whatever sits underneath shows through. Used
+    for item quality borders and for every overlay state, so those cannot drift
+    apart.
+
+    @param opts.thickness: stroke width
+    @param opts.offset: inset from the frame edge
+    @param opts.layer / opts.sublayer: draw layer for the pieces
+    @param opts.color: initial colour
+    @return set: table with :SetColor(r,g,b,a), :Show(), :Hide()
+]]
+UI.CORNER_RING = "Interface\\AddOns\\InventoryManager\\Textures\\rounded-corner-ring.tga"
+
+-- The arc tile's stroke is half its radius, so drawing it at twice the stroke
+-- width makes the arc meet the straight runs exactly, at any thickness.
+UI.CORNER_RING_RATIO = 2
+
+function UI:AttachRing(frame, opts)
+    opts = opts or {}
+    local thickness = opts.thickness or 1
+    local offset = opts.offset or 0
+    local layer = opts.layer or "OVERLAY"
+    local sublayer = opts.sublayer
+    local color = opts.color or self.colors.border
+    local radius = thickness * self.CORNER_RING_RATIO
+
+    local set = { pieces = {} }
+
+    local function Strip()
+        local tex = frame:CreateTexture(nil, layer, nil, sublayer)
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+        table.insert(set.pieces, tex)
+        return tex
+    end
+
+    local function Corner(l, r, t, b)
+        local tex = frame:CreateTexture(nil, layer, nil, sublayer)
+        tex:SetTexture(UI.CORNER_RING)
+        tex:SetTexCoord(l, r, t, b)
+        tex:SetSize(radius, radius)
+        table.insert(set.pieces, tex)
+        return tex
+    end
+
+    set.TopLeft = Corner(0, 1, 0, 1)
+    set.TopLeft:SetPoint("TOPLEFT", frame, "TOPLEFT", offset, -offset)
+    set.TopRight = Corner(1, 0, 0, 1)
+    set.TopRight:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -offset, -offset)
+    set.BottomLeft = Corner(0, 1, 1, 0)
+    set.BottomLeft:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", offset, offset)
+    set.BottomRight = Corner(1, 0, 1, 0)
+    set.BottomRight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -offset, offset)
+
+    set.Top = Strip()
+    set.Top:SetHeight(thickness)
+    set.Top:SetPoint("TOPLEFT", set.TopLeft, "TOPRIGHT")
+    set.Top:SetPoint("TOPRIGHT", set.TopRight, "TOPLEFT")
+
+    set.Bottom = Strip()
+    set.Bottom:SetHeight(thickness)
+    set.Bottom:SetPoint("BOTTOMLEFT", set.BottomLeft, "BOTTOMRIGHT")
+    set.Bottom:SetPoint("BOTTOMRIGHT", set.BottomRight, "BOTTOMLEFT")
+
+    set.Left = Strip()
+    set.Left:SetWidth(thickness)
+    set.Left:SetPoint("TOPLEFT", set.TopLeft, "BOTTOMLEFT")
+    set.Left:SetPoint("BOTTOMLEFT", set.BottomLeft, "TOPLEFT")
+
+    set.Right = Strip()
+    set.Right:SetWidth(thickness)
+    set.Right:SetPoint("TOPRIGHT", set.TopRight, "BOTTOMRIGHT")
+    set.Right:SetPoint("BOTTOMRIGHT", set.BottomRight, "TOPRIGHT")
+
+    function set:SetColor(r, g, b, a)
+        if not r then return end
+        for _, tex in ipairs(self.pieces) do tex:SetVertexColor(r, g, b, a or 1) end
+    end
+
+    function set:Show()
+        for _, tex in ipairs(self.pieces) do tex:Show() end
+    end
+
+    function set:Hide()
+        for _, tex in ipairs(self.pieces) do tex:Hide() end
+    end
+
+    set:SetColor(unpack(color))
+    return set
+end
+
+function UI:AttachRoundedSurface(frame, layer, radius, inset)
+    layer = layer or "BACKGROUND"
+    radius = radius or self.layout.radius
+    inset = inset or 0
+
+    local pieces = {}
+
+    local function Fill()
+        local tex = frame:CreateTexture(nil, layer)
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+        table.insert(pieces, tex)
+        return tex
+    end
+
+    local function Corner(l, r, t, b)
+        local tex = frame:CreateTexture(nil, layer)
+        tex:SetTexture(UI.ROUNDED_CORNER)
+        tex:SetTexCoord(l, r, t, b)
+        tex:SetSize(radius, radius)
+        table.insert(pieces, tex)
+        return tex
+    end
+
+    -- The tile is authored as a top-left corner; the other three are flips
+    local tl = Corner(0, 1, 0, 1)
+    tl:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
+    local tr = Corner(1, 0, 0, 1)
+    tr:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -inset, -inset)
+    local bl = Corner(0, 1, 1, 0)
+    bl:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", inset, inset)
+    local br = Corner(1, 0, 1, 0)
+    br:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
+
+    local top = Fill()
+    top:SetPoint("TOPLEFT", tl, "TOPRIGHT")
+    top:SetPoint("BOTTOMRIGHT", tr, "BOTTOMLEFT")
+
+    local bottom = Fill()
+    bottom:SetPoint("TOPLEFT", bl, "TOPRIGHT")
+    bottom:SetPoint("BOTTOMRIGHT", br, "BOTTOMLEFT")
+
+    local middle = Fill()
+    middle:SetPoint("TOPLEFT", tl, "BOTTOMLEFT")
+    middle:SetPoint("BOTTOMRIGHT", br, "TOPRIGHT")
+
+    local surface = { pieces = pieces }
+
+    function surface:SetColor(r, g, b, a)
+        if not r then return end
+        for _, tex in ipairs(self.pieces) do
+            tex:SetVertexColor(r, g, b, a or 1)
+        end
+    end
+
+    function surface:Show()
+        for _, tex in ipairs(self.pieces) do tex:Show() end
+    end
+
+    function surface:Hide()
+        for _, tex in ipairs(self.pieces) do tex:Hide() end
+    end
+
+    return surface
+end
+
+--[[
+    Convert a frame from a square backdrop to a rounded surface.
+
+    SetBackdropColor and SetBackdropBorderColor are shimmed onto the frame so
+    every existing call site keeps working untouched - this is deliberately a
+    drop-in swap rather than a rewrite of every caller.
+
+    @param borderless: skip the 1px border layer (used for small controls)
+]]
+function UI:MakeRounded(frame, radius, borderless)
+    radius = radius or self.layout.radius
+
+    if frame.SetBackdrop then
+        frame:SetBackdrop(nil)
+    end
+
+    local border = nil
+    if not borderless then
+        border = self:AttachRoundedSurface(frame, "BACKGROUND", radius, 0)
+    end
+    local fill = self:AttachRoundedSurface(frame, "BORDER", radius, border and 1 or 0)
+
+    frame._imFill = fill
+    frame._imBorder = border
+
+    frame.SetBackdropColor = function(_, r, g, b, a)
+        fill:SetColor(r, g, b, a)
+    end
+    frame.SetBackdropBorderColor = function(_, r, g, b, a)
+        if border then border:SetColor(r, g, b, a) end
+    end
+
+    return frame
+end
+
 function UI:CreatePanel(name, parent, width, height)
     local frame = CreateFrame("Frame", name, parent or UIParent, "BackdropTemplate")
     frame:SetSize(width or 400, height or 500)
 
-    -- Dark background with thin border
-    frame:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    -- Rounded dark surface with a 1px border
+    self:MakeRounded(frame, self.layout.radius)
     frame:SetBackdropColor(unpack(self.colors.background))
     frame:SetBackdropBorderColor(unpack(self.colors.border))
 
@@ -169,41 +409,105 @@ function UI:CreatePanel(name, parent, width, height)
 end
 
 -- Create a header/title bar for a panel
+-- Sidebar row: a full-width selectable list item, as distinct from a button.
+-- No radius and no border - rows read as a list because they share edges, and
+-- the selected one is marked by a fill plus an accent edge rather than a box.
+function UI:CreateRailRow(parent, label, height)
+    local row = CreateFrame("Button", nil, parent)
+    row:SetHeight(height or self.layout.rowHeightSmall)
+
+    row.bg = row:CreateTexture(nil, "BACKGROUND")
+    row.bg:SetTexture("Interface\\Buttons\\WHITE8X8")
+    row.bg:SetAllPoints(row)
+    row.bg:SetVertexColor(0, 0, 0, 0)
+
+    -- Left edge marker, shown only when selected
+    row.marker = row:CreateTexture(nil, "ARTWORK")
+    row.marker:SetTexture("Interface\\Buttons\\WHITE8X8")
+    row.marker:SetWidth(2)
+    row.marker:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    row.marker:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    row.marker:SetVertexColor(unpack(self.colors.accent))
+    row.marker:Hide()
+
+    row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.text:SetPoint("LEFT", row, "LEFT", self.layout.padding, 0)
+    row.text:SetText(label or "")
+    row.text:SetTextColor(unpack(self.colors.textDim))
+
+    row._imSelected = false
+
+    function row:SetSelected(selected)
+        self._imSelected = selected and true or false
+        self:Refresh()
+    end
+
+    function row:Refresh(hovered)
+        if self._imSelected then
+            self.bg:SetVertexColor(unpack(UI.colors.accentWash))
+            self.text:SetTextColor(unpack(UI.colors.accentHover))
+            self.marker:Show()
+        elseif hovered then
+            self.bg:SetVertexColor(unpack(UI.colors.surfaceRaised))
+            self.text:SetTextColor(unpack(UI.colors.text))
+            self.marker:Hide()
+        else
+            self.bg:SetVertexColor(0, 0, 0, 0)
+            self.text:SetTextColor(unpack(UI.colors.textDim))
+            self.marker:Hide()
+        end
+    end
+
+    return row
+end
+
+-- Small glyph control (close, clear, dismiss). One implementation so these
+-- cannot drift apart: the window close and the search clear were previously a
+-- FontString and a Blizzard texture respectively, and looked it.
+-- @param hoverColor: colour on hover; defaults to the accent
+function UI:CreateGlyphButton(parent, glyph, hoverColor)
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(self.layout.iconSize - 2, self.layout.iconSize - 2)
+
+    btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    btn.text:SetPoint("CENTER")
+    btn.text:SetText(glyph or "X")
+    btn.text:SetTextColor(unpack(self.colors.textDim))
+
+    btn._imHoverColor = hoverColor or self.colors.accent
+
+    btn:SetScript("OnEnter", function(self)
+        self.text:SetTextColor(unpack(self._imHoverColor))
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self.text:SetTextColor(unpack(UI.colors.textDim))
+    end)
+
+    return btn
+end
+
 function UI:CreateHeader(parent, title)
     local header = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     header:SetHeight(self.layout.rowHeight)
     header:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
     header:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
 
-    header:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
-    header:SetBackdropColor(unpack(self.colors.headerBar))
-    header:SetBackdropBorderColor(unpack(self.colors.border))
+    -- No fill: a square header bar would overhang the panel's rounded top
+    -- corners, and the design gives the title weight rather than a bar.
+    header.SetBackdropColor = function() end
+    header.SetBackdropBorderColor = function() end
 
-    -- Title text (uses accent color)
+    -- Title carries weight, not colour. The accent is reserved for state.
     header.title = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     header.title:SetPoint("LEFT", self.layout.padding, 0)
     header.title:SetText(title or "InventoryManager")
-    header.title:SetTextColor(unpack(self.colors.accent))
+    header.title:SetTextColor(unpack(self.colors.text))
 
-    -- Close button (red X style)
-    local closeBtn = CreateFrame("Button", nil, header)
-    closeBtn:SetSize(self.layout.iconSize - 2, self.layout.iconSize - 2)
+    -- Close: neutral at rest, red only once you are actually on it
+    local closeBtn = self:CreateGlyphButton(header, "X", self.colors.error)
     closeBtn:SetPoint("RIGHT", header, "RIGHT", -self.layout.paddingSmall, 0)
-    closeBtn.text = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    closeBtn.text:SetPoint("CENTER")
-    closeBtn.text:SetText("|cffff6666X|r")
     closeBtn:SetScript("OnClick", function()
         parent:Hide()
-    end)
-    closeBtn:SetScript("OnEnter", function(self)
-        self.text:SetText("|cffff0000X|r")
-    end)
-    closeBtn:SetScript("OnLeave", function(self)
-        self.text:SetText("|cffff6666X|r")
     end)
     header.closeButton = closeBtn
 
@@ -215,12 +519,8 @@ function UI:CreateButton(parent, text, width, height)
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetSize(width or self.layout.buttonWidth, height or self.layout.buttonHeightSmall)
 
-    button:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
-    button:SetBackdropColor(0.15, 0.15, 0.15, 1)
+    self:MakeRounded(button, self.layout.radiusSmall)
+    button:SetBackdropColor(unpack(self.colors.backgroundDark))
     button:SetBackdropBorderColor(unpack(self.colors.border))
 
     button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -750,13 +1050,11 @@ function UI:CreateScrollFrame(parent, width, height, fill)
     else
         container:SetSize(w, h)
     end
-    container:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
-    container:SetBackdropColor(0.05, 0.05, 0.05, 0.3)
-    container:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
+    -- No fill and no outline. This container is a layout box, not a surface:
+    -- a translucent square drawn across the whole scroll area darkened the
+    -- panel ground beneath every card and left a stray rectangle inset from
+    -- the window edge. Depth here comes from the cards rising, not from the
+    -- area behind them sinking.
 
     -- The actual scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, container)

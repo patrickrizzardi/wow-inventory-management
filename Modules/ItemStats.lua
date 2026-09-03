@@ -140,19 +140,34 @@ end
 -- QUERIES
 -- ============================================================================
 
--- True when the item occupies a real equipment slot (so secondaries are meaningful)
+-- Item classes that can carry secondary stats. Gating on class is the reliable
+-- test: equipLoc comes back empty or unresolved for plenty of items (and
+-- C_Item.GetItemInfoInstant is documented in this codebase as unreliable for
+-- it), which silently swept consumables, keystones and quest items into the
+-- stat buckets. Only armour and weapons ever roll secondaries.
+local GEAR_CLASSES = {
+    [2] = true,  -- Weapon
+    [4] = true,  -- Armor
+}
+
+-- True when the item is gear that can carry secondary stats
 function ItemStats:IsEquippable(itemID)
     if not itemID then return false end
 
-    local _, _, _, equipLoc = C_Item.GetItemInfoInstant(itemID)
-    if not equipLoc or equipLoc == "" or equipLoc == "nil" then
-        -- GetItemInfoInstant is unreliable for equipLoc on some items; fall back
-        local _, _, _, _, _, _, _, _, fullEquipLoc = GetItemInfo(itemID)
-        equipLoc = fullEquipLoc
+    local _, _, _, equipLoc, _, classID = C_Item.GetItemInfoInstant(itemID)
+    if not classID then
+        -- Instant lookup missed; fall back to the full query
+        local _, _, _, _, _, _, _, _, fullEquipLoc, _, _, fullClassID = GetItemInfo(itemID)
+        equipLoc = equipLoc or fullEquipLoc
+        classID = fullClassID
     end
 
-    if not equipLoc or equipLoc == "" or equipLoc == "nil" then return false end
-    if equipLoc == "INVTYPE_NON_EQUIP" or equipLoc == "INVTYPE_BAG" then return false end
+    if not classID or not GEAR_CLASSES[classID] then return false end
+
+    -- Shirts and tabards are armour by class but purely cosmetic
+    if equipLoc == "INVTYPE_BODY" or equipLoc == "INVTYPE_TABARD" then
+        return false
+    end
 
     return true
 end

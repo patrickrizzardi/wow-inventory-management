@@ -106,19 +106,8 @@ function BagUI:UpdateFilterButtons(frame)
     if not frame or not frame.filterButtons then return end
 
     local active = self:GetViewMode()
-    for _, btn in ipairs(frame.filterButtons) do
-        local isActive = (btn._imViewMode == active)
-        btn._imActive = isActive
-
-        if isActive then
-            btn:SetBackdropColor(0.18, 0.14, 0.04, 1)
-            btn:SetBackdropBorderColor(unpack(UI.colors.accent))
-            btn.text:SetTextColor(unpack(UI.colors.accent))
-        else
-            btn:SetBackdropColor(0.15, 0.15, 0.15, 1)
-            btn:SetBackdropBorderColor(unpack(UI.colors.border))
-            btn.text:SetTextColor(unpack(UI.colors.textDim or UI.colors.text))
-        end
+    for _, row in ipairs(frame.filterButtons) do
+        row:SetSelected(row._imViewMode == active)
     end
 end
 
@@ -140,13 +129,20 @@ local SIZING = {
     SCROLLBAR_WIDTH = 10,          -- Scrollbar track width
     SCROLLBAR_MARGIN = 8,          -- Space around scrollbar
     SCROLL_CONTENT_INSET = 22,     -- Scroll content is inset from container (4 left + 18 scrollbar area)
-    MIN_FRAME_WIDTH = 480,
+    MIN_FRAME_WIDTH = 400,
+    RAIL_WIDTH = 128,              -- view-mode rail down the left side
     MAX_FRAME_WIDTH = 1200,
+    MIN_FRAME_HEIGHT = 300,        -- floor for content-fitted height
     -- Layout tweaks (tighter spacing)
-    ITEM_GAP = 2,                  -- Gap between items (was 4, reduced for tighter packing)
+    ITEM_GAP = 4,                  -- Gap between item icons
     CATEGORY_PADDING = 6,          -- Padding around category content (was 10)
-    COLUMN_GAP = 12,               -- Gap between columns (was 20)
-    LEFT_MARGIN_EXTRA = 4,         -- Extra left margin to prevent border clipping
+    CATEGORY_GAP = 12,             -- Gap BETWEEN category blocks, horizontally and
+                                   -- vertically. Must exceed twice the block's draw
+                                   -- inflation or the raised surfaces touch.
+    BLOCK_PADDING = 8,             -- Padding inside a category block, all sides.
+                                   -- Was LEFT_MARGIN_EXTRA (4) and treated as a
+                                   -- clipping guard; it is real padding and is
+                                   -- mirrored on every edge.
 }
 
 -- ============================================================================
@@ -160,25 +156,21 @@ local SIZING = {
     Layout breakdown (left to right):
     - 10px: scroll container left margin
     - 4px: scroll content left inset
-    - categoryPadding: left padding inside content
-    - [column 1]: paddingSmall + (itemSize * itemsPerRow) + (paddingSmall gaps)
-    - columnGap: gap between columns
-    - [column 2]: same as column 1
-    - categoryPadding: right padding inside content
+    - categoryPadding: outer padding
+    - blockPadding: inset before the first item
+    - itemsPerRow items, with itemGap between them
+    - blockPadding + categoryPadding: matching right side
     - 18px: scrollbar area (10 width + margins)
     - 10px: scroll container right margin
 ]]
 function BagUI:CalculateRequiredWidth()
     local settings = self:GetSettings()
     local iconSize = settings.iconSize or 20
-    local columns = settings.columns or 2
-    local itemsPerRow = settings.itemsPerRow or 6
+    local itemsPerRow = settings.itemsPerRow or 8
 
-    -- Use our own tighter spacing constants
     local itemGap = SIZING.ITEM_GAP
     local categoryPadding = SIZING.CATEGORY_PADDING
-    local columnGap = SIZING.COLUMN_GAP
-    local leftMarginExtra = SIZING.LEFT_MARGIN_EXTRA
+    local blockPadding = SIZING.BLOCK_PADDING
 
     -- Item button total size (icon + border/padding from template)
     local itemSize = iconSize + SIZING.BUTTON_BORDER_PADDING
@@ -186,21 +178,24 @@ function BagUI:CalculateRequiredWidth()
     -- Width of items in one row: N items + (N-1) gaps between them
     local itemRowWidth = (itemSize * itemsPerRow) + (itemGap * (itemsPerRow - 1))
 
-    -- Each column content: left margin + item row
-    local columnContentWidth = leftMarginExtra + itemRowWidth
+    -- One full-width section: outer padding, the item row inset on both sides
+    local contentAreaWidth = (categoryPadding * 2) + (blockPadding * 2) + itemRowWidth
 
-    -- Total content area: outer padding + columns + gaps between columns + outer padding
-    local contentAreaWidth = categoryPadding + (columnContentWidth * columns) + (columnGap * (columns - 1)) + categoryPadding
-
-    -- Frame width = content + scroll container margins (both sides) + scrollbar area
+    -- Frame width = rail + content + scroll container margins + scrollbar area
     local scrollbarArea = SIZING.SCROLLBAR_WIDTH + SIZING.SCROLLBAR_MARGIN
-    local frameWidth = contentAreaWidth + (SIZING.SCROLL_CONTAINER_MARGIN * 2) + scrollbarArea + 4
+    local frameWidth = SIZING.RAIL_WIDTH + contentAreaWidth
+        + (SIZING.SCROLL_CONTAINER_MARGIN * 2) + scrollbarArea + 4
 
-    -- Clamp to bounds
+    -- Round up and add a pixel of slack. The grid recomputes its column count
+    -- from the MEASURED width of the scroll content, which arrives as a float
+    -- once UI scale is applied; asking for the exact minimum leaves the
+    -- recomputation one sub-pixel away from losing a whole column.
+    frameWidth = math.ceil(frameWidth) + 1
+
     frameWidth = math.max(SIZING.MIN_FRAME_WIDTH, math.min(SIZING.MAX_FRAME_WIDTH, frameWidth))
 
-    IM:Debug(string.format("[BagUI] CalculateRequiredWidth: %d (icon=%d, cols=%d, items/row=%d, itemSize=%d, rowWidth=%d, colWidth=%d, content=%d)",
-        frameWidth, iconSize, columns, itemsPerRow, itemSize, itemRowWidth, columnContentWidth, contentAreaWidth))
+    IM:Debug(string.format("[BagUI] CalculateRequiredWidth: %d (icon=%d, items/row=%d, itemSize=%d, rowWidth=%d, content=%d)",
+        frameWidth, iconSize, itemsPerRow, itemSize, itemRowWidth, contentAreaWidth))
 
     return frameWidth
 end
@@ -249,14 +244,14 @@ function BagUI:Create()
 
     -- Make it resizable
     frame:SetResizable(true)
-    frame:SetResizeBounds(480, 400, 1200, 900)
+    frame:SetResizeBounds(SIZING.MIN_FRAME_WIDTH, SIZING.MIN_FRAME_HEIGHT, SIZING.MAX_FRAME_WIDTH, 900)
 
     -- Header using DRY CreateHeader
     local header = UI:CreateHeader(frame, "InventoryManager Bags")
     
     -- Gear icon button (settings)
     local gearBtn = CreateFrame("Button", nil, header)
-    gearBtn:SetSize(UI.layout.iconSize, UI.layout.iconSize)
+    gearBtn:SetSize(UI.layout.iconSize - 2, UI.layout.iconSize - 2)  -- match the close glyph
     gearBtn:SetPoint("RIGHT", header.closeButton, "LEFT", -UI.layout.paddingSmall, 0)
     
     -- Use a cleaner settings icon without background
@@ -264,14 +259,22 @@ function BagUI:Create()
     normalTex:SetAllPoints()
     normalTex:SetTexture("Interface\\Buttons\\UI-OptionsButton")
     normalTex:SetTexCoord(0, 1, 0, 1)
-    normalTex:SetVertexColor(1, 1, 1, 0.8)
+    normalTex:SetDesaturated(true)
+    normalTex:SetVertexColor(unpack(UI.colors.textDim))
     gearBtn:SetNormalTexture(normalTex)
+    -- SetNormalTexture swaps the button's texture object, discarding the tint
+    -- set above, so re-apply it to the texture the button is actually using.
+    if gearBtn:GetNormalTexture() then
+        gearBtn:GetNormalTexture():SetDesaturated(true)
+        gearBtn:GetNormalTexture():SetVertexColor(unpack(UI.colors.textDim))
+    end
     
     local highlightTex = gearBtn:CreateTexture(nil, "HIGHLIGHT")
     highlightTex:SetAllPoints()
     highlightTex:SetTexture("Interface\\Buttons\\UI-OptionsButton")
     highlightTex:SetTexCoord(0, 1, 0, 1)
-    highlightTex:SetVertexColor(1, 1, 1, 1)
+    highlightTex:SetDesaturated(true)
+    highlightTex:SetVertexColor(unpack(UI.colors.accent))
     highlightTex:SetBlendMode("ADD")
     
     gearBtn:SetScript("OnClick", function()
@@ -292,12 +295,8 @@ function BagUI:Create()
     searchBar:SetHeight(UI.layout.buttonHeight)
     searchBar:SetPoint("TOPLEFT", header, "BOTTOMLEFT", UI.layout.cardSpacing, -UI.layout.paddingSmall)
     searchBar:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", -UI.layout.cardSpacing, -UI.layout.paddingSmall)
-    searchBar:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    searchBar:SetBackdropColor(0.06, 0.06, 0.06, 1)
+    UI:MakeRounded(searchBar, UI.layout.radiusSmall)
+    searchBar:SetBackdropColor(unpack(UI.colors.backgroundDark))
     searchBar:SetBackdropBorderColor(unpack(UI.colors.border))
     frame.searchBar = searchBar
 
@@ -306,7 +305,8 @@ function BagUI:Create()
     searchIcon:SetSize(UI.layout.iconSizeSmall, UI.layout.iconSizeSmall)
     searchIcon:SetPoint("LEFT", UI.layout.paddingSmall, 0)
     searchIcon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
-    searchIcon:SetVertexColor(0.6, 0.6, 0.6)
+    searchIcon:SetDesaturated(true)
+    searchIcon:SetVertexColor(unpack(UI.colors.textDisabled))
 
     -- Search editbox
     local searchBox = CreateFrame("EditBox", nil, searchBar, "InputBoxTemplate")
@@ -352,99 +352,96 @@ function BagUI:Create()
 
     frame.searchBox = searchBox
 
-    -- Clear button
-    local clearBtn = CreateFrame("Button", nil, searchBar)
-    clearBtn:SetSize(UI.layout.iconSizeSmall, UI.layout.iconSizeSmall)
+    -- Clear button: the same glyph control as the window close, so the two X's
+    -- in this window are literally the same thing rather than lookalikes.
+    local clearBtn = UI:CreateGlyphButton(searchBar, "X")
     clearBtn:SetPoint("RIGHT", -UI.layout.paddingSmall, 0)
-    clearBtn:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
-    clearBtn:GetNormalTexture():SetVertexColor(0.6, 0.6, 0.6)
-    clearBtn:SetHighlightTexture("Interface\\Buttons\\UI-StopButton")
-    clearBtn:GetHighlightTexture():SetVertexColor(1, 1, 1)
     clearBtn:SetScript("OnClick", function()
         searchBox:SetText("")
         searchBox:ClearFocus()
     end)
-    clearBtn:SetScript("OnEnter", function(self)
+    clearBtn:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine("Clear search")
         GameTooltip:Show()
     end)
-    clearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    clearBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- ============================================================
-    -- VIEW MODE FILTER BAR (below search)
+    -- VIEW MODE RAIL (left side)
     -- ============================================================
-    local filterBar = CreateFrame("Frame", nil, frame)
-    filterBar:SetHeight(UI.layout.buttonHeightSmall)
-    filterBar:SetPoint("TOPLEFT", searchBar, "BOTTOMLEFT", 0, -UI.layout.paddingSmall)
-    filterBar:SetPoint("TOPRIGHT", searchBar, "BOTTOMRIGHT", 0, -UI.layout.paddingSmall)
-    frame.filterBar = filterBar
+    -- Vertical, not a row across the top. Four buttons side by side forced a
+    -- 480px minimum frame width regardless of how few items per row the user
+    -- wanted, which showed up as dead space to the right of the grid. A rail
+    -- takes width that is USED, scales to more modes, and lets the window fit
+    -- the grid exactly at any items-per-row.
+    local rail = CreateFrame("Frame", nil, frame)
+    rail:SetWidth(SIZING.RAIL_WIDTH)
+    rail:SetPoint("TOPLEFT", searchBar, "BOTTOMLEFT", -UI.layout.cardSpacing, -UI.layout.paddingSmall)
+    rail:SetPoint("BOTTOM", frame, "BOTTOM", 0, UI.layout.bottomBarHeight)
+    frame.rail = rail
+
+    -- The rail is a surface, not a strip of floating buttons: its own recessed
+    -- fill plus a hairline is what makes it read as a sidebar.
+    local railBg = rail:CreateTexture(nil, "BACKGROUND")
+    railBg:SetTexture("Interface\\Buttons\\WHITE8X8")
+    railBg:SetAllPoints(rail)
+    railBg:SetVertexColor(unpack(UI.colors.backgroundDark))
+
+    local railRule = rail:CreateTexture(nil, "ARTWORK")
+    railRule:SetWidth(1)
+    railRule:SetPoint("TOPRIGHT", rail, "TOPRIGHT", 0, 0)
+    railRule:SetPoint("BOTTOMRIGHT", rail, "BOTTOMRIGHT", 0, 0)
+    railRule:SetVertexColor(unpack(UI.colors.border))
+
+    -- Label, not a row. It previously sat in the same column at nearly the same
+    -- size as the rows, so it read as a fifth (dead) option and invited clicks.
+    -- Smaller, dimmer, and separated by a rule so it reads as a section title.
+    local railHeading = rail:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    railHeading:SetPoint("TOPLEFT", rail, "TOPLEFT", UI.layout.padding, -UI.layout.padding)
+    railHeading:SetText("GROUP BY")
+    railHeading:SetTextColor(unpack(UI.colors.textDisabled))
+    railHeading:SetAlpha(0.75)
+
+    local railHeadingRule = rail:CreateTexture(nil, "ARTWORK")
+    railHeadingRule:SetHeight(1)
+    railHeadingRule:SetPoint("TOPLEFT", railHeading, "BOTTOMLEFT", 0, -UI.layout.paddingSmall)
+    railHeadingRule:SetPoint("RIGHT", rail, "RIGHT", -UI.layout.padding, 0)
+    railHeadingRule:SetVertexColor(unpack(UI.colors.border))
 
     local filterButtons = {}
-    for _, def in ipairs(BagUI.VIEW_MODE_BUTTONS) do
-        local btn = UI:CreateButton(filterBar, def.label, 60, UI.layout.buttonHeightSmall)
-        btn._imViewMode = def.mode
-        btn._imActive = false
+    for index, def in ipairs(BagUI.VIEW_MODE_BUTTONS) do
+        local row = UI:CreateRailRow(rail, def.label, UI.layout.rowHeight)
+        row._imViewMode = def.mode
+        row:SetPoint("LEFT", rail, "LEFT", 0, 0)
+        row:SetPoint("RIGHT", rail, "RIGHT", -1, 0)  -- clear of the hairline
+        row:SetPoint("TOP", railHeadingRule, "BOTTOM",
+            0, -UI.layout.paddingSmall - ((index - 1) * UI.layout.rowHeight))
 
-        -- CreateButton's hover handlers reset the backdrop, so they are replaced
-        -- here to keep the active mode visibly selected on mouse-out.
-        btn:SetScript("OnEnter", function(self)
-            if not self._imActive then
-                self:SetBackdropColor(0.25, 0.25, 0.25, 1)
-                self:SetBackdropBorderColor(unpack(UI.colors.borderLight))
-            end
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        row:SetScript("OnEnter", function(self)
+            self:Refresh(true)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(def.label)
             GameTooltip:AddLine(def.tooltip, 0.7, 0.7, 0.7, true)
             GameTooltip:Show()
         end)
-        btn:SetScript("OnLeave", function(self)
+        row:SetScript("OnLeave", function(self)
+            self:Refresh(false)
             GameTooltip:Hide()
-            BagUI:UpdateFilterButtons()
         end)
-        btn:SetScript("OnMouseDown", function(self)
-            self:SetBackdropColor(0.1, 0.1, 0.1, 1)
-        end)
-        btn:SetScript("OnMouseUp", function(self)
-            -- Re-clicking the already-active mode is a no-op in SetViewMode,
-            -- so repaint here or the button stays stuck in its pressed shade.
-            BagUI:UpdateFilterButtons()
-            if not self._imActive then
-                self:SetBackdropColor(0.25, 0.25, 0.25, 1)
-            end
-        end)
-        btn:SetScript("OnClick", function(self)
+        row:SetScript("OnClick", function(self)
             BagUI:SetViewMode(self._imViewMode)
         end)
 
-        table.insert(filterButtons, btn)
+        table.insert(filterButtons, row)
     end
     frame.filterButtons = filterButtons
 
-    -- Split the bar evenly; recalculated on resize since the frame is resizable
-    local function LayoutFilterButtons()
-        local count = #filterButtons
-        if count == 0 then return end
-
-        local gap = UI.layout.paddingSmall
-        local available = filterBar:GetWidth() - (gap * (count - 1))
-        if available <= 0 then return end
-
-        local btnWidth = available / count
-        for i, btn in ipairs(filterButtons) do
-            btn:ClearAllPoints()
-            btn:SetSize(btnWidth, UI.layout.buttonHeightSmall)
-            btn:SetPoint("TOPLEFT", filterBar, "TOPLEFT", (i - 1) * (btnWidth + gap), 0)
-        end
-    end
-    filterBar:SetScript("OnSizeChanged", LayoutFilterButtons)
-    LayoutFilterButtons()
-
     BagUI:UpdateFilterButtons(frame)
 
-    -- Content container (for categories and items) - below filter bar
+    -- Content container (for categories and items) - right of the rail
     local contentContainer = CreateFrame("Frame", nil, frame)
-    contentContainer:SetPoint("TOPLEFT", filterBar, "BOTTOMLEFT", -UI.layout.cardSpacing, -UI.layout.paddingSmall)
+    contentContainer:SetPoint("TOPLEFT", rail, "TOPRIGHT", 0, UI.layout.paddingSmall)
     contentContainer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, UI.layout.bottomBarHeight + UI.layout.padding)
     frame.contentContainer = contentContainer
     
@@ -474,19 +471,22 @@ function BagUI:Create()
     footer:SetHeight(UI.layout.bottomBarHeight)
     footer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
     footer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-    footer:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    footer:SetBackdropColor(unpack(UI.colors.headerBar))
-    footer:SetBackdropBorderColor(unpack(UI.colors.border))
+    -- No fill: a square footer bar would overhang the panel's rounded bottom
+    -- corners. A hairline does the separating instead.
+    local footerRule = footer:CreateTexture(nil, "ARTWORK")
+    footerRule:SetTexture("Interface\\Buttons\\WHITE8X8")
+    footerRule:SetHeight(1)
+    footerRule:SetPoint("TOPLEFT", footer, "TOPLEFT", UI.layout.padding, 0)
+    footerRule:SetPoint("TOPRIGHT", footer, "TOPRIGHT", -UI.layout.padding, 0)
+    footerRule:SetVertexColor(unpack(UI.colors.border))
     frame.footer = footer
 
-    -- Gold display (clickable to open dashboard)
-    local goldText = footer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    -- Gold display (clickable to open dashboard). This is the number the
+    -- footer exists for, so it is the largest thing in it, and gold is now
+    -- reserved for money alone.
+    local goldText = footer:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     goldText:SetPoint("LEFT", UI.layout.padding, 0)
-    goldText:SetTextColor(unpack(UI.colors.accent))
+    goldText:SetTextColor(unpack(UI.colors.money))
     footer.goldText = goldText
 
     -- Make gold clickable
@@ -503,11 +503,48 @@ function BagUI:Create()
     end)
     footer:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Bag space display
-    local bagSpaceText = footer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    bagSpaceText:SetPoint("RIGHT", -UI.layout.padding, 0)
-    bagSpaceText:SetTextColor(0.7, 0.7, 0.7)
-    footer.bagSpaceText = bagSpaceText
+    -- Capacity meters. "How full am I" is a shape, not arithmetic - a fill bar
+    -- answers it before the digits have been read. Total is deliberately gone:
+    -- it is just Bags + Reagent, which both bars already show.
+    local function CreateMeter(label)
+        local meter = CreateFrame("Frame", nil, footer)
+        meter:SetSize(150, 10)
+
+        local tag = meter:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        tag:SetPoint("LEFT", 0, 0)
+        tag:SetText(label)
+        tag:SetTextColor(unpack(UI.colors.textDisabled))
+        meter.tag = tag
+
+        local value = meter:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        value:SetPoint("LEFT", tag, "RIGHT", UI.layout.paddingSmall, 0)
+        value:SetTextColor(unpack(UI.colors.textDim))
+        meter.value = value
+
+        local track = meter:CreateTexture(nil, "ARTWORK")
+        track:SetTexture("Interface\\Buttons\\WHITE8X8")
+        track:SetSize(64, 5)
+        track:SetPoint("RIGHT", meter, "RIGHT", 0, 0)
+        track:SetVertexColor(unpack(UI.colors.border))
+        meter.track = track
+
+        local fill = meter:CreateTexture(nil, "OVERLAY")
+        fill:SetTexture("Interface\\Buttons\\WHITE8X8")
+        fill:SetHeight(5)
+        fill:SetPoint("LEFT", track, "LEFT", 0, 0)
+        fill:SetVertexColor(unpack(UI.colors.textDim))
+        meter.fill = fill
+
+        return meter
+    end
+
+    local bagMeter = CreateMeter("Bags")
+    bagMeter:SetPoint("RIGHT", footer, "RIGHT", -UI.layout.padding, 7)
+    footer.bagMeter = bagMeter
+
+    local reagentMeter = CreateMeter("Reagent")
+    reagentMeter:SetPoint("RIGHT", footer, "RIGHT", -UI.layout.padding, -7)
+    footer.reagentMeter = reagentMeter
 
     -- Resize grip (bottom-right corner) - HIDDEN (resizing via edges only)
     local resizeGrip = CreateFrame("Button", nil, frame)
@@ -624,6 +661,38 @@ function BagUI:Refresh()
     if BagUI.CategoryView then
         BagUI.CategoryView:Refresh(_bagFrame.scrollContent)
     end
+
+    -- Content height is only known once the view has laid itself out
+    self:FitHeightToContent()
+end
+
+--[[
+    Shrink the window to the height its content actually needs.
+
+    The height slider stops being a fixed size and becomes a CEILING: a bag
+    holding six categories no longer leaves two thirds of the frame empty, but
+    a full bag still grows to whatever the user allowed. Chrome height is
+    measured off the live frame rather than summed from constants, so it stays
+    correct if the header, search bar or filter row ever change size.
+]]
+function BagUI:FitHeightToContent()
+    if not _bagFrame then return end
+
+    local container = _bagFrame.contentContainer
+    local content = _bagFrame.scrollContent
+    if not container or not content then return end
+
+    local chrome = _bagFrame:GetHeight() - container:GetHeight()
+    if chrome <= 0 then return end  -- layout not settled yet
+
+    local maxHeight = self:GetSettings().height or 500
+    local needed = chrome + content:GetHeight() + UI.layout.padding
+    local target = math.max(SIZING.MIN_FRAME_HEIGHT, math.min(maxHeight, needed))
+
+    -- Sub-pixel churn would fight the layout every refresh
+    if math.abs(_bagFrame:GetHeight() - target) < 1 then return end
+
+    _bagFrame:SetHeight(target)
 end
 
 function BagUI:UpdateGoldDisplay()
@@ -665,34 +734,46 @@ function BagUI:UpdateBagSpace()
     local totalFree = regularFree + reagentFree
     local totalUsed = regularUsed + reagentUsed
     
-    -- Format text with all three counts
-    local text
-    if reagentTotal > 0 then
-        -- Show: Bags x/x | Reagent x/x | Total x/x
-        text = string.format(
-            "Bags: %d/%d  |  Reagent: %d/%d  |  Total: %d/%d",
-            regularUsed, regularTotal,
-            reagentUsed, reagentTotal,
-            totalUsed, totalSlots
-        )
-    else
-        -- Just show regular bags if no reagent bag
-        text = string.format("Bags: %d/%d", regularUsed, regularTotal)
-    end
-    
     -- Dynamic threshold: warn when less than 10% free or less than 5 slots
     local threshold = math.max(math.floor(totalSlots * 0.1), 5)
-    local color = totalFree < threshold and UI.colors.error or UI.colors.textDim
-    
-    _bagFrame.footer.bagSpaceText:SetTextColor(unpack(color))
-    _bagFrame.footer.bagSpaceText:SetText(text)
+    local isTight = totalFree < threshold
+    local fillColor = isTight and UI.colors.error or UI.colors.textDim
+
+    local function ApplyMeter(meter, used, total)
+        if not meter then return end
+
+        if total <= 0 then
+            meter:Hide()
+            return
+        end
+        meter:Show()
+
+        meter.value:SetText(string.format("%d/%d", used, total))
+        meter.value:SetTextColor(unpack(isTight and UI.colors.error or UI.colors.textDim))
+
+        local trackWidth = meter.track:GetWidth()
+        local ratio = math.min(used / total, 1)
+        -- A nearly-empty bag still needs a visible nub, or the meter reads as broken
+        meter.fill:SetWidth(math.max(trackWidth * ratio, 3))
+        meter.fill:SetVertexColor(unpack(fillColor))
+    end
+
+    ApplyMeter(_bagFrame.footer.bagMeter, regularUsed, regularTotal)
+    ApplyMeter(_bagFrame.footer.reagentMeter, reagentUsed, reagentTotal)
 end
 
 function BagUI:OnResize()
     if not _bagFrame then return end
 
-    -- Save size and position
+    -- Save size and position. Persisting the dragged height matters now that
+    -- FitHeightToContent treats settings.height as its ceiling: without this a
+    -- manual resize would be undone by the next refresh.
     self:SavePosition()
+
+    if not IM.db.global.bagUI then
+        self:InitializeSettings()
+    end
+    IM.db.global.bagUI.height = math.floor(_bagFrame:GetHeight() + 0.5)
 
     -- Trigger category view to reflow
     if BagUI.CategoryView then
@@ -784,7 +865,9 @@ function BagUI:ResizeForSettings()
             -- Content container fills frame (minus footer)
             -- So scroll container width = frame width - 20
             -- And scroll content width = scroll container - 22 (from CreateScrollFrame)
-            local newScrollContentWidth = totalWidth - 20 - 22
+            -- Frame minus the rail (flush to the window edge), then the
+            -- scroll container's own margins (20) and content inset (22)
+            local newScrollContentWidth = totalWidth - SIZING.RAIL_WIDTH - 20 - 22
             _bagFrame.scrollFrame.content:SetWidth(newScrollContentWidth)
             IM:Debug(string.format("[BagUI] Updated scroll content width to %d", newScrollContentWidth))
         end
@@ -818,13 +901,12 @@ function BagUI:InitializeSettings()
         end
         
         -- Calculate reasonable default: ~8 items per row for normal bags, scale up for larger
-        local defaultItemsPerRow = math.min(math.ceil(totalSlots / 15), 12)
-        defaultItemsPerRow = math.max(defaultItemsPerRow, 6)  -- Minimum 6, maximum 12
+        local defaultItemsPerRow = math.min(math.ceil(totalSlots / 12), 14)
+        defaultItemsPerRow = math.max(defaultItemsPerRow, 8)
         
         IM.db.global.bagUI = {
             enabled = true,  -- Enabled by default
-            columns = 2,  -- Default to 2 columns
-            itemsPerRow = 6,  -- Default to 6 items per row
+            itemsPerRow = 10,  -- Items before wrapping; also sets the window width
             viewMode = "category",  -- see BagUI.VIEW_MODE_BUTTONS for valid modes
             showItemSets = true,
             height = 500,  -- Default height

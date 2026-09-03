@@ -33,6 +33,7 @@ IM.UI.OverlayFactory = OverlayFactory
 local BORDER_THICKNESS = 2
 local GLOW_THICKNESS = 4
 
+
 -- Icon textures
 local LOCK_ICON = "Interface\\PetBattles\\PetBattle-LockIcon"
 local SELL_ICON = "Interface\\MoneyFrame\\UI-GoldIcon"
@@ -81,42 +82,17 @@ local _overlayCache = {}
     @returns table - Table with Top, Bottom, Left, Right texture references
 ]]
 local function _createBorderTextures(overlay, prefix, color, layer, thickness, offset)
-    offset = offset or 0
-    local textures = {}
-
-    -- Top border
-    textures.Top = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
-    textures.Top:SetHeight(thickness)
-    textures.Top:SetPoint("TOPLEFT", offset, -offset)
-    textures.Top:SetPoint("TOPRIGHT", -offset, -offset)
-    textures.Top:SetColorTexture(unpack(color))
-    textures.Top:Hide()
-
-    -- Bottom border
-    textures.Bottom = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
-    textures.Bottom:SetHeight(thickness)
-    textures.Bottom:SetPoint("BOTTOMLEFT", offset, offset)
-    textures.Bottom:SetPoint("BOTTOMRIGHT", -offset, offset)
-    textures.Bottom:SetColorTexture(unpack(color))
-    textures.Bottom:Hide()
-
-    -- Left border
-    textures.Left = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
-    textures.Left:SetWidth(thickness)
-    textures.Left:SetPoint("TOPLEFT", offset, -offset)
-    textures.Left:SetPoint("BOTTOMLEFT", offset, offset)
-    textures.Left:SetColorTexture(unpack(color))
-    textures.Left:Hide()
-
-    -- Right border
-    textures.Right = overlay:CreateTexture(nil, "OVERLAY", nil, layer)
-    textures.Right:SetWidth(thickness)
-    textures.Right:SetPoint("TOPRIGHT", -offset, -offset)
-    textures.Right:SetPoint("BOTTOMRIGHT", -offset, offset)
-    textures.Right:SetColorTexture(unpack(color))
-    textures.Right:Hide()
-
-    return textures
+    -- Thin wrapper: the ring itself lives in UI:AttachRing so the item quality
+    -- border and these state overlays are drawn by the same code.
+    local set = IM.UI:AttachRing(overlay, {
+        thickness = thickness,
+        offset = offset or 0,
+        layer = "OVERLAY",
+        sublayer = layer,
+        color = color,
+    })
+    set:Hide()
+    return set
 end
 
 --[[
@@ -298,14 +274,8 @@ end
 function OverlayFactory:ShowLock(overlay, show)
     if show then
         overlay.lockShade:Show()
-        overlay.lockGlow.Top:Show()
-        overlay.lockGlow.Bottom:Show()
-        overlay.lockGlow.Left:Show()
-        overlay.lockGlow.Right:Show()
-        overlay.lockBorder.Top:Show()
-        overlay.lockBorder.Bottom:Show()
-        overlay.lockBorder.Left:Show()
-        overlay.lockBorder.Right:Show()
+        overlay.lockGlow:Show()
+        overlay.lockBorder:Show()
         overlay.lockIconSet.bg:Show()
         overlay.lockIconSet.icon:Show()
         if overlay.lockAnimGroup and not overlay.lockAnimGroup:IsPlaying() then
@@ -313,14 +283,8 @@ function OverlayFactory:ShowLock(overlay, show)
         end
     else
         overlay.lockShade:Hide()
-        overlay.lockGlow.Top:Hide()
-        overlay.lockGlow.Bottom:Hide()
-        overlay.lockGlow.Left:Hide()
-        overlay.lockGlow.Right:Hide()
-        overlay.lockBorder.Top:Hide()
-        overlay.lockBorder.Bottom:Hide()
-        overlay.lockBorder.Left:Hide()
-        overlay.lockBorder.Right:Hide()
+        overlay.lockGlow:Hide()
+        overlay.lockBorder:Hide()
         overlay.lockIconSet.bg:Hide()
         overlay.lockIconSet.icon:Hide()
         if overlay.lockAnimGroup then
@@ -338,14 +302,8 @@ end
 function OverlayFactory:ShowSell(overlay, show)
     if show then
         overlay.sellShade:Show()
-        overlay.sellGlow.Top:Show()
-        overlay.sellGlow.Bottom:Show()
-        overlay.sellGlow.Left:Show()
-        overlay.sellGlow.Right:Show()
-        overlay.sellBorder.Top:Show()
-        overlay.sellBorder.Bottom:Show()
-        overlay.sellBorder.Left:Show()
-        overlay.sellBorder.Right:Show()
+        overlay.sellGlow:Show()
+        overlay.sellBorder:Show()
         overlay.sellIconSet.bg:Show()
         overlay.sellIconSet.icon:Show()
         if overlay.sellAnimGroup and not overlay.sellAnimGroup:IsPlaying() then
@@ -353,14 +311,8 @@ function OverlayFactory:ShowSell(overlay, show)
         end
     else
         overlay.sellShade:Hide()
-        overlay.sellGlow.Top:Hide()
-        overlay.sellGlow.Bottom:Hide()
-        overlay.sellGlow.Left:Hide()
-        overlay.sellGlow.Right:Hide()
-        overlay.sellBorder.Top:Hide()
-        overlay.sellBorder.Bottom:Hide()
-        overlay.sellBorder.Left:Hide()
-        overlay.sellBorder.Right:Hide()
+        overlay.sellGlow:Hide()
+        overlay.sellBorder:Hide()
         overlay.sellIconSet.bg:Hide()
         overlay.sellIconSet.icon:Hide()
         if overlay.sellAnimGroup then
@@ -378,18 +330,12 @@ end
 function OverlayFactory:ShowUnsellable(overlay, show)
     if show then
         overlay.unsellableShade:Show()
-        overlay.unsellableBorder.Top:Show()
-        overlay.unsellableBorder.Bottom:Show()
-        overlay.unsellableBorder.Left:Show()
-        overlay.unsellableBorder.Right:Show()
+        overlay.unsellableBorder:Show()
         overlay.unsellableIconSet.bg:Show()
         overlay.unsellableIconSet.icon:Show()
     else
         overlay.unsellableShade:Hide()
-        overlay.unsellableBorder.Top:Hide()
-        overlay.unsellableBorder.Bottom:Hide()
-        overlay.unsellableBorder.Left:Hide()
-        overlay.unsellableBorder.Right:Hide()
+        overlay.unsellableBorder:Hide()
         overlay.unsellableIconSet.bg:Hide()
         overlay.unsellableIconSet.icon:Hide()
     end
@@ -404,14 +350,8 @@ end
 function OverlayFactory:ShowMail(overlay, show)
     if show then
         overlay.mailShade:Show()
-        overlay.mailGlow.Top:Show()
-        overlay.mailGlow.Bottom:Show()
-        overlay.mailGlow.Left:Show()
-        overlay.mailGlow.Right:Show()
-        overlay.mailBorder.Top:Show()
-        overlay.mailBorder.Bottom:Show()
-        overlay.mailBorder.Left:Show()
-        overlay.mailBorder.Right:Show()
+        overlay.mailGlow:Show()
+        overlay.mailBorder:Show()
         overlay.mailIconSet.bg:Show()
         overlay.mailIconSet.icon:Show()
         if overlay.mailAnimGroup and not overlay.mailAnimGroup:IsPlaying() then
@@ -419,14 +359,8 @@ function OverlayFactory:ShowMail(overlay, show)
         end
     else
         overlay.mailShade:Hide()
-        overlay.mailGlow.Top:Hide()
-        overlay.mailGlow.Bottom:Hide()
-        overlay.mailGlow.Left:Hide()
-        overlay.mailGlow.Right:Hide()
-        overlay.mailBorder.Top:Hide()
-        overlay.mailBorder.Bottom:Hide()
-        overlay.mailBorder.Left:Hide()
-        overlay.mailBorder.Right:Hide()
+        overlay.mailGlow:Hide()
+        overlay.mailBorder:Hide()
         overlay.mailIconSet.bg:Hide()
         overlay.mailIconSet.icon:Hide()
         if overlay.mailAnimGroup then

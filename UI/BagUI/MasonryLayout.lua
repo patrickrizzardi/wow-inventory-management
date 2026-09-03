@@ -26,10 +26,10 @@ local function _GetSizing()
     -- Fallback if not available yet
     return {
         BUTTON_BORDER_PADDING = 17,
-        ITEM_GAP = 2,
+        ITEM_GAP = 4,
         CATEGORY_PADDING = 6,
-        COLUMN_GAP = 12,
-        LEFT_MARGIN_EXTRA = 4,
+        CATEGORY_GAP = 12,
+        BLOCK_PADDING = 8,
     }
 end
 
@@ -46,24 +46,61 @@ function MasonryLayout:GetCategoryPadding()
     return sizing.CATEGORY_PADDING
 end
 
-function MasonryLayout:GetColumnGap()
-    local sizing = _GetSizing()
-    return sizing.COLUMN_GAP
-end
-
 function MasonryLayout:GetItemGap()
     local sizing = _GetSizing()
     return sizing.ITEM_GAP
 end
 
-function MasonryLayout:GetLeftMarginExtra()
+function MasonryLayout:GetBlockPadding()
     local sizing = _GetSizing()
-    return sizing.LEFT_MARGIN_EXTRA
+    return sizing.BLOCK_PADDING
+end
+
+--[[
+    How many items fit across one category block, and how wide their area is.
+
+    THE single answer to that question. It was previously computed twice - once
+    in CalculateCategoryHeight from the block width, once in
+    CalculateItemPositions from (block width - 4) - so the two could disagree
+    by a column. When they did, the renderer wrapped an extra row that the
+    reserved height knew nothing about, and the items hung outside the block.
+
+    Both callers now go through here, so they cannot drift again.
+]]
+function MasonryLayout:GetItemAreaWidth(blockWidth)
+    -- Items are inset by the left margin; mirror it on the right
+    return blockWidth - (self:GetBlockPadding() * 2)
+end
+
+-- Sub-pixel tolerance. The window width is DERIVED from itemsPerRow, so the
+-- available area lands on an exact multiple of the item pitch - precisely where
+-- a bare floor() is most fragile. Widths come back from GetWidth() as floats
+-- (UI scale), so a measured 433.6 instead of 434 floors one pixel short and
+-- drops an entire column. That is the "set 10, get 9, set 11, get 11" case: at
+-- 11 the division had slack to absorb the error.
+local WIDTH_TOLERANCE = 1
+
+function MasonryLayout:GetItemsPerRow(blockWidth, maxPerRow)
+    local itemSize = self:GetItemSize()
+    local gap = self:GetItemGap()
+
+    -- N items occupy N*size + (N-1)*gap, so solve for N including the gaps.
+    -- The old floor(width / itemSize) ignored them and over-counted.
+    local available = self:GetItemAreaWidth(blockWidth) + gap + WIDTH_TOLERANCE
+    local fits = math.floor(available / (itemSize + gap))
+
+    return math.max(1, math.min(maxPerRow or 8, fits))
+end
+
+function MasonryLayout:GetCategoryGap()
+    local sizing = _GetSizing()
+    return sizing.CATEGORY_GAP or 12
 end
 
 function MasonryLayout:GetRowPadding()
-    -- Vertical spacing between category groups
-    return (IM.UI and IM.UI.layout and IM.UI.layout.elementSpacing) or 6
+    -- Vertical spacing between category groups. Shares one constant with the
+    -- horizontal gap so blocks are separated by the same amount in both axes.
+    return self:GetCategoryGap()
 end
 
 -- ============================================================================
@@ -80,14 +117,24 @@ end
     @param itemsPerRow: Max items before wrapping within a category
     @return layout: Array of column data with positioned categories
 ]]
+--[[
+    Sections are full width and stacked, one per row.
+
+    Categories used to be packed two-per-row into multiple columns so small
+    ones did not each cost a whole row. That packing is what stopped items
+    lining up: every category started its grid at its own x, so icons in one
+    section never aligned with the section above it. A single full-width column
+    puts every item on one shared grid, which is the alignment that reads as
+    tidy. Width is set by itemsPerRow instead of a column count.
+]]
 function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRow)
-    columns = columns or 1
+    columns = 1
     itemsPerRow = itemsPerRow or 8
 
     -- Get dynamic sizing from single source of truth
     local itemSize = self:GetItemSize()
     local categoryPadding = self:GetCategoryPadding()
-    local columnGap = self:GetColumnGap()
+    local columnGap = 0  -- single column
     local rowPadding = self:GetRowPadding()
 
     -- Debug: Verify we got valid values
@@ -100,7 +147,7 @@ function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRo
         rowPadding = rowPadding or 6
     end
 
-    local categoryGapHorizontal = categoryPadding  -- Gap between categories sharing a row
+    local categoryGapHorizontal = self:GetCategoryGap()  -- Gap between categories sharing a row
     
     -- Calculate column width
     local totalPadding = categoryPadding * 2  -- Left and right padding
@@ -123,35 +170,10 @@ function MasonryLayout:Calculate(categories, containerWidth, columns, itemsPerRo
         columnData[i] = {}
     end
     
-    -- Group categories that can share rows (max 2 per row, total items <= itemsPerRow)
+    -- One category per row, full width. No packing: see the note on Calculate.
     local groups = {}
-    local currentGroup = {}
-    local currentGroupItemCount = 0
-    
     for _, category in ipairs(categories) do
-        local itemCount = #category.items
-        
-        -- Can we add this category to current group?
-        local canAddToGroup = #currentGroup < 2 and 
-                              (currentGroupItemCount + itemCount) <= itemsPerRow
-        
-        if canAddToGroup and #currentGroup > 0 then
-            -- Add to current group
-            table.insert(currentGroup, category)
-            currentGroupItemCount = currentGroupItemCount + itemCount
-        else
-            -- Start new group
-            if #currentGroup > 0 then
-                table.insert(groups, currentGroup)
-            end
-            currentGroup = {category}
-            currentGroupItemCount = itemCount
-        end
-    end
-    
-    -- Don't forget the last group
-    if #currentGroup > 0 then
-        table.insert(groups, currentGroup)
+        table.insert(groups, { category })
     end
     
     IM:Debug(string.format("[MasonryLayout] Created %d groups from %d categories", #groups, #categories))
@@ -249,9 +271,8 @@ function MasonryLayout:CalculateCategoryHeight(category, availableWidth, itemsPe
     -- Header height (category name)
     local headerHeight = (IM.UI.layout.rowHeightSmall or 24) + (IM.UI.layout.elementSpacing or 6)
 
-    -- Calculate how many items fit per row
-    local itemsPerRowActual = math.min(itemsPerRow, math.floor(availableWidth / itemSize))
-    if itemsPerRowActual < 1 then itemsPerRowActual = 1 end
+    -- Same answer the renderer will use; see GetItemsPerRow
+    local itemsPerRowActual = self:GetItemsPerRow(availableWidth, itemsPerRow)
 
     -- Calculate number of rows needed
     local numRows = math.ceil(itemCount / itemsPerRowActual)
@@ -260,7 +281,7 @@ function MasonryLayout:CalculateCategoryHeight(category, availableWidth, itemsPe
     local itemsHeight = numRows * itemSize + (numRows - 1) * itemGap
 
     -- Total height with bottom padding
-    return headerHeight + itemsHeight + 4  -- Reduced bottom padding
+    return headerHeight + itemsHeight + self:GetBlockPadding()
 end
 
 -- ============================================================================
@@ -284,8 +305,7 @@ function MasonryLayout:CalculateItemPositions(itemCount, startX, startY, availab
     local itemSize = self:GetItemSize()
     local itemGap = self:GetItemGap()
 
-    local itemsPerRowActual = math.min(itemsPerRow, math.floor(availableWidth / itemSize))
-    if itemsPerRowActual < 1 then itemsPerRowActual = 1 end
+    local itemsPerRowActual = self:GetItemsPerRow(availableWidth, itemsPerRow)
 
     local currentX = startX
     local currentY = startY

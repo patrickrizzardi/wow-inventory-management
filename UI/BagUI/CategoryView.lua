@@ -17,6 +17,7 @@ local CategoryView = BagUI.CategoryView
 -- Header frame pool (prevents frame leak that causes stack overflow)
 local _headerPool = {}
 local _activeHeaders = {}
+
 local _emptyStateText = nil
 
 -- Equipment slot order (for subcategory mode)
@@ -51,9 +52,33 @@ for i, slot in ipairs(EQUIPMENT_SLOT_ORDER) do
     SLOT_ORDER_MAP[slot] = i
 end
 
--- ============================================================================
--- HEADER POOL
--- ============================================================================
+-- Empty-slot placeholders. Deliberately pooled TEXTURES, not ItemButtons: the
+-- button pool is sized to the character's actual bag slots, so drawing a
+-- placeholder per partial row would exhaust it and real items would vanish.
+local _slotPool = {}
+local _activeSlots = {}
+
+local function _AcquireSlot(scrollContent)
+    local tex = table.remove(_slotPool)
+    if not tex then
+        tex = scrollContent:CreateTexture(nil, "BACKGROUND")
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+    end
+    tex:ClearAllPoints()
+    tex:SetVertexColor(unpack(UI.colors.backgroundDark))
+    tex:Show()
+    table.insert(_activeSlots, tex)
+    return tex
+end
+
+local function _ReleaseAllSlots()
+    for _, tex in ipairs(_activeSlots) do
+        tex:Hide()
+        tex:ClearAllPoints()
+        table.insert(_slotPool, tex)
+    end
+    wipe(_activeSlots)
+end
 
 local function _AcquireHeader(scrollContent)
     local header = table.remove(_headerPool)
@@ -90,8 +115,9 @@ function CategoryView:Refresh(scrollContent)
         BagUI.ItemButton:ReleaseAll()
     end
 
-    -- Release all category headers back to pool
+    -- Release all category headers and slot placeholders back to their pools
     _ReleaseAllHeaders()
+    _ReleaseAllSlots()
 
     -- Hide empty state from previous render
     if _emptyStateText then
@@ -123,8 +149,17 @@ function CategoryView:Refresh(scrollContent)
         return
     end
 
-    -- Organize into categories (GetViewMode sanitizes stale saved modes)
-    local categories = self:Organize(items, BagUI:GetViewMode())
+    -- Organize into categories (GetViewMode sanitizes stale saved modes).
+    -- Reported explicitly rather than left to throw: with script errors off a
+    -- failure here is completely silent, and the symptom - an empty view whose
+    -- elements were already released - looks like the view mode itself is
+    -- broken rather than one call in it.
+    local mode = BagUI:GetViewMode()
+    local ok, categories = pcall(self.Organize, self, items, mode)
+    if not ok then
+        IM:PrintError(string.format("Bag grouping '%s' failed: %s", tostring(mode), tostring(categories)))
+        return
+    end
 
     -- Filter out empty categories (shouldn't happen but safety check)
     local nonEmptyCategories = {}
@@ -157,7 +192,15 @@ function CategoryView:Refresh(scrollContent)
         IM:Debug(string.format("[CategoryView] Using fallback containerWidth=%d", containerWidth))
     end
 
-    local columnData, totalHeight = BagUI.MasonryLayout:CalculateFromSettings(categories, containerWidth)
+    local laidOut, columnData = pcall(BagUI.MasonryLayout.CalculateFromSettings,
+        BagUI.MasonryLayout, categories, containerWidth)
+    if not laidOut then
+        IM:PrintError(string.format("Bag layout failed for '%s': %s", tostring(mode), tostring(columnData)))
+        return
+    end
+
+    IM:Debug(string.format("[CategoryView] mode=%s categories=%d containerWidth=%d",
+        tostring(mode), #categories, containerWidth))
 
     -- Render categories and track actual content bounds
     local contentBounds = { maxX = 0, maxY = 0 }
@@ -550,7 +593,7 @@ function CategoryView:GetItemSubcategory(item)
     
     -- Step 2: Not equipment - for armor/weapons without slots, return "Other"
     -- This prevents showing "Plate", "Mail", "Leather", "Cloth" as categories
-    if classID == IM.ITEM_CLASS.Armor or classID == IM.ITEM_CLASS.Weapon then
+    if classID == IM.ITEM_CLASS.ARMOR or classID == IM.ITEM_CLASS.WEAPON then
         return "Other"
     end
     
@@ -626,9 +669,20 @@ end
 function CategoryView:RenderCategories(scrollContent, columnData, contentBounds)
     if not scrollContent or not columnData then return end
 
+    -- Sections are independent, so render them independently. A single bad
+    -- category used to abort the whole pass, leaving the view completely blank
+    -- with every previously drawn element already released - the failure looked
+    -- like "the mode is broken" rather than "one section is". Now a bad section
+    -- is the only thing missing, and it names itself in the debug log.
     for colIndex, column in ipairs(columnData) do
         for _, categoryData in ipairs(column) do
-            self:RenderCategory(scrollContent, categoryData, contentBounds)
+            local ok, err = pcall(self.RenderCategory, self, scrollContent, categoryData, contentBounds)
+            if not ok then
+                local name = categoryData and categoryData.category
+                    and categoryData.category.name or "?"
+                IM:PrintError(string.format(
+                    "Bag section '%s' failed to render: %s", tostring(name), tostring(err)))
+            end
         end
     end
 end
@@ -640,23 +694,31 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
     local width = categoryData.width
 
     -- Get sizing from MasonryLayout (single source of truth)
-    local leftMarginExtra = BagUI.MasonryLayout:GetLeftMarginExtra()
+    local blockPadding = BagUI.MasonryLayout:GetBlockPadding()
 
     -- Calculate item positions FIRST so we can anchor header to first item
     local itemStartY = y - (IM.UI.layout.rowHeightSmall or 24) - (IM.UI.layout.elementSpacing or 6)
-    local itemStartX = x + leftMarginExtra
+    local itemStartX = x + blockPadding
 
     IM:Debug(string.format("[CategoryView] Rendering '%s': headerY=%d, itemStartY=%d, itemStartX=%d",
         category.name, y, itemStartY, itemStartX))
 
     local settings = BagUI:GetSettings()
     local itemSize = BagUI.MasonryLayout:GetItemSize()
+    local maxPerRow = settings.itemsPerRow or 8
+
+    -- Pad the last row out with placeholders so a section is always a complete
+    -- rectangle, instead of stopping mid-row and leaving a notch. Costs no
+    -- extra height: the row already exists.
+    local perRow = BagUI.MasonryLayout:GetItemsPerRow(width, maxPerRow)
+    local slotCount = math.ceil(#category.items / perRow) * perRow
+
     local positions = BagUI.MasonryLayout:CalculateItemPositions(
-        #category.items,
+        slotCount,
         itemStartX,
         itemStartY,
-        width - 4,  -- Reduced inner padding
-        settings.itemsPerRow or 8
+        width,  -- block width; MasonryLayout applies the inner inset itself
+        maxPerRow
     )
 
     -- Render items first and track the first button for header anchoring
@@ -682,23 +744,58 @@ function CategoryView:RenderCategory(scrollContent, categoryData, contentBounds)
         end
     end
 
+    -- Fill the remainder of the last row
+    for i = #category.items + 1, slotCount do
+        local slot = _AcquireSlot(scrollContent)
+        slot:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", positions[i].x, positions[i].y)
+        slot:SetSize(itemSize, itemSize)
+    end
+
+    -- Raised surface behind the category. Elevation here is lightness, not a
+    -- shadow: the block sits a few percent above the window ground, with a
+    -- lighter hairline on its top edge and a darker one beneath, which reads
+    -- as light falling from above.
+    -- Sections are not cards. A card promises its contents fill a rectangle,
+    -- and these do not - a one-item category bought a whole box of dead space.
+    -- Grouping is carried by the header and a hairline rule instead, which is
+    -- also what lets every section share one item grid.
+
     -- Acquire category header from pool
     local header = _AcquireHeader(scrollContent)
     header:SetSize(width, UI.layout.rowHeightSmall)
 
     if firstButton then
         local headerGap = IM.UI.layout.elementSpacing or 6
-        header:SetPoint("BOTTOMLEFT", firstButton, "TOPLEFT", -leftMarginExtra, headerGap)
+        header:SetPoint("BOTTOMLEFT", firstButton, "TOPLEFT", -blockPadding, headerGap)
     else
         header:SetPoint("TOPLEFT", scrollContent, "TOPLEFT", x, y)
     end
 
-    -- Reuse or create header text
+    -- Header carries the hierarchy: near-white and heavier, with the count
+    -- beside it and a rule running out to the section's right edge.
     if not header._imHeaderText then
-        local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         headerText:SetPoint("LEFT", UI.layout.paddingSmall, 0)
         header._imHeaderText = headerText
     end
-    header._imHeaderText:SetText(category.name)
-    header._imHeaderText:SetTextColor(unpack(UI.colors.accent))
+    header._imHeaderText:SetText(string.upper(category.name))
+    header._imHeaderText:SetTextColor(unpack(UI.colors.text))
+
+    if not header._imHeaderCount then
+        local countText = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        countText:SetPoint("LEFT", header._imHeaderText, "RIGHT", UI.layout.paddingSmall + 2, 0)
+        header._imHeaderCount = countText
+    end
+    header._imHeaderCount:SetText(tostring(#category.items))
+    header._imHeaderCount:SetTextColor(unpack(UI.colors.textDisabled))
+
+    if not header._imHeaderRule then
+        local rule = header:CreateTexture(nil, "ARTWORK")
+        rule:SetTexture("Interface\\Buttons\\WHITE8X8")
+        rule:SetHeight(1)
+        rule:SetPoint("LEFT", header._imHeaderCount, "RIGHT", UI.layout.paddingSmall * 2, 0)
+        rule:SetPoint("RIGHT", header, "RIGHT", -UI.layout.paddingSmall, 0)
+        rule:SetVertexColor(unpack(UI.colors.border))
+        header._imHeaderRule = rule
+    end
 end
