@@ -563,11 +563,7 @@ function UI:CreateCheckbox(parent, text, default)
     checkbox:SetSize(checkboxSize, checkboxSize)
     checkbox:SetPoint("LEFT", 0, 3)  -- Offset to center in container and prevent clipping
 
-    checkbox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(checkbox, self.layout.radiusSmall)
     checkbox:SetBackdropColor(0.1, 0.1, 0.1, 1)
     checkbox:SetBackdropBorderColor(unpack(self.colors.border))
 
@@ -639,11 +635,7 @@ function UI:CreateSlider(parent, text, min, max, step, default)
     slider:SetValueStep(step or 1)
     slider:SetObeyStepOnDrag(true)
 
-    slider:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(slider, self.layout.radiusSmall)
     slider:SetBackdropColor(0.1, 0.1, 0.1, 1)
     slider:SetBackdropBorderColor(unpack(self.colors.border))
 
@@ -701,11 +693,7 @@ function UI:CreateNumberInput(parent, text, default, minVal, maxVal)
     editbox:SetNumeric(true)
     editbox:SetMaxLetters(6)
 
-    editbox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(editbox, self.layout.radiusSmall)
     editbox:SetBackdropColor(0.1, 0.1, 0.1, 1)
     editbox:SetBackdropBorderColor(unpack(self.colors.border))
     editbox:SetTextInsets(self.layout.elementSpacing, self.layout.elementSpacing, 0, 0)
@@ -790,11 +778,7 @@ function UI:CreateCurrencyInput(parent, text, defaultCopper)
     goldBox:SetAutoFocus(false)
     goldBox:SetNumeric(true)
     goldBox:SetMaxLetters(5)
-    goldBox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(goldBox, self.layout.radiusSmall)
     goldBox:SetBackdropColor(0.1, 0.1, 0.1, 1)
     goldBox:SetBackdropBorderColor(unpack(self.colors.border))
     goldBox:SetTextInsets(self.layout.paddingSmall, self.layout.paddingSmall, 0, 0)
@@ -815,11 +799,7 @@ function UI:CreateCurrencyInput(parent, text, defaultCopper)
     silverBox:SetAutoFocus(false)
     silverBox:SetNumeric(true)
     silverBox:SetMaxLetters(2)
-    silverBox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(silverBox, self.layout.radiusSmall)
     silverBox:SetBackdropColor(0.1, 0.1, 0.1, 1)
     silverBox:SetBackdropBorderColor(unpack(self.colors.border))
     silverBox:SetTextInsets(self.layout.paddingSmall, self.layout.paddingSmall, 0, 0)
@@ -840,11 +820,7 @@ function UI:CreateCurrencyInput(parent, text, defaultCopper)
     copperBox:SetAutoFocus(false)
     copperBox:SetNumeric(true)
     copperBox:SetMaxLetters(2)
-    copperBox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(copperBox, self.layout.radiusSmall)
     copperBox:SetBackdropColor(0.1, 0.1, 0.1, 1)
     copperBox:SetBackdropBorderColor(unpack(self.colors.border))
     copperBox:SetTextInsets(self.layout.paddingSmall, self.layout.paddingSmall, 0, 0)
@@ -929,11 +905,7 @@ function UI:CreateDropdown(parent, text, options, default)
     dropdown:SetSize(self.layout.inputWidthLarge - self.layout.iconSize, self.layout.buttonHeightSmall)
     dropdown:SetPoint("TOPLEFT", 0, -self.layout.iconSizeSmall + 2)
 
-    dropdown:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(dropdown, self.layout.radiusSmall)
     dropdown:SetBackdropColor(0.12, 0.12, 0.12, 1)
     dropdown:SetBackdropBorderColor(unpack(self.colors.border))
 
@@ -972,11 +944,7 @@ function UI:ShowDropdownMenu(anchor, options, callback)
     if not UI.dropdownMenu then
         UI.dropdownMenu = CreateFrame("Frame", "InventoryManagerDropdownMenu", UIParent, "BackdropTemplate")
         UI.dropdownMenu:SetFrameStrata("TOOLTIP")
-        UI.dropdownMenu:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = self.layout.borderSize,
-        })
+        UI:MakeRounded(UI.dropdownMenu, UI.layout.radiusSmall)
         UI.dropdownMenu:SetBackdropColor(0.1, 0.1, 0.1, 0.95)
         UI.dropdownMenu:SetBackdropBorderColor(unpack(self.colors.border))
 
@@ -1212,11 +1180,7 @@ function UI:CreateFeatureCard(parent, yOffset, height)
     card:SetHeight(height or 100)
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", self.layout.cardSpacing, yOffset or 0)
     card:SetPoint("RIGHT", parent, "RIGHT", -self.layout.cardSpacing, 0)
-    card:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(card, self.layout.radius)
     card:SetBackdropColor(0.10, 0.09, 0.07, 0.9)  -- Subtle warm tint
     card:SetBackdropBorderColor(unpack(self.colors.accentDim))
     return card
@@ -1229,11 +1193,7 @@ function UI:CreateSettingsCard(parent, yOffset, height)
     card:SetHeight(height or 100)
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", self.layout.cardSpacing, yOffset or 0)
     card:SetPoint("RIGHT", parent, "RIGHT", -self.layout.cardSpacing, 0)
-    card:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(card, self.layout.radius)
     card:SetBackdropColor(unpack(self.colors.background))
     card:SetBackdropBorderColor(unpack(self.colors.borderDark))
     return card
@@ -1299,11 +1259,7 @@ function UI:CreateCard(parent, config)
     local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", self.layout.cardSpacing, yOffset)
     card:SetPoint("RIGHT", parent, "RIGHT", -self.layout.cardSpacing, 0)
-    card:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(card, self.layout.radius)
     card:SetBackdropColor(unpack(self.colors.background))
     card:SetBackdropBorderColor(unpack(self.colors.borderDark))
     
@@ -1537,11 +1493,7 @@ function UI:CreateItemListRow(parent, itemID, itemName, itemLink, itemTexture, y
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", self.layout.cardSpacing, yOffset)
     row:SetPoint("RIGHT", parent, "RIGHT", -self.layout.cardSpacing, 0)
 
-    row:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = self.layout.borderSize,
-    })
+    self:MakeRounded(row, self.layout.radiusSmall)
     row:SetBackdropColor(0.12, 0.12, 0.12, 1)
     row:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
 
@@ -1556,7 +1508,7 @@ function UI:CreateItemListRow(parent, itemID, itemName, itemLink, itemTexture, y
     local removeBtn = CreateFrame("Button", nil, row, "BackdropTemplate")
     removeBtn:SetSize(removeBtnSize, removeBtnSize)
     removeBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-    removeBtn:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
+    self:MakeRounded(removeBtn, self.layout.radiusSmall, true)
     removeBtn:SetBackdropColor(0.3, 0.1, 0.1, 1)
     removeBtn.text = removeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     removeBtn.text:SetPoint("CENTER")
@@ -1664,7 +1616,7 @@ function UI:CreateTabBar(parent, config)
     -- Create tab bar frame
     local tabBar = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     tabBar:SetHeight(height)
-    tabBar:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+    self:MakeRounded(tabBar, self.layout.radiusSmall, true)
     tabBar:SetBackdropColor(0.08, 0.08, 0.08, 1)
 
     -- Store tab buttons and state
@@ -1693,11 +1645,7 @@ function UI:CreateTabBar(parent, config)
     local function CreateTabButton(data, index)
         local btn = CreateFrame("Button", nil, tabBar, "BackdropTemplate")
         btn:SetHeight(height - 6)
-        btn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = self.layout.borderSize,
-        })
+        self:MakeRounded(btn, self.layout.radiusSmall)
         btn:SetBackdropColor(0.15, 0.15, 0.15, 1)
         btn:SetBackdropBorderColor(unpack(self.colors.border))
 
