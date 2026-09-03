@@ -90,11 +90,7 @@ function Dashboard:Create()
     local frame = CreateFrame("Frame", "InventoryManagerDashboard", UIParent, "BackdropTemplate")
     frame:SetSize(420, 440)
     frame:SetPoint("CENTER")
-    frame:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
+    UI:MakeRounded(frame, UI.layout.radius)
     frame:SetBackdropColor(unpack(UI.colors.background))
     frame:SetBackdropBorderColor(unpack(UI.colors.border))
     frame:SetFrameStrata("HIGH")
@@ -170,9 +166,7 @@ function Dashboard:Create()
     titleBar:SetHeight(UI.layout.titleBarHeight)
     titleBar:SetPoint("TOPLEFT", UI.layout.borderSize, -UI.layout.borderSize)
     titleBar:SetPoint("TOPRIGHT", -UI.layout.borderSize, -UI.layout.borderSize)
-    titleBar:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
+    UI:MakeRounded(titleBar, UI.layout.radius, true)
     titleBar:SetBackdropColor(unpack(UI.colors.headerBar))
 
     local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -280,9 +274,7 @@ function Dashboard:CreateNetWorthContent(frame)
     breakdownBox:SetHeight(130)
     breakdownBox:SetPoint("TOPLEFT", 0, 0)
     breakdownBox:SetPoint("RIGHT", 0, 0)
-    breakdownBox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
+    UI:MakeRounded(breakdownBox, UI.layout.radius, true)
     breakdownBox:SetBackdropColor(unpack(UI.colors.backgroundLight))
 
     local headerLabel = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -297,7 +289,7 @@ function Dashboard:CreateNetWorthContent(frame)
 
     local charGoldValue = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     charGoldValue:SetPoint("TOPRIGHT", -10, -24)
-    charGoldValue:SetTextColor(1, 0.84, 0, 1)
+    charGoldValue:SetTextColor(unpack(UI.colors.money))
     content.charGoldValue = charGoldValue
 
     -- Row 2: Warband Bank (with + prefix)
@@ -308,7 +300,7 @@ function Dashboard:CreateNetWorthContent(frame)
 
     local warbandValue = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     warbandValue:SetPoint("TOPRIGHT", -10, -40)
-    warbandValue:SetTextColor(1, 0.84, 0, 1)
+    warbandValue:SetTextColor(unpack(UI.colors.money))
     content.warbandValue = warbandValue
 
     -- Divider line 1
@@ -316,16 +308,16 @@ function Dashboard:CreateNetWorthContent(frame)
     divider1:SetHeight(1)
     divider1:SetPoint("TOPLEFT", 140, -54)
     divider1:SetPoint("RIGHT", -10, 0)
-    divider1:SetColorTexture(0.4, 0.4, 0.4, 0.6)
+    divider1:SetColorTexture(UI.colors.borderLight[1], UI.colors.borderLight[2], UI.colors.borderLight[3], 0.6)
 
     -- Row 3: Liquid Gold (subtotal)
     local liquidLabel = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     liquidLabel:SetPoint("TOPLEFT", 10, -60)
-    liquidLabel:SetText("|cff00ff00Liquid Gold:|r")
+    liquidLabel:SetText(UI:ColorText("Liquid Gold:", "success"))
 
     local liquidValue = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     liquidValue:SetPoint("TOPRIGHT", -10, -60)
-    liquidValue:SetTextColor(0, 1, 0, 1)
+    liquidValue:SetTextColor(unpack(UI.colors.success))
     content.liquidValue = liquidValue
 
     -- Row 4: Inventory Value (with + prefix)
@@ -336,7 +328,7 @@ function Dashboard:CreateNetWorthContent(frame)
 
     local invValue = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     invValue:SetPoint("TOPRIGHT", -10, -76)
-    invValue:SetTextColor(0.7, 0.7, 0.7, 1)
+    invValue:SetTextColor(unpack(UI.colors.textDim))
     content.invValue = invValue
 
     -- Divider line 2
@@ -344,7 +336,7 @@ function Dashboard:CreateNetWorthContent(frame)
     divider2:SetHeight(1)
     divider2:SetPoint("TOPLEFT", 140, -90)
     divider2:SetPoint("RIGHT", -10, 0)
-    divider2:SetColorTexture(0.4, 0.4, 0.4, 0.6)
+    divider2:SetColorTexture(UI.colors.borderLight[1], UI.colors.borderLight[2], UI.colors.borderLight[3], 0.6)
 
     -- Row 5: Total Net Worth (final)
     local totalLabel = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -353,13 +345,13 @@ function Dashboard:CreateNetWorthContent(frame)
 
     local totalValue = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     totalValue:SetPoint("TOPRIGHT", -10, -98)
-    totalValue:SetTextColor(1, 0.84, 0, 1)
+    totalValue:SetTextColor(unpack(UI.colors.money))
     content.totalValue = totalValue
 
     -- Inventory hint
     local invHint = breakdownBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     invHint:SetPoint("BOTTOMLEFT", 10, 4)
-    invHint:SetText("|cff666666Inventory requires vendor price data (login to each character)|r")
+    invHint:SetText(UI:ColorText("Inventory requires vendor price data (login to each character)", "dim"))
 
     -- Characters header
     local charHeader = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -427,10 +419,8 @@ function Dashboard:CreateLedgerContent(frame)
     searchRow:SetHeight(28)
     searchRow:SetPoint("TOPLEFT", 0, yOffset)
     searchRow:SetPoint("RIGHT", 0, 0)
-    searchRow:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
-    searchRow:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
+    UI:MakeRounded(searchRow, UI.layout.radiusSmall, true)
+    searchRow:SetBackdropColor(UI.colors.background[1], UI.colors.background[2], UI.colors.background[3], 0.8)
 
     local searchLabel = searchRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     searchLabel:SetPoint("LEFT", 8, 0)
@@ -443,12 +433,8 @@ function Dashboard:CreateLedgerContent(frame)
     searchInput:SetFontObject("GameFontNormalSmall")
     searchInput:SetAutoFocus(false)
     searchInput:SetMaxLetters(50)
-    searchInput:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    searchInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
+    UI:MakeRounded(searchInput, UI.layout.radiusSmall)
+    searchInput:SetBackdropColor(unpack(UI.colors.background))
     searchInput:SetBackdropBorderColor(unpack(UI.colors.border))
     searchInput:SetTextInsets(6, 6, 0, 0)
     searchInput:SetTextColor(unpack(UI.colors.text))
@@ -457,7 +443,7 @@ function Dashboard:CreateLedgerContent(frame)
     local searchPlaceholder = searchInput:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     searchPlaceholder:SetPoint("LEFT", 6, 0)
     searchPlaceholder:SetText("Filter by item, source...")
-    searchPlaceholder:SetTextColor(0.4, 0.4, 0.4, 1)
+    searchPlaceholder:SetTextColor(unpack(UI.colors.textDisabled))
     if _ledgerFilters.search and _ledgerFilters.search ~= "" then
         searchPlaceholder:Hide()
     end
@@ -505,10 +491,8 @@ function Dashboard:CreateLedgerContent(frame)
     filterRow:SetHeight(32)
     filterRow:SetPoint("TOPLEFT", 0, yOffset)
     filterRow:SetPoint("RIGHT", 0, 0)
-    filterRow:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
-    filterRow:SetBackdropColor(0.08, 0.08, 0.08, 0.8)
+    UI:MakeRounded(filterRow, UI.layout.radiusSmall, true)
+    filterRow:SetBackdropColor(UI.colors.backgroundDark[1], UI.colors.backgroundDark[2], UI.colors.backgroundDark[3], 0.8)
 
     -- Type filter dropdown
     local typeLabel = filterRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -652,9 +636,7 @@ function Dashboard:CreateLedgerContent(frame)
     summaryBox:SetHeight(56)
     summaryBox:SetPoint("TOPLEFT", 0, yOffset)
     summaryBox:SetPoint("RIGHT", 0, 0)
-    summaryBox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
+    UI:MakeRounded(summaryBox, UI.layout.radius, true)
     summaryBox:SetBackdropColor(unpack(UI.colors.backgroundLight))
 
     local summaryLabel = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -663,7 +645,7 @@ function Dashboard:CreateLedgerContent(frame)
 
     local incomeLabel = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     incomeLabel:SetPoint("TOPLEFT", 10, -24)
-    incomeLabel:SetText("|cff4DCC4DIncome:|r")  -- UX Fix #7: Consistent color (#4DCC4D)
+    incomeLabel:SetText(UI:ColorText("Income:", "success"))
 
     local incomeValue = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     incomeValue:SetPoint("LEFT", incomeLabel, "RIGHT", 6, 0)
@@ -671,7 +653,7 @@ function Dashboard:CreateLedgerContent(frame)
 
     local expenseLabel = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     expenseLabel:SetPoint("TOPLEFT", 140, -24)
-    expenseLabel:SetText("|cffE64D4DExpenses:|r")  -- UX Fix #7: Consistent color (#E64D4D)
+    expenseLabel:SetText(UI:ColorText("Expenses:", "error"))
 
     local expenseValue = summaryBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     expenseValue:SetPoint("LEFT", expenseLabel, "RIGHT", 6, 0)
@@ -702,25 +684,25 @@ function Dashboard:CreateLedgerContent(frame)
     infoBtn:SetPoint("BOTTOMRIGHT", -6, 4)
     infoBtn.text = infoBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     infoBtn.text:SetPoint("CENTER")
-    infoBtn.text:SetText("|cff888888?|r")
+    infoBtn.text:SetText(UI:ColorText("?", "dim"))
     infoBtn:SetScript("OnEnter", function(self)
         self.text:SetText(UI:ColorText("?", "accent"))
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine("Ledger Tracking Info", 1, 0.84, 0)
+        GameTooltip:AddLine("Ledger Tracking Info", UI.colors.money[1], UI.colors.money[2], UI.colors.money[3])
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cffcc66ff'Other'|r transactions include:", 1, 1, 1)
-        GameTooltip:AddLine("  - Crafting costs (profession materials)", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("  - Profession training fees", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("  - Great Vault fees", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("  - Garrison/Mission Table costs", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("  - Any other untracked gold change", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("|cffcc66ff'Other'|r transactions include:", UI.colors.text[1], UI.colors.text[2], UI.colors.text[3])
+        GameTooltip:AddLine("  - Crafting costs (profession materials)", UI.colors.textDim[1], UI.colors.textDim[2], UI.colors.textDim[3])
+        GameTooltip:AddLine("  - Profession training fees", UI.colors.textDim[1], UI.colors.textDim[2], UI.colors.textDim[3])
+        GameTooltip:AddLine("  - Great Vault fees", UI.colors.textDim[1], UI.colors.textDim[2], UI.colors.textDim[3])
+        GameTooltip:AddLine("  - Garrison/Mission Table costs", UI.colors.textDim[1], UI.colors.textDim[2], UI.colors.textDim[3])
+        GameTooltip:AddLine("  - Any other untracked gold change", UI.colors.textDim[1], UI.colors.textDim[2], UI.colors.textDim[3])
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cff888888These are gold changes not claimed by|r", 0.5, 0.5, 0.5)
-        GameTooltip:AddLine("|cff888888any specific tracking module.|r", 0.5, 0.5, 0.5)
+        GameTooltip:AddLine("These are gold changes not claimed by", UI.colors.textDisabled[1], UI.colors.textDisabled[2], UI.colors.textDisabled[3])
+        GameTooltip:AddLine("any specific tracking module.", UI.colors.textDisabled[1], UI.colors.textDisabled[2], UI.colors.textDisabled[3])
         GameTooltip:Show()
     end)
     infoBtn:SetScript("OnLeave", function(self)
-        self.text:SetText("|cff888888?|r")
+        self.text:SetText(UI:ColorText("?", "dim"))
         GameTooltip:Hide()
     end)
 
@@ -768,7 +750,7 @@ function Dashboard:CreateLedgerContent(frame)
     -- Create persistent "no data" message (hidden by default)
     local noDataMsg = transList:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     noDataMsg:SetPoint("TOPLEFT", 8, 0)
-    noDataMsg:SetText("|cff888888No transactions match the selected filters.|r")
+    noDataMsg:SetText("|cff8c8c9bNo transactions match the selected filters.|r")
     noDataMsg:Hide()
     content.noDataMsg = noDataMsg
 end
@@ -796,9 +778,7 @@ function Dashboard:CreateInventoryContent(frame)
     infoBox:SetHeight(52)
     infoBox:SetPoint("TOPLEFT", 0, yOffset)
     infoBox:SetPoint("RIGHT", 0, 0)
-    infoBox:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
+    UI:MakeRounded(infoBox, UI.layout.radius, true)
     infoBox:SetBackdropColor(unpack(UI.colors.backgroundLight))
 
     local infoTitle = infoBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -807,11 +787,11 @@ function Dashboard:CreateInventoryContent(frame)
 
     local infoText = infoBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     infoText:SetPoint("TOPLEFT", 10, -20)
-    infoText:SetText("|cff888888Search items across all characters' bags, banks, and warband bank.|r")
+    infoText:SetText("|cff8c8c9bSearch items across all characters' bags, banks, and warband bank.|r")
 
     local loginHint = infoBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     loginHint:SetPoint("BOTTOMLEFT", 10, 6)
-    loginHint:SetText("|cff666666Log into each character to scan their inventory.|r")
+    loginHint:SetText(UI:ColorText("Log into each character to scan their inventory.", "dim"))
 
     yOffset = yOffset - 58
 
@@ -820,10 +800,8 @@ function Dashboard:CreateInventoryContent(frame)
     searchRow:SetHeight(28)
     searchRow:SetPoint("TOPLEFT", 0, yOffset)
     searchRow:SetPoint("RIGHT", 0, 0)
-    searchRow:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
-    searchRow:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
+    UI:MakeRounded(searchRow, UI.layout.radiusSmall, true)
+    searchRow:SetBackdropColor(UI.colors.background[1], UI.colors.background[2], UI.colors.background[3], 0.8)
 
     local searchLabel = searchRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     searchLabel:SetPoint("LEFT", 8, 0)
@@ -836,12 +814,8 @@ function Dashboard:CreateInventoryContent(frame)
     searchInput:SetFontObject("GameFontNormalSmall")
     searchInput:SetAutoFocus(false)
     searchInput:SetMaxLetters(50)
-    searchInput:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = UI.layout.borderSize,
-    })
-    searchInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
+    UI:MakeRounded(searchInput, UI.layout.radiusSmall)
+    searchInput:SetBackdropColor(unpack(UI.colors.background))
     searchInput:SetBackdropBorderColor(unpack(UI.colors.border))
     searchInput:SetTextInsets(6, 6, 0, 0)
     searchInput:SetTextColor(unpack(UI.colors.text))
@@ -849,7 +823,7 @@ function Dashboard:CreateInventoryContent(frame)
     local searchPlaceholder = searchInput:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     searchPlaceholder:SetPoint("LEFT", 6, 0)
     searchPlaceholder:SetText("Search by item name...")
-    searchPlaceholder:SetTextColor(0.4, 0.4, 0.4, 1)
+    searchPlaceholder:SetTextColor(unpack(UI.colors.textDisabled))
 
     searchInput:SetScript("OnEditFocusGained", function(self)
         searchPlaceholder:Hide()
@@ -891,10 +865,8 @@ function Dashboard:CreateInventoryContent(frame)
     filterRow:SetHeight(32)
     filterRow:SetPoint("TOPLEFT", 0, yOffset)
     filterRow:SetPoint("RIGHT", 0, 0)
-    filterRow:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-    })
-    filterRow:SetBackdropColor(0.08, 0.08, 0.08, 0.8)
+    UI:MakeRounded(filterRow, UI.layout.radiusSmall, true)
+    filterRow:SetBackdropColor(UI.colors.backgroundDark[1], UI.colors.backgroundDark[2], UI.colors.backgroundDark[3], 0.8)
 
     -- Character filter dropdown
     local charLabel = filterRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1043,7 +1015,7 @@ function Dashboard:CreateInventoryContent(frame)
     -- Create persistent "no data" message (hidden by default)
     local noDataMsg = resultsList:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     noDataMsg:SetPoint("TOPLEFT", 8, 0)
-    noDataMsg:SetText("|cff888888No items found. Try a different search.|r")
+    noDataMsg:SetText("|cff8c8c9bNo items found. Try a different search.|r")
     noDataMsg:Hide()
     content.noDataMsg = noDataMsg
     -- Note: No scanPrompt needed - we always show either summary (when empty) or search results
@@ -1126,12 +1098,12 @@ function Dashboard:RefreshInventory()
         headerRow:SetHeight(24)
         headerRow:SetPoint("TOPLEFT", 0, yOffset)
         headerRow:SetPoint("RIGHT", 0, 0)
-        headerRow:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
+        UI:MakeRounded(headerRow, UI.layout.radiusSmall, true)
         headerRow:SetBackdropColor(unpack(UI.colors.headerBar))
 
         local headerText = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         headerText:SetPoint("LEFT", 8, 0)
-        headerText:SetText(UI:ColorText("INVENTORY SUMMARY", "accent") .. " |cff888888(Click character to browse)|r")
+        headerText:SetText(UI:ColorText("INVENTORY SUMMARY", "accent") .. " |cff8c8c9b(Click character to browse)|r")
 
         yOffset = yOffset - 28
 
@@ -1142,9 +1114,9 @@ function Dashboard:RefreshInventory()
             row:SetHeight(ROW_HEIGHT)
             row:SetPoint("TOPLEFT", 0, yOffset)
             row:SetPoint("RIGHT", 0, 0)
-            row:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
+            UI:MakeRounded(row, UI.layout.radiusSmall, true)
             local bgAlpha = i % 2 == 0 and 0.5 or 0.2
-            row:SetBackdropColor(0.12, 0.12, 0.12, bgAlpha)
+            row:SetBackdropColor(UI.colors.background[1], UI.colors.background[2], UI.colors.background[3], bgAlpha)
 
             -- Make row clickable - sets character filter and shows their items
             row:EnableMouse(true)
@@ -1152,7 +1124,7 @@ function Dashboard:RefreshInventory()
                 self:SetBackdropColor(unpack(UI.colors.rowHover))
             end)
             row:SetScript("OnLeave", function(self)
-                self:SetBackdropColor(0.12, 0.12, 0.12, bgAlpha)
+                self:SetBackdropColor(UI.colors.background[1], UI.colors.background[2], UI.colors.background[3], bgAlpha)
             end)
             row:SetScript("OnClick", function()
                 -- Set the character filter
@@ -1190,12 +1162,15 @@ function Dashboard:RefreshInventory()
 
             local countLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             countLabel:SetPoint("RIGHT", -30, 0)
-            countLabel:SetText("|cffffd700" .. charInfo.count .. "|r items")
+            -- Secondary detail, not a warning. It was decorative gold before the
+            -- palette split; "warning" is the wrong home for it just because it
+            -- is also amber - a semantic token has to keep meaning what it says.
+            countLabel:SetText(UI:ColorText(charInfo.count, "dim") .. " items")
 
             -- Arrow indicator
             local arrow = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             arrow:SetPoint("RIGHT", -8, 0)
-            arrow:SetText("|cff888888>|r")
+            arrow:SetText("|cff8c8c9b>|r")
 
             yOffset = yOffset - (ROW_HEIGHT + ROW_SPACING)
         end
@@ -1203,7 +1178,7 @@ function Dashboard:RefreshInventory()
         if #summary == 0 then
             local noData = resultsList:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             noData:SetPoint("TOPLEFT", 8, yOffset)
-            noData:SetText("|cff888888No inventory data yet. Login to characters to scan.|r")
+            noData:SetText("|cff8c8c9bNo inventory data yet. Login to characters to scan.|r")
             yOffset = yOffset - 20
         end
 
@@ -1234,7 +1209,7 @@ function Dashboard:RefreshInventory()
         headerRow:SetHeight(24)
         headerRow:SetPoint("TOPLEFT", 0, yOffset)
         headerRow:SetPoint("RIGHT", 0, 0)
-        headerRow:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
+        UI:MakeRounded(headerRow, UI.layout.radiusSmall, true)
         headerRow:SetBackdropColor(unpack(UI.colors.headerBar))
 
         -- Back button
@@ -1243,7 +1218,7 @@ function Dashboard:RefreshInventory()
             self:SetBackdropColor(unpack(UI.colors.headerBarHover))
         end)
         headerRow:SetScript("OnLeave", function(self)
-            self:SetBackdropColor(0.15, 0.12, 0.05, 1)
+            self:SetBackdropColor(unpack(UI.colors.headerBar))
         end)
         headerRow:SetScript("OnClick", function()
             -- Reset to summary view
@@ -1255,7 +1230,7 @@ function Dashboard:RefreshInventory()
 
         local backArrow = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         backArrow:SetPoint("LEFT", 8, 0)
-        backArrow:SetText("|cff888888<|r")
+        backArrow:SetText("|cff8c8c9b<|r")
 
         -- Get character name for display
         local charDisplayName = "Character"
@@ -1267,7 +1242,7 @@ function Dashboard:RefreshInventory()
 
         local headerText = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         headerText:SetPoint("LEFT", 20, 0)
-        headerText:SetText(UI:ColorText("BROWSING: " .. charDisplayName, "accent") .. " |cff888888(Click to go back)|r")
+        headerText:SetText(UI:ColorText("BROWSING: " .. charDisplayName, "accent") .. " |cff8c8c9b(Click to go back)|r")
 
         yOffset = yOffset - 28
     end
@@ -1298,13 +1273,9 @@ function Dashboard:RefreshInventory()
         row:SetHeight(ROW_HEIGHT)
         row:SetPoint("TOPLEFT", 0, yOffset)
         row:SetPoint("RIGHT", 0, 0)
-        row:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = UI.layout.borderSize,
-        })
-        row:SetBackdropColor(0.12, 0.12, 0.12, 1)
-        row:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
+        UI:MakeRounded(row, UI.layout.radiusSmall)
+        row:SetBackdropColor(unpack(UI.colors.background))
+        row:SetBackdropBorderColor(unpack(UI.colors.border))
 
         -- Item icon
         local icon = row:CreateTexture(nil, "ARTWORK")
@@ -1354,11 +1325,7 @@ function Dashboard:RefreshInventory()
         if not showMoreBtn then
             showMoreBtn = CreateFrame("Button", nil, resultsList, "BackdropTemplate")
             showMoreBtn:SetHeight(28)
-            showMoreBtn:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 2,
-            })
+            UI:MakeRounded(showMoreBtn, UI.layout.radiusSmall)
             showMoreBtn.text = showMoreBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             showMoreBtn.text:SetPoint("CENTER")
             _showMoreButtons.inventory = showMoreBtn
@@ -1372,7 +1339,7 @@ function Dashboard:RefreshInventory()
         showMoreBtn:SetBackdropBorderColor(unpack(UI.colors.accent))
         
         local remaining = #results - _inventoryPaginationLimit
-        showMoreBtn.text:SetText(UI:ColorText("Show More Items", "accent") .. " |cff888888(" .. remaining .. " remaining)|r")
+        showMoreBtn.text:SetText(UI:ColorText("Show More Items", "accent") .. " |cff8c8c9b(" .. remaining .. " remaining)|r")
         showMoreBtn:Show()
 
         local module = Dashboard
@@ -1382,11 +1349,11 @@ function Dashboard:RefreshInventory()
         end)
         showMoreBtn:SetScript("OnEnter", function(self)
             self:SetBackdropColor(unpack(UI.colors.rowHover))
-            self.text:SetText(UI:ColorText("► Show More Items", "accent") .. " |cffaaaaaa(" .. remaining .. " remaining)|r")
+            self.text:SetText(UI:ColorText("► Show More Items", "accent") .. " |cff8c8c9b(" .. remaining .. " remaining)|r")
         end)
         showMoreBtn:SetScript("OnLeave", function(self)
-            self:SetBackdropColor(0.2, 0.17, 0.08, 1)
-            self.text:SetText(UI:ColorText("Show More Items", "accent") .. " |cff888888(" .. remaining .. " remaining)|r")
+            self:SetBackdropColor(unpack(UI.colors.tabSelected))
+            self.text:SetText(UI:ColorText("Show More Items", "accent") .. " |cff8c8c9b(" .. remaining .. " remaining)|r")
         end)
 
         yOffset = yOffset - 32
@@ -1469,20 +1436,16 @@ function Dashboard:RefreshNetWorth()
         row:SetHeight(ROW_HEIGHT)
         row:SetPoint("TOPLEFT", 0, yOffset)
         row:SetPoint("RIGHT", 0, 0)
-        row:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = UI.layout.borderSize,
-        })
-        row:SetBackdropColor(0.12, 0.12, 0.12, 1)
-        row:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
+        UI:MakeRounded(row, UI.layout.radiusSmall)
+        row:SetBackdropColor(unpack(UI.colors.background))
+        row:SetBackdropBorderColor(unpack(UI.colors.border))
 
         -- Top line: Name (level) ... Total
         local nameLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         nameLabel:SetPoint("TOPLEFT", 10, -6)
         local displayName = charInfo.name
         if charInfo.level then
-            displayName = displayName .. " |cff888888(" .. charInfo.level .. ")|r"
+            displayName = displayName .. " |cff8c8c9b(" .. charInfo.level .. ")|r"
         end
         nameLabel:SetText(displayName)
         nameLabel:SetTextColor(classColor[1], classColor[2], classColor[3], 1)
@@ -1490,15 +1453,15 @@ function Dashboard:RefreshNetWorth()
         local totalLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         totalLabel:SetPoint("TOPRIGHT", -10, -6)
         totalLabel:SetText(IM:FormatMoney(charInfo.netWorth))
-        totalLabel:SetTextColor(1, 0.84, 0, 1)
+        totalLabel:SetTextColor(unpack(UI.colors.money))
 
         -- Bottom line: Gold: X | Inventory: X
         local detailLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         detailLabel:SetPoint("BOTTOMLEFT", 10, 6)
         detailLabel:SetTextColor(unpack(UI.colors.textDim))
 
-        local goldText = "|cffffd700" .. IM:FormatMoney(charInfo.gold) .. "|r"
-        local invText = "|cff888888" .. IM:FormatMoney(charInfo.inventory) .. "|r"
+        local goldText = "|cff" .. UI.hexColors.money .. IM:FormatMoney(charInfo.gold) .. "|r"
+        local invText = "|cff8c8c9b" .. IM:FormatMoney(charInfo.inventory) .. "|r"
         detailLabel:SetText("Gold: " .. goldText .. "  |  Inv: " .. invText)
 
         yOffset = yOffset - (ROW_HEIGHT + ROW_SPACING)
@@ -1507,7 +1470,7 @@ function Dashboard:RefreshNetWorth()
     if #breakdown.characters == 0 then
         local noData = charList:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         noData:SetPoint("TOPLEFT", 10, 0)
-        noData:SetText("|cff888888No character data yet.|r")
+        noData:SetText("|cff8c8c9bNo character data yet.|r")
         yOffset = -20
     end
 
@@ -1596,7 +1559,7 @@ function Dashboard:RefreshLedger()
     content.expenseValue:SetText(IM:FormatMoney(stats.totalExpense))
 
     -- UX Fix #7: Use consistent colors
-    local netColor = stats.netGold >= 0 and "|cff4DCC4D+" or "|cffE64D4D-"
+    local netColor = stats.netGold >= 0 and ("|cff" .. UI.hexColors.success .. "+") or ("|cff" .. UI.hexColors.error .. "-")
     content.netValue:SetText(netColor .. IM:FormatMoney(math.abs(stats.netGold)) .. "|r")
 
     if content.countLabel then
@@ -1630,8 +1593,10 @@ function Dashboard:RefreshLedger()
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, yOffset)
         row:SetPoint("RIGHT", 0, 0)
-        row:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8X8"})
-        row:SetBackdropColor(0.12, 0.12, 0.12, i % 2 == 0 and 0.5 or 0.2)
+        if not row._imFill then
+            UI:MakeRounded(row, UI.layout.radiusSmall, true)
+        end
+        row:SetBackdropColor(UI.colors.background[1], UI.colors.background[2], UI.colors.background[3], i % 2 == 0 and 0.5 or 0.2)
 
         -- Create or reuse FontStrings
         if not row.topLine then
@@ -1689,7 +1654,7 @@ function Dashboard:RefreshLedger()
         row.valueLabel:Show()
         if entry.valueFormatted and entry.valueFormatted ~= "" then
             -- UX Fix #7: Use consistent colors
-            local prefix = entry.isExpense and "|cffE64D4D-" or "|cff4DCC4D+"
+            local prefix = entry.isExpense and ("|cff" .. UI.hexColors.error .. "-") or ("|cff" .. UI.hexColors.success .. "+")
             row.valueLabel:SetText(prefix .. entry.valueFormatted .. "|r")
         else
             row.valueLabel:SetText("")
@@ -1715,11 +1680,7 @@ function Dashboard:RefreshLedger()
         if not showMoreBtn then
             showMoreBtn = CreateFrame("Button", nil, transList, "BackdropTemplate")
             showMoreBtn:SetHeight(28)
-            showMoreBtn:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 2,
-            })
+            UI:MakeRounded(showMoreBtn, UI.layout.radiusSmall)
             showMoreBtn.text = showMoreBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             showMoreBtn.text:SetPoint("CENTER")
             _showMoreButtons.ledger = showMoreBtn
@@ -1733,7 +1694,7 @@ function Dashboard:RefreshLedger()
         showMoreBtn:SetBackdropBorderColor(unpack(UI.colors.accent))
         
         local remaining = #entries - _paginationLimit
-        showMoreBtn.text:SetText(UI:ColorText("Show More Transactions", "accent") .. " |cff888888(" .. remaining .. " remaining)|r")
+        showMoreBtn.text:SetText(UI:ColorText("Show More Transactions", "accent") .. " |cff8c8c9b(" .. remaining .. " remaining)|r")
         showMoreBtn:Show()
 
         local module = Dashboard
@@ -1744,11 +1705,11 @@ function Dashboard:RefreshLedger()
         end)
         showMoreBtn:SetScript("OnEnter", function(self)
             self:SetBackdropColor(unpack(UI.colors.rowHover))
-            self.text:SetText(UI:ColorText("► Show More Transactions", "accent") .. " |cffaaaaaa(" .. remaining .. " remaining)|r")
+            self.text:SetText(UI:ColorText("► Show More Transactions", "accent") .. " |cff8c8c9b(" .. remaining .. " remaining)|r")
         end)
         showMoreBtn:SetScript("OnLeave", function(self)
-            self:SetBackdropColor(0.2, 0.17, 0.08, 1)
-            self.text:SetText(UI:ColorText("Show More Transactions", "accent") .. " |cff888888(" .. remaining .. " remaining)|r")
+            self:SetBackdropColor(unpack(UI.colors.tabSelected))
+            self.text:SetText(UI:ColorText("Show More Transactions", "accent") .. " |cff8c8c9b(" .. remaining .. " remaining)|r")
         end)
         yOffset = yOffset - 32
     else
