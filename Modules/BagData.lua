@@ -38,6 +38,11 @@ local _callbacks = {
 }
 local _pendingRefresh = false
 local _initialized = false
+-- Distinct from _initialized, which is set BEFORE the first scan runs. The
+-- first ForceRefresh fires OnBagItemAdded for every occupied slot, because the
+-- cache starts empty; consumers that react to arrivals need to know when that
+-- flood is over rather than treating a whole inventory as newly acquired.
+local _initialScanDone = false
 
 -- Bag IDs to scan
 local BAG_IDS = {
@@ -368,6 +373,12 @@ end
 
 -- Public API
 
+-- True once the initial full scan has completed, i.e. once OnBagItemAdded
+-- means "this arrived" rather than "this was already here at login".
+function BagData:IsInitialScanComplete()
+    return _initialScanDone
+end
+
 function BagData:GetAllItems()
     return _allItems
 end
@@ -519,6 +530,7 @@ function BagData:OnEnable()
             _initialized = true
             _RebuildEquipmentSetIndex()
             module:ForceRefresh()
+            _initialScanDone = true
         end
     end)
 end

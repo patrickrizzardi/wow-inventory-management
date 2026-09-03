@@ -620,6 +620,21 @@ end
 
 function BagUI:Hide()
     if _bagFrame then
+        -- Closing the bag is the "I have seen it" signal: clear Blizzard's
+        -- new-item flags so those items drop back into their normal categories.
+        -- Nothing else clears them - the ContainerFrame code that normally
+        -- would is suppressed by this addon.
+        --
+        -- Guarded on _isVisible: Hide() is also called on a bag that was never
+        -- open (binding setup, toggle hooks, addon conflict handling), and
+        -- clearing there would wipe the flags before they were ever displayed.
+        if _isVisible then
+            local Recent = IM:GetModule("RecentItems")
+            if Recent and Recent:IsEnabled() then
+                Recent:MarkAllSeen()
+            end
+        end
+
         _bagFrame:Hide()
         _isVisible = false
 
@@ -909,6 +924,7 @@ function BagUI:InitializeSettings()
             itemsPerRow = 10,  -- Items before wrapping; also sets the window width
             viewMode = "category",  -- see BagUI.VIEW_MODE_BUTTONS for valid modes
             showItemSets = true,
+            showRecentSection = true,  -- Recent section pinned above every grouping
             height = 500,  -- Default height
             iconSize = 20,  -- Item icon size (16-32)
             position = {

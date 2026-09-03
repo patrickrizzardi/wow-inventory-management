@@ -540,6 +540,13 @@ SlashCmdList["INVENTORYMANAGER"] = function(msg)
         else
             IM:Print("BagUI module not loaded")
         end
+    elseif cmd == "recent" then
+        local Recent = IM:GetModule("RecentItems")
+        if Recent then
+            Recent:Diagnose()
+        else
+            IM:PrintError("RecentItems module not loaded")
+        end
     elseif cmd == "bagdiag" then
         -- Run bag integration diagnostics
         if IM.UI and IM.UI.BagIntegration then
