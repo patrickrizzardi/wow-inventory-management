@@ -409,6 +409,58 @@ function UI:CreatePanel(name, parent, width, height)
 end
 
 -- Create a header/title bar for a panel
+-- Sidebar row: a full-width selectable list item, as distinct from a button.
+-- No radius and no border - rows read as a list because they share edges, and
+-- the selected one is marked by a fill plus an accent edge rather than a box.
+function UI:CreateRailRow(parent, label, height)
+    local row = CreateFrame("Button", nil, parent)
+    row:SetHeight(height or self.layout.rowHeightSmall)
+
+    row.bg = row:CreateTexture(nil, "BACKGROUND")
+    row.bg:SetTexture("Interface\\Buttons\\WHITE8X8")
+    row.bg:SetAllPoints(row)
+    row.bg:SetVertexColor(0, 0, 0, 0)
+
+    -- Left edge marker, shown only when selected
+    row.marker = row:CreateTexture(nil, "ARTWORK")
+    row.marker:SetTexture("Interface\\Buttons\\WHITE8X8")
+    row.marker:SetWidth(2)
+    row.marker:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    row.marker:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    row.marker:SetVertexColor(unpack(self.colors.accent))
+    row.marker:Hide()
+
+    row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.text:SetPoint("LEFT", row, "LEFT", self.layout.padding, 0)
+    row.text:SetText(label or "")
+    row.text:SetTextColor(unpack(self.colors.textDim))
+
+    row._imSelected = false
+
+    function row:SetSelected(selected)
+        self._imSelected = selected and true or false
+        self:Refresh()
+    end
+
+    function row:Refresh(hovered)
+        if self._imSelected then
+            self.bg:SetVertexColor(unpack(UI.colors.accentWash))
+            self.text:SetTextColor(unpack(UI.colors.accentHover))
+            self.marker:Show()
+        elseif hovered then
+            self.bg:SetVertexColor(unpack(UI.colors.surfaceRaised))
+            self.text:SetTextColor(unpack(UI.colors.text))
+            self.marker:Hide()
+        else
+            self.bg:SetVertexColor(0, 0, 0, 0)
+            self.text:SetTextColor(unpack(UI.colors.textDim))
+            self.marker:Hide()
+        end
+    end
+
+    return row
+end
+
 -- Small glyph control (close, clear, dismiss). One implementation so these
 -- cannot drift apart: the window close and the search clear were previously a
 -- FontString and a Blizzard texture respectively, and looked it.
