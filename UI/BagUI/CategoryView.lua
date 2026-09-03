@@ -542,7 +542,7 @@ function CategoryView:GetItemSubcategory(item)
     
     -- Step 2: Not equipment - for armor/weapons without slots, return "Other"
     -- This prevents showing "Plate", "Mail", "Leather", "Cloth" as categories
-    if classID == IM.ITEM_CLASS.Armor or classID == IM.ITEM_CLASS.Weapon then
+    if classID == IM.ITEM_CLASS.ARMOR or classID == IM.ITEM_CLASS.WEAPON then
         return "Other"
     end
     
@@ -618,9 +618,20 @@ end
 function CategoryView:RenderCategories(scrollContent, columnData, contentBounds)
     if not scrollContent or not columnData then return end
 
+    -- Sections are independent, so render them independently. A single bad
+    -- category used to abort the whole pass, leaving the view completely blank
+    -- with every previously drawn element already released - the failure looked
+    -- like "the mode is broken" rather than "one section is". Now a bad section
+    -- is the only thing missing, and it names itself in the debug log.
     for colIndex, column in ipairs(columnData) do
         for _, categoryData in ipairs(column) do
-            self:RenderCategory(scrollContent, categoryData, contentBounds)
+            local ok, err = pcall(self.RenderCategory, self, scrollContent, categoryData, contentBounds)
+            if not ok then
+                local name = categoryData and categoryData.category
+                    and categoryData.category.name or "?"
+                IM:PrintError(string.format(
+                    "Bag section '%s' failed to render: %s", tostring(name), tostring(err)))
+            end
         end
     end
 end
