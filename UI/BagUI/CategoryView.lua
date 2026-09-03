@@ -115,8 +115,17 @@ function CategoryView:Refresh(scrollContent)
         return
     end
 
-    -- Organize into categories (GetViewMode sanitizes stale saved modes)
-    local categories = self:Organize(items, BagUI:GetViewMode())
+    -- Organize into categories (GetViewMode sanitizes stale saved modes).
+    -- Reported explicitly rather than left to throw: with script errors off a
+    -- failure here is completely silent, and the symptom - an empty view whose
+    -- elements were already released - looks like the view mode itself is
+    -- broken rather than one call in it.
+    local mode = BagUI:GetViewMode()
+    local ok, categories = pcall(self.Organize, self, items, mode)
+    if not ok then
+        IM:PrintError(string.format("Bag grouping '%s' failed: %s", tostring(mode), tostring(categories)))
+        return
+    end
 
     -- Filter out empty categories (shouldn't happen but safety check)
     local nonEmptyCategories = {}
@@ -149,7 +158,15 @@ function CategoryView:Refresh(scrollContent)
         IM:Debug(string.format("[CategoryView] Using fallback containerWidth=%d", containerWidth))
     end
 
-    local columnData, totalHeight = BagUI.MasonryLayout:CalculateFromSettings(categories, containerWidth)
+    local laidOut, columnData = pcall(BagUI.MasonryLayout.CalculateFromSettings,
+        BagUI.MasonryLayout, categories, containerWidth)
+    if not laidOut then
+        IM:PrintError(string.format("Bag layout failed for '%s': %s", tostring(mode), tostring(columnData)))
+        return
+    end
+
+    IM:Debug(string.format("[CategoryView] mode=%s categories=%d containerWidth=%d",
+        tostring(mode), #categories, containerWidth))
 
     -- Render categories and track actual content bounds
     local contentBounds = { maxX = 0, maxY = 0 }

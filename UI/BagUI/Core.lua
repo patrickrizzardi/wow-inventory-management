@@ -394,10 +394,20 @@ function BagUI:Create()
     railRule:SetPoint("BOTTOMRIGHT", rail, "BOTTOMRIGHT", 0, 0)
     railRule:SetVertexColor(unpack(UI.colors.border))
 
+    -- Label, not a row. It previously sat in the same column at nearly the same
+    -- size as the rows, so it read as a fifth (dead) option and invited clicks.
+    -- Smaller, dimmer, and separated by a rule so it reads as a section title.
     local railHeading = rail:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     railHeading:SetPoint("TOPLEFT", rail, "TOPLEFT", UI.layout.padding, -UI.layout.padding)
     railHeading:SetText("GROUP BY")
     railHeading:SetTextColor(unpack(UI.colors.textDisabled))
+    railHeading:SetAlpha(0.75)
+
+    local railHeadingRule = rail:CreateTexture(nil, "ARTWORK")
+    railHeadingRule:SetHeight(1)
+    railHeadingRule:SetPoint("TOPLEFT", railHeading, "BOTTOMLEFT", 0, -UI.layout.paddingSmall)
+    railHeadingRule:SetPoint("RIGHT", rail, "RIGHT", -UI.layout.padding, 0)
+    railHeadingRule:SetVertexColor(unpack(UI.colors.border))
 
     local filterButtons = {}
     for index, def in ipairs(BagUI.VIEW_MODE_BUTTONS) do
@@ -405,7 +415,7 @@ function BagUI:Create()
         row._imViewMode = def.mode
         row:SetPoint("LEFT", rail, "LEFT", 0, 0)
         row:SetPoint("RIGHT", rail, "RIGHT", -1, 0)  -- clear of the hairline
-        row:SetPoint("TOP", railHeading, "BOTTOM",
+        row:SetPoint("TOP", railHeadingRule, "BOTTOM",
             0, -UI.layout.paddingSmall - ((index - 1) * UI.layout.rowHeight))
 
         row:SetScript("OnEnter", function(self)
