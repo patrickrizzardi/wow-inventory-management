@@ -7,7 +7,7 @@ tier-reason: Mechanically triggered — unbounded blast radius (W2/W3), an EX-HI
 session-id:
   - 7d6ca3d0-55ef-47b1-8349-7f5fbbc6fb4b
 created_at: 2026-09-07
-updated_at: 2026-09-07
+updated_at: 2026-09-08
 ---
 
 # PLAN: audit-remediation
@@ -15,20 +15,25 @@ updated_at: 2026-09-07
 Remediation of every finding from five completed audits of the InventoryManager WoW addon,
 shipped as a single 1.4.0 release. Every numbered finding in the brief has exactly one home below —
 or, for eight of them, two labelled work items **both** of which must close; the coverage index in
-Appendix A proves it and is the authority on completeness. **The count is now 126, not 125**: one
-finding (**OQ-1**, Phase 11) came from neither an audit nor a review pass but from a question the
-owner asked while reading revision five and that was answered in revision six, and it is a data-loss
-defect. See Appendix A.
+Appendix A proves it and is the authority on completeness. **The count is now 127, not 125**: two
+findings came from neither an audit nor a review pass. **OQ-1** (Phase 11) came from a question the
+owner asked while reading revision five and that was answered in revision six, and it is a
+data-loss defect. **OQ-2** (Phase 3) came from reading the owner's own in-game debug log during
+Phase 0 execution — four startup paths re-entering their own work on every login with no completion
+latch — and its addition to this table is itself a bookkeeping correction: an earlier revision folded
+that same remediation work into Phase 3's scope with no coverage-index row, which is exactly the
+silent-discharge shape this plan's own risk R11 exists to catch. See Appendix A.
 
-> **One finding in this plan was found by the owner, not by the process, and that is a signal about
-> where the remaining blind spots are.** OQ-1 — the two stores expire on different axes, so dropping
-> `sellHistory` destroys entries that exist nowhere else — survived five planner rounds and four
-> review rounds. Every one of those passes read `sellHistory` as *duplicate* data because the v1→v2
-> migration had copied it, and nobody checked whether the copies were still there. The blind spot
-> was not the code; it was that the plan reasoned about the *shape* of the two stores and never
-> about their **lifetimes**. Any future review of a store-retirement in this plan should ask the
-> lifetime question first: what deletes rows from each side, on what axis, and can one side outlive
-> the other?
+> **Two findings in this plan were found by the owner or by reading a live trace, not by the audits
+> or the review passes, and both are signals about where the remaining blind spots are.**
+>
+> **OQ-1** — the two stores expire on different axes, so dropping `sellHistory` destroys entries
+> that exist nowhere else — survived five planner rounds and four review rounds. Every one of those
+> passes read `sellHistory` as *duplicate* data because the v1→v2 migration had copied it, and
+> nobody checked whether the copies were still there. The blind spot was not the code; it was that
+> the plan reasoned about the *shape* of the two stores and never about their **lifetimes**. Any
+> future review of a store-retirement in this plan should ask the lifetime question first: what
+> deletes rows from each side, on what axis, and can one side outlive the other?
 >
 > **OQ-1 is closed by an owner decision to ACCEPT the loss, not by a fix.** Revision six proposed a
 > consolidation merge into `transactions`; revision seven withdraws it on the owner's decision and
@@ -37,6 +42,26 @@ defect. See Appendix A.
 > policy purges is circular. The finding stays on the coverage index as a **finding closed by
 > decision** (Appendix B, **L1**), and the lesson above survives the decision unchanged. **Owner
 > silence would not have closed it** — an explicit accept did.
+>
+> **OQ-2** — four startup paths (BagUI's override bindings, `BagData`'s full refresh,
+> `InventorySnapshot`'s startup scan, `NetWorth`'s gold-update logging) each re-run their real work
+> multiple times on a single login, with no completion latch — was found by reading the owner's
+> in-game debug log during Phase 0 execution, by no audit and no review pass. Every audit reasoned
+> about steady-state event handling — what a handler does when it fires during play — and none of
+> them read a login trace to see how many times a startup handler actually fires before the client
+> settles. That is the same class of blind spot as OQ-1's: the process reasoned about a *shape*
+> (what the code does) and never observed a *trace* (how many times, over what window, it actually
+> runs). Any future audit of a startup path in this plan should read a real `/reload` debug trace
+> before trusting the handler list.
+>
+> **OQ-2 is closed by a fix, not a decision.** Phase 3's login-settle latch (step 3), keyed on
+> successful completion rather than on first firing, collapses all four paths to once per login —
+> and, unlike a fire-once latch, leaves `InventorySnapshot`'s scan re-runnable when Phase 9's
+> `ScanBags` honest-return fix reports a real failure. The close condition is the in-game cross-check
+> both phases carry in their exit criteria, not a `git show` on either phase alone. **This finding
+> was also, until this revision, the exact defect its own sibling risk R11 exists to catch**: it was
+> real remediation work folded into Phase 3's scope with no coverage-index row, discovered by
+> re-reading this plan rather than by a new observation in-game. It is corrected here, not deferred.
 
 > **How this plan treats completeness, stated once at the top because it changed the shape of
 > Phase 11.** Where a set's exhaustiveness cannot be proved by listing it — every write site into a
@@ -222,15 +247,15 @@ anything else, and a confidently-wrong number is treated as worse than a missing
 | A2 | `.toc` order is a sane authoritative `OnEnable` order and no module depends on the accidental `pairs()` order | `verified` — recon refuted every candidate dependency (`RecentItems.lua:93`, `JunkList.lua:23-24`) |
 | A3 | Only the `_claimedThisCycle` item is gated on the module-order fix | `verified` — five other asserted prerequisites explicitly refuted by recon |
 | A4 | BagUI consumes the twelve fenced factory methods **plus the methods those factories hang on their returned objects** (enumerated under the fence above — `card:AddContent/AddCheckbox/AddText/GetContentHeight`, `container:AdvanceY/FinalizeHeight/GetYOffset`, `row:SetSelected/Refresh`, `ring:Show/Hide/SetColor`, `container.content`/`scrollFrame.content`/`container.scrollBar`) and nothing else | `verified` — exhaustive grep across the subsystem; the returned-object half is consumed at `UI/Panels/BagUI.lua:53,159,177` and renders through `ResizeForSettings` |
-| A5 | `C_Bank.FetchDepositedMoney(Enum.BankType.Account)` returns `0` (not `nil`) before the account bank is opened | `unverified` — Phase 0 item 1 settles it; the fix treats both as UNKNOWN either way |
-| A6 | `C_Bank.FetchPurchasedBankTabIDs` is readable cold | `unverified` — Phase 0 item 2; if true, warband item refresh becomes location-independent |
-| A7 | `Enum.PlayerInteractionType.AccountBanker` fires on the live build | `unverified` — Phase 0 item 3 |
-| A8 | `pairs()` order over `IM.modules` is stable within a build | `unverified` — Phase 0 item 4; changes only how the double-log is reproduced, not the fix |
+| A5 | `C_Bank.FetchDepositedMoney(Enum.BankType.Account)` returns `0` (not `nil`) before the account bank is opened | `verified` — **REFUTED.** Observed identically on three separate cold logins, before any bank was opened: `[Database] Warband bank gold set to 11294783865` / `[WarbandBankTracking] Initialized warband gold: 1,129,478g 38s 65c`. The API returns the REAL value cold — not `0`, not `nil`. Consequence: W3-1's login wipe is a **latent hazard, not observed damage**, on this client — the `>= 0` guard in `Database.lua` still accepts a `0` or `nil` the day the API returns one and would still stamp `warbandBankGoldUpdated` as fresh, so Phase 8's guard is still required, but the failure story softens from "damage already happening" to "unfired hazard" (Phase 8's evidence note). This also settles that warband gold is readable anywhere with no bank visit — the foundation for requirement 4's cross-character sharing |
+| A6 | `C_Bank.FetchPurchasedBankTabIDs` is readable cold | `partially verified` — the call returns a live table cold (`table: 0000019953E87C70`, no bank frame open), not `nil` and not an error. **The element count (`#` of that table) is still unobserved and stays OPEN.** Phase 9 step 9's cold warband-item-refresh capability therefore stays conditional, not confirmed: a non-empty count would unlock it, but nobody has checked |
+| A7 | `Enum.PlayerInteractionType.AccountBanker` fires on the live build | `verified` — **REFUTED as a usable signal.** The owner opened the personal bank frame and switched to its warband tab, repeatedly: **no event fired at all**. In TWW the warband bank is a second tab inside the personal bank frame, not a distinct interaction, so `AccountBanker` cannot be relied on to fire on a tab switch. This is the definitive confirmation of W2-18 (Phase 7): resolving bank type at **process time** via `C_Bank.IsAccountBankPanelShown()` is the only available mechanism, not merely the preferred one — there is no event to hook, so `_detectedBankType` latched at frame-open cannot be corrected by any listener, and bank-side counterpart diffing is mandatory rather than optional, because a bag-side-only diff can never learn which bank received an item. Any future design keyed on an interaction event here is dead on arrival |
+| A8 | `pairs()` order over `IM.modules` is stable within a build | `verified` — three `/reload`s produced a byte-identical `OnEnable` order: CurrencySearch, AutoSell, MailHelper, WarbandBankTracking, InventorySnapshot, NetWorth, BankItemTracking, BarberTracking, BMAHTracking, GuildBankTracking, UnclaimedGoldTracking, TooltipInfo, QuestTracking, TransmogTracking, SellHistory, Ledger, VendorTracking, MailTracking, AuctionTracking, RepairTracking, TradeTracking, FlightTracking, ItemLock, LootTracking. **Caveat**: these were `/reload`s, not full client restarts, so string interning persisted — stability across a cold restart is unobserved; this does not change the fix (Phase 3 makes order deterministic regardless), only the reproduction confidence for Phase 4. Derived consequence, recorded in Phases 3 and 4: the resulting `PLAYER_MONEY` handler chain is NetWorth → Barber → BMAH → UnclaimedGold → Transmog → Ledger → Vendor → Auction → Flight, so UnclaimedGold's `_claimedThisCycle = false` reset runs BEFORE the vendor/auction/flight/transmog claims, which is why those stick; WarbandBank's claim comes from the separate `ACCOUNT_MONEY` event, whose ordering relative to `PLAYER_MONEY` remains unobserved — the amount-keyed queue (Phase 4) makes that unknown moot |
 | A9 | The scroll-child width snapshot clips the Dashboard/popup search boxes | `unverified` — Phase 0 item 5; the fix (set width at refresh time) is free either way |
 | A10 | `SetOverrideBindingClick`/`ClearOverrideBindings` are combat-restricted | `unverified` in-game, documented by Blizzard — the guard is correct regardless |
-| A11 | `UI/Panels/History.lua`, `Ledger.lua`, `NetWorth.lua` are unreachable | `unverified` — 4 panels resolve only by dynamic string lookup (`UI/Panels/Selling.lua:53`); Phase 0 proves death in both directions before any deletion |
+| A11 | `UI/Panels/History.lua`, `Ledger.lua`, `NetWorth.lua` are unreachable | `verified` for `History.lua` — **proven dead in both directions.** `UI/Config.lua:17-25` lists General, BagUI, UI, Selling, Dashboard, MailHelper, Currency — no History. The only dynamic resolver in the tree is `UI/Panels/Selling.lua:53` (`UI.Panels[panel.module]`), whose `subTabs` (`:16-21`) resolve only AutoSell, Categories, Whitelist, JunkList. Nothing can construct `UI.Panels.History` — cleared for deletion in Phase 18. `Ledger.lua`/`NetWorth.lua` verdicts unchanged (still to be confirmed the same way before their own deletion) |
 | A12 | The user accepts an unbacked-up migration | `verified` — asked twice, answered "just write it and ship it" both times |
-| A14 | `GetNormalizedRealmName()`'s output for each of the owner's realms is knowable only by observation | `unverified` — Phase 0 step 7 records one `(GetRealmName(), GetNormalizedRealmName())` pair per distinct stored realm. **Normalized names strip punctuation and accents, not only spaces**, so no offline rule is provably equivalent; Phase 11's migration looks the value up in a Phase-0-derived `realmMap` and leaves any unmapped realm byte-identical rather than guessing (Phase 11 steps 6 and 9A) |
+| A14 | `GetNormalizedRealmName()`'s output for each of the owner's realms is knowable only by observation | `verified` — **normalization PRESERVES apostrophes.** Recorded pairs: `(Warsong, Warsong)` and `(Zul'jin, Zul'jin)` — normalization strips spaces and hyphens, not punctuation, so both of the owner's real realms are **identity** under the transform; `realmMap = {Warsong→Warsong, Zul'jin→Zul'jin}`. **Design consequence, re-scoping Phase 11's fixtures (see that phase's steps 9A/11 and the Docker-proof note)**: because the map is identity for both real realms, the v3 key rewrite is a provable no-op against the owner's real SavedVariables — the real-data Docker run cannot exercise the key-rewrite path at all. The synthetic fixtures are therefore promoted from pathological-case coverage to the **sole** coverage of that path, and a clean real-data run showing zero key changes is the *expected* result, not evidence the rewrite works |
 | A13 | The owner's `sellHistory` contains rows older than `ledger.maxAgeDays` that have **no** counterpart left in `transactions` | `unverified`, and **deliberately left unmeasured** — the instrument that would have counted it was the consolidation merge, withdrawn by owner decision in revision seven. Its truth changes how many rows the v3 drop destroys, not what the plan does: the loss is accepted either way (Appendix B **L1**). Nothing in the plan depends on the number |
 
 ### Risk table
@@ -244,7 +269,7 @@ Mitigation buckets: `elim` = eliminated/automated (−2, one axis), `guard` = en
 | Risk | Prob | Sev | Initial | Mitigation (bucket) | Residual | Gate |
 |---|---|---|---|---|---|---|
 | R1 Auto-sell destroys an irreplaceable item (dead quality floor `Filters.lua:200` + junk-list override `:553` + `autoSellEnabled=true` default) | B | I | **EH** | Quality floor wired above BOTH the threshold and the junk-list branch, nil-quality guard, default false, first-sale-per-session confirm (`elim`, B→D) | **HIGH** | Floor B (irreversible) — cannot go below HIGH. **Override required** |
-| R2 The v3 migration corrupts or destroys live SavedVariables (no backup by user decision; v1→v2 non-idempotent precedent; `_mergeDefaults:183-187` scalar→table coercion) | B | I | **EH** | Migration written as pure functions over explicit inputs — **including the realm transform, which is a pure `opts.normalizeRealm` lookup rather than a WoW API call, so the proof actually executes the key rewrite instead of stubbing it away** (Phase 11 steps 4, 6, 10) — + Docker Lua 5.1 double-run deep-compare against a copy of the real DB, second run must be a no-op; the transform's values proven output-equal to `GetNormalizedRealmName()` for the owner's real realms before the commit exists (step 9A); `sellHistory` removed from `defaults` in the same commit as the data drop so `_mergeDefaults` cannot resurrect it (`guard`, B→C). **Bucket note: `guard` is earned only because every line of the pass is executable in the harness.** An earlier revision put a WoW API call inside the key rewrite, which would have made the artefact prove a migration with its most destructive step disabled — an unearned bucket. Any future edit that reaches for a WoW global inside the pass forfeits the −1 and puts this row back at **EX-HIGH**. **One loss inside this risk is by design, not by defect, and is not mitigated**: the v3 drop destroys `sellHistory` rows older than `ledger.maxAgeDays` that have no counterpart left in `transactions` — accepted by owner decision, Appendix B **L1** | **HIGH** | Floor B (irreversible + data). **Override required** |
+| R2 The v3 migration corrupts or destroys live SavedVariables (no backup by user decision; v1→v2 non-idempotent precedent; `_mergeDefaults:183-187` scalar→table coercion) | B | I | **EH** | Migration written as pure functions over explicit inputs — **including the realm transform, which is a pure `opts.normalizeRealm` lookup rather than a WoW API call, so the proof actually executes the key rewrite instead of stubbing it away** (Phase 11 steps 4, 6, 10) — + Docker Lua 5.1 double-run deep-compare against a copy of the real DB, second run must be a no-op; the transform's values proven output-equal to `GetNormalizedRealmName()` for the owner's real realms before the commit exists (step 9A); `sellHistory` removed from `defaults` in the same commit as the data drop so `_mergeDefaults` cannot resurrect it (`guard`, B→C). **Bucket note: `guard` is earned only because every line of the pass is executable in the harness.** An earlier revision put a WoW API call inside the key rewrite, which would have made the artefact prove a migration with its most destructive step disabled — an unearned bucket. Any future edit that reaches for a WoW global inside the pass forfeits the −1 and puts this row back at **EX-HIGH**. **One loss inside this risk is by design, not by defect, and is not mitigated**: the v3 drop destroys `sellHistory` rows older than `ledger.maxAgeDays` that have no counterpart left in `transactions` — accepted by owner decision, Appendix B **L1**. **Mitigation-cell honesty, added after Phase 0's realm observation (A14) — this does NOT re-score the row.** The realm-rewrite member is a **provable no-op** against the owner's real data: both his realms (`Warsong`, `Zul'jin`) map to themselves, so the real-data Docker run shows zero key rewrites and that is the *expected*, not reassuring, result — only the synthetic fixtures (Phase 11 step 11) exercise that member at all. The other four atomic-commit members — the `sellHistory` drop, the `ledgerCharFilter`→`ledgerCharKey` rename, the `pendingQueue` delete, and the `.char`/`.src` normalization pass itself — are **not** inert; they touch the owner's real, live data on every run and carry the row's full risk. Nobody should read "the migration did nothing visible" on the real-data run as "the migration is safe" | **HIGH** | Floor B (irreversible + data). **Override required** |
 | R3 Account-shared warband gold/items destroyed by a cold read or an empty scan | A | III | **HIGH** | Single writer that rejects a write lowering a nonzero stored value, treats `nil`/`0` as UNKNOWN, never stamps a timestamp on a rejected write; never replace a non-empty snapshot with an empty one (`elim`, A→C) | **MEDIUM** | Passes, recorded in Future Requirements with trigger |
 | R4 Gold movements booked twice, with the wrong sign, or never (the ledger is money accounting) | A | II | **EH** | Amount-keyed FIFO claim queue hooked inside `IM:AddTransaction`, order-independent, arm-and-confirm against the matching `PLAYER_MONEY` delta (`guard`, A→B) | **HIGH** | Floor B (money movement) — cannot go below HIGH. **Override required** |
 | R5 The module-order change regresses one of 119 registrations across 26 multi-handler events | C | III | MEDIUM | `.toc` order made authoritative via an ordered array AND the dispatcher's mutation-during-`ipairs` hole closed in the same change, eliminating the truncation class (`elim`, C→E) | LOW | Passes |
@@ -253,7 +278,7 @@ Mitigation buckets: `elim` = eliminated/automated (−2, one axis), `guard` = en
 | R8 The mail cursor / async `SendMail` path loses or misplaces an item | C | II | HIGH | Verify attachment after the click, `ClearCursor()` on every path including before `SendMail`, unmailable collection list, serial state machine advancing on `MAIL_SEND_SUCCESS` with retry-then-abort on `MAIL_FAILED` (`elim`, C→E) | LOW | Passes |
 | R9 A Blizzard API assumption is wrong (30 `hooksecurefunc` edges, interface bump to 120100, 5 unverified behaviors) | C | III | MEDIUM | Phase 0 settles all five in-game before any dependent design; tainted-string parsing stays inside `pcall` (`guard`, C→D) | LOW | Passes |
 | R10 Client stutter and unbounded frame/memory growth (hidden-window rebuilds, 2 of 3 leaking refresh paths, per-refresh debug formatting) | A | IV | MEDIUM | Frame pooling on all three Dashboard paths + shared row pool for both popups + one debounced `BagUI:QueueRefresh` + `IM:IsDebug()` guards (`elim`, A→C) | LOW | Passes. **Caveat**: the largest single win (B1's `OnHide`) is approval-gated; until approved this stays MEDIUM |
-| R11 A finding is silently dropped, or a set the plan asserts is incomplete, **or a whole defect class goes unfound by every pass** — the audits' counts were unreliable (5 vs 18 defective charKey sites, 40 vs 30 `hooksecurefunc` sites, an earlier 96-vs-125 finding total the conductor has since corrected), three review rounds each found a different missing member of a plan-asserted set, **and OQ-1 — a data-loss defect — was found by the owner asking a question after five planner rounds and four review rounds had all read past it** | B | III | MEDIUM | Coverage index mapping every numbered item to exactly one phase or to two labelled work items both of which must close — **plus** the completeness-critical sets converted from plan-time assertions into execution-time grep derivations whose exit criterion is "zero unhandled hits" (Phase 11 steps 2-3). **Both are `human`, 0, record-only, and the derivation does NOT earn a guard bucket**: a grep an executor must remember to run is a written procedure, not an automated one — nothing in the tree fails if it is skipped. It moves the *probability of a wrong list* honestly, but it is not mechanically enforced, so it scores nothing (`human`, 0) | MEDIUM | Passes, recorded with trigger |
+| R11 A finding is silently dropped, or a set the plan asserts is incomplete, **or a whole defect class goes unfound by every pass** — the audits' counts were unreliable (5 vs 18 defective charKey sites, 40 vs 30 `hooksecurefunc` sites, an earlier 96-vs-125 finding total the conductor has since corrected), three review rounds each found a different missing member of a plan-asserted set, **OQ-1 — a data-loss defect — was found by the owner asking a question after five planner rounds and four review rounds had all read past it, and OQ-2 — four startup-path re-entry defects, found by reading a login debug trace that no audit or review pass read — was itself briefly an instance of this exact risk: real remediation work folded into a phase's scope with no coverage-index row, until this revision caught it against the plan's own draft** | B | III | MEDIUM | Coverage index mapping every numbered item to exactly one phase or to two labelled work items both of which must close — **plus** the completeness-critical sets converted from plan-time assertions into execution-time grep derivations whose exit criterion is "zero unhandled hits" (Phase 11 steps 2-3). **Both are `human`, 0, record-only, and the derivation does NOT earn a guard bucket**: a grep an executor must remember to run is a written procedure, not an automated one — nothing in the tree fails if it is skipped. It moves the *probability of a wrong list* honestly, but it is not mechanically enforced, so it scores nothing (`human`, 0) | MEDIUM | Passes, recorded with trigger |
 | R12 Colour-only encoding of income/expense and staleness is unreadable to a colour-blind user | A | IV | MEDIUM | Every colour-carried meaning also carries a glyph or a word (`↑ +142,000g`, `stale 12d`, `12.4%`, `6 by quality · 2 on junk list`) (`elim`, A→C) | LOW | Passes |
 | Security | — | — | N/A | Sandboxed WoW client addon: no network, no credentials, no untrusted input beyond Blizzard's own API. Injection surface is tainted chat strings, already `pcall`-wrapped | N/A | — |
 | Auth | — | — | N/A | Single-user client addon, no auth model | N/A | — |
@@ -334,12 +359,15 @@ The user's confirmed list, copied exactly, in order.
 
 1. **"we fix it ALL" — every audit finding gets a home, nothing parked**
    → Satisfied by the coverage index (Appendix A): all 125 numbered findings mapped to exactly one
-   phase, **plus OQ-1, the finding the owner found himself — asked while reading revision five,
-   answered in revision six — 126 rows
-   in total.** OQ-1 stays on the index and is closed by the owner's recorded decision to accept its
-   consequence (Appendix B **L1**) — "nothing parked" means every row reaches a recorded resolution,
-   and an accept is one; silence is not. Exit criterion: Phase 19's release checklist refuses to
-   publish while any coverage-index row is unclosed.
+   phase, **plus OQ-1 (the finding the owner found himself, asked while reading revision five,
+   answered in revision six) and OQ-2 (the login-storm findings, discovered by reading the owner's
+   debug log during Phase 0 and now correctly indexed rather than folded into a phase's scope) —
+   127 rows in total.** OQ-1 stays on the index and is closed by the owner's recorded decision to
+   accept its consequence (Appendix B **L1**); OQ-2 stays on the index and is closed by Phase 3's
+   fix, cross-checked against Phase 9's exit criteria — "nothing parked" means every row reaches a
+   recorded resolution, a fix is one and an accept is one, silence and a scope-fold with no row are
+   not. Exit criterion: Phase 19's release checklist refuses to publish while any coverage-index row
+   is unclosed.
 2. **"batch the duct tape" — no-duct-tape rule applies; fix at discovery, don't defer**
    → Satisfied by the root-cause clustering in §3.2: six named ancestors replace 30-odd symptom
    patches. Two deferrals (D1, D2) and one deliberate accepted loss (L1) exist, and each names all
@@ -434,9 +462,9 @@ slots from holding account-shared data, and then — only then — makes the num
   no zeroing, no phantom transfer.
 - One accounting system. `sellHistory` is gone from the data *and* from `defaults`. Its rows are
   discarded with it — a **deliberate accepted loss** by owner decision (Appendix B **L1**), because
-  his retention setting already declares data past the window unwanted. If `UI/Panels/History.lua`
-  turns out to be reachable, its view's span shortens from "last 100 entries" to the retention
-  window, which is how the Ledger has always behaved.
+  his retention setting already declares data past the window unwanted. `UI/Panels/History.lua` is
+  confirmed unreachable (Phase 0, both directions) and is deleted outright in Phase 18, so there is
+  no surviving view whose span could shorten.
 - Every Dashboard total is computed over the same post-filter array as the rows beneath it.
 - Timestamps, per-category totals, per-item totals and exports are rendered.
 - The Bag UI's correctness and performance defects are fixed; every visible change was approved
@@ -539,6 +567,18 @@ reachable by dynamic string lookup.
 
 The user runs the in-game steps; the executor records the answers into the assumption table in §1
 and adjusts the named phases before they start.
+
+**Execution status — the owner ran most of this phase; results are in §1 (A5, A6, A7, A8, A11,
+A14) and in the evidence notes of Phases 3, 4, 7, 8, 9, 11 and 18.** Five of seven items are
+settled: W0-1 (A5, REFUTED — the API returns the real value cold), W0-3 (A7, REFUTED as a usable
+signal — no event fires), W0-4 (A8, verified stable), the death proofs (A11, `History.lua`
+confirmed unreachable in both directions), and the realm pairs (A14, both realms are identity
+under normalization). **Two items stay OPEN and gate exactly what they always gated**: W0-2 (A6,
+partially verified — the table reads cold but its element count is still unmeasured, so Phase 9
+step 9's cold-refresh capability stays conditional) and W0-5 (A9, still unverified — the bag UI's
+`CreateScrollFrame` chain resolves fine, but the Dashboard's two search boxes and both popups are a
+different code path and remain unchecked). No design in this plan depends on either open item
+resolving one way or the other before it can ship.
 
 **Steps.**
 1. **W0-1.** `/reload`, `/im debug`, and read the `[WarbandBankTracking] Initialized warband gold:`
@@ -766,6 +806,40 @@ accidental and Phase 4 can distinguish a design bug from an ordering artefact.
 arithmetic, MailHelper's tracking bypass, guild bank attribution, and single-slot pendings are all
 independently fixable. Do not serialize the rest of the ledger work behind this.
 
+**Evidence (A8, observed, Phase 0 W0-4).** Three `/reload`s produced a byte-identical `OnEnable`
+order — see §1's A8 for the full sequence. **The `_claimedThisCycle` bug (Phase 4) is therefore
+deterministic and reproducible on demand under this ordering, not intermittent**; this changes how
+Phase 4 is reproduced, not what either phase fixes. Caveat carried forward: these were `/reload`s,
+not full client restarts, so stability across a cold restart is unobserved — it does not weaken this
+phase's fix, which makes order deterministic regardless of `pairs()` behavior.
+
+**Login storm — OQ-2, a numbered finding clustered here as one ancestor (see Appendix A), not
+folded-in scope with no coverage row.** All four instances share one producer — a startup path
+re-entering its own work on every login with no completion latch — and this phase already owns the
+lifecycle spine, so the fix lands here rather than in a new phase.
+**This is a different producer class from B8 (Phase 17), not the same one — state the boundary
+explicitly.** B8 debounces an *interval*-triggered rebuild that recurs during play
+(`BAG_UPDATE_DELAYED`/`PLAYER_EQUIPMENT_CHANGED` firing repeatedly while the user loots and swaps
+gear), which needs a time-window debounce. OQ-2 is a *one-shot* re-entry at a single event — login —
+across four unrelated modules, which needs a per-login completion latch, not a debounce interval.
+Same symptom shape (redundant re-entry, no dedup), different trigger and different mechanism.
+**Provenance.** Found by reading the owner's in-game debug log during Phase 0 execution, by no
+audit and no review pass — the same class of blind spot as OQ-1: every audit reasoned about
+steady-state event handling and none of them read a login trace. See the plan's opening diagnosis
+note.
+Observed on every login, before any user action:
+- BagUI's override bindings are **cleared and re-set five times in ~2 seconds**. This compounds B12
+  (Phase 17): those calls carry no `InCombatLockdown` guard, and `BagUI/Core.lua:1381-1382`'s
+  clear-then-set means a failure between the two — now observed to happen five times per login
+  instead of once — leaves the user with no working bag key until the next `UPDATE_BINDINGS`.
+- `[BagData] Full refresh complete` fires **twice** back to back.
+- `InventorySnapshot` scans the same 6 bags **three times in ~1 second** (`PLAYER_ENTERING_WORLD` →
+  a delayed startup scan → a third pass).
+- `[NetWorth] Gold updated: <same value>` fires **three times** in the same second.
+**Decision: close OQ-2 with a fix inside this phase (the login-settle guard below) rather than
+opening a new phase for it** — same ancestor as the ordering fix, since this phase already owns the
+lifecycle spine.
+
 **Steps.**
 1. **W2-1 (ordering).** `Core.lua:342` drives `OnEnable` from `pairs(IM.modules)`, discarding
    registration order. Add an ordered array — `table.insert(self.moduleOrder, name)` at
@@ -789,8 +863,35 @@ independently fixable. Do not serialize the rest of the ledger work behind this.
    appended it, and runs 2 handlers.
    **This must land in the same commit as the ordering fix** — otherwise the ordering fix leaves a
    live iterator bug in the exact thirty lines it just touched.
+3. **Login-settle guard (OQ-2 — see this phase's evidence note above and Appendix A).** Add one
+   latch, cleared only by the next `/reload`, and route BagUI's binding setup, `BagData`'s full
+   refresh, `InventorySnapshot`'s startup scan and `NetWorth`'s gold-update logging through it, so
+   each does its real startup work once per login instead of once per firing handler.
+   **The latch must key on successful completion, not on "has this path fired yet."** Each wrapped
+   call reports back whether it actually did its work; only a call that reports completion sets that
+   path's latch. A call that reports it did **not** complete — most concretely,
+   `InventorySnapshot:ScanBags` returning `false` — must **not** set the latch and must remain
+   callable on the next firing of the same handler. **Do not implement "set on the first
+   `PLAYER_ENTERING_WORLD` pass" as an earlier sketch of this step described** — that version latches
+   on firing, not completion, and would silently suppress the retry Phase 9 depends on.
+   Concretely: one latch per wrapped path (not one shared boolean for all four) —
+   `IM:IsLoginSettled(pathName)` / `IM:MarkLoginSettled(pathName, success)` — set only when `success`
+   is truthy.
+   **Forward reference — this is the collision Phase 9 exists to close, and it is real, not
+   theoretical.** `InventorySnapshot.lua`'s `ScanBags` returns `true` unconditionally today (the
+   W3-6 bug Phase 9 fixes), so until Phase 9 lands, this latch behaves exactly like a fire-once latch
+   for that one path — that is expected and correct here, not a defect in this phase. Once Phase 9's
+   step 5 makes `ScanBags` return `false` on an empty scan, this same latch, unchanged, starts
+   respecting `TryScanWithRetry`'s exponential backoff automatically, because the latch was built to
+   consume a completion signal from day one rather than a firing signal. **Phase 9 must re-verify
+   this interaction as its own exit criterion** (see Phase 9's exit criteria) — do not assume it once
+   Phase 9's return-value change lands; prove it in-game with the latch live. See §3.4: Phase 3
+   precedes Phase 9.
+   **This is a separate commit from steps 1-2** — it touches four different files for a different
+   reason (redundant startup re-entry, not handler ordering) and mixing it into the ordering/iterator
+   commit would make `git show` prove two unrelated things at once.
 
-**Exit criteria (in-game smoke checklist). This phase has two halves; each needs its own
+**Exit criteria (in-game smoke checklist). This phase has three parts; each needs its own
 falsifiable proof.**
 
 - **Half 1 — ordering.** `/reload` three times with the temporary order print from Phase 0
@@ -835,9 +936,18 @@ falsifiable proof.**
   `PLAYER_MONEY` 11, `PLAYER_ENTERING_WORLD` 7 all fire their observable effects).
 - The custom bag still opens on its keybind (BagUI registers four handlers at file scope; ordering
   must not have disturbed them).
+- **Half 3 — the login-settle guard.** `/reload` and watch `/im debug`: BagUI's override-binding
+  setup, `BagData`'s full refresh, `InventorySnapshot`'s startup scan and `NetWorth`'s gold-update
+  log each fire their real work **exactly once** per login, not the observed five/two/three/three.
+  The bag key still works immediately after login and after a second `/reload`. **This half proves
+  the once-per-login collapse only** — it does not and cannot prove the retry stays reachable, since
+  today's `ScanBags` always reports success; that half of the proof is Phase 9's exit criterion,
+  run after Phase 9 lands.
 
-**Reviewer fan-out prediction.** One concurrency/lifecycle seat. The blast radius is unbounded on
-paper but the diff is thirty lines with a single decision in it.
+**Reviewer fan-out prediction.** One concurrency/lifecycle seat for the ordering and iterator fix.
+The blast radius is unbounded on paper but the diff is thirty lines with a single decision in it.
+The login-settle guard earns its own small correctness seat — four call sites, one latch mechanism
+keyed per path on completion, not on firing.
 
 ---
 
@@ -850,6 +960,17 @@ movement is booked exactly once regardless of which handler runs first.
 (`Database.lua:614-652`) so that an entry with `val ~= 0` claims its own amount. Order-independent
 by construction, covers every present and future call site, and lets `IsInTrackedContext` be
 deleted entirely. **Symptoms that die with it: W2-2, W2-3, W2-4, W2-5, W2-6, W2-7, W2-17.**
+
+**Evidence (A8, observed, Phase 0 W0-4).** `OnEnable` order is stable across three `/reload`s (§1
+A8), so the `_claimedThisCycle` double-log this phase deletes is **deterministic and reproducible
+on demand** under that ordering, not intermittent — reproduce it by loading gold through two
+sources inside the same half-second and expect it every time, not occasionally. Derived from the
+same observation: the `PLAYER_MONEY` handler chain is NetWorth → Barber → BMAH → UnclaimedGold →
+Transmog → Ledger → Vendor → Auction → Flight, which is *why* UnclaimedGold's stale-flag bug (W2-3,
+W2-4) reliably lets the later trackers' claims stick — it resets before them. WarbandBank's claim
+runs off the separate `ACCOUNT_MONEY` event, whose ordering relative to `PLAYER_MONEY` was not
+observed and does not need to be: the amount-keyed queue this phase builds is order-independent by
+construction, so that remaining unknown is moot.
 
 **Design constraint (verification leverage).** Write the queue as **pure functions over explicit
 inputs** — `claim(queue, amount, now) -> (claimed, newQueue)` and
@@ -1070,6 +1191,21 @@ Recon refuted any ordering dependency — `GuildBankTracking` uses only `GUILDBA
 its own `_lastGuildBankGold`. This phase **consumes** Phase 4's claim machinery, so run it after
 Phase 4.
 
+**Evidence (W2-18, observed, Phase 0).** `/im debug` logged `[BankItemTracking] Bank opened
+(fallback) - type=personal` followed by `Initial snapshot: 1 unique items, 1 total` while the
+character bank actually held 7 items — the snapshot is of the BAGS (1 item), not the bank, and it
+reached its type through the **fallback** path. Confirms the bag-only-diff half of W2-18 directly.
+
+**Evidence (A7, observed, Phase 0 W0-3).** The owner opened the personal bank frame and switched to
+its warband tab, repeatedly: no event fired. `Enum.PlayerInteractionType.AccountBanker` is not a
+usable per-tab signal because the warband bank is a second tab inside the same frame, not a
+distinct interaction. **This makes the process-time check below the only available mechanism, not
+merely the preferred one** — there is no event to hook, so `_detectedBankType` latched at frame-open
+can never be corrected by a listener, at any point in the future, on this client. Counterpart
+(bank-side) diffing is mandatory for the same reason: a bag-side-only diff can never learn which
+bank received an item with no event to disambiguate it. **Any future "improvement" that tries to key
+this off an interaction event is dead on arrival — do not reopen it.**
+
 **Steps.**
 1. **W2-14.** Guild bank attributes other members' gold moves to the player:
    `GuildBankTracking.lua:269-323` infers direction from the guild bank's own delta and assumes "it
@@ -1095,6 +1231,15 @@ Phase 4.
    producer**: extract the duplicated snapshot/diff helper once so both files get the fix.
    Note for the executor: the project docs blame a nil `_lastBankType`; **that variable no longer
    exists — the module was rewritten** (the doc fix is W7-6, Phase 18).
+5. **New, in-scope as an instance of W2-14's class (wrong-context handling in
+   `GuildBankTracking`), not a new finding.** `/im debug` observed (Phase 0)
+   `[GuildBankTracking] FRAME_SHOW fired, type=8` on a **personal** bank open — the module wakes for
+   the wrong banker — and on close it fires **twice**, `type=8` then `type=0`. A guild-bank module
+   reacting to a personal banker and to a null interaction type, in the exact module whose gold
+   attribution step 1 above is already rewriting. Fix: scope `GuildBankTracking`'s frame handling to
+   the actual guild-bank interaction type (`Enum.PlayerInteractionType.GuildBanker`, or whatever
+   process-time check the extracted helper in step 4 exposes) and ignore `FRAME_SHOW`/`FRAME_HIDE`
+   for any other type, including the null `type=0` close.
 
 **Exit criteria (in-game smoke checklist).**
 - **A guildmate's deposit while you watch the guild bank produces no entry on your ledger** and no
@@ -1107,6 +1252,9 @@ Phase 4.
 - Withdraw an item and confirm the direction is correct.
 - The extracted snapshot/diff helper is called from both `BankItemTracking` and
   `GuildBankTracking` (grep confirms no second copy remains).
+- **Open the personal bank (not the guild bank) and confirm `/im debug` shows no
+  `[GuildBankTracking] FRAME_SHOW` line at all** — the observed `type=8`/`type=0` wake-on-wrong-banker
+  is gone.
 
 **Reviewer fan-out prediction.** Money-correctness seat and a DRY/extraction seat for the shared
 snapshot helper.
@@ -1120,6 +1268,22 @@ value, in order that logging in without visiting a bank leaves the balance intac
 phantom transfer.
 
 Carries risk R3 (initial HIGH → residual MEDIUM). Consumes Phase 0 items 1 and 3.
+
+**Evidence (A5, observed, Phase 0 W0-1).** `C_Bank.FetchDepositedMoney(Enum.BankType.Account)`
+returns the REAL value cold, on three separate logins, before any bank was opened:
+`[Database] Warband bank gold set to 11294783865` / `[WarbandBankTracking] Initialized warband
+gold: 1,129,478g 38s 65c`. **This means W3-1's login wipe is a latent hazard on this client, not
+observed damage** — the `>= 0` guard would still accept a `0` or `nil` value the day the API
+returns one, and would still stamp `warbandBankGoldUpdated` as fresh, so this phase's guard is
+still required exactly as designed; only the severity story changes, from "this is actively
+happening" to "this has not fired yet." The same observation is the foundation of requirement 4:
+warband gold is readable **anywhere, with no bank visit at all**, which is what makes the
+cross-character sharing the owner asked for possible without a bank-presence precondition.
+
+**Evidence (W3-1, observed, Phase 0).** `[Database] Warband bank gold set to 11294783865` fired
+**twice** per bank open in the recorded log, on both bank opens — once from
+`WarbandBankTracking`, once from `NetWorth:UpdateWarbandBankGold`. This is the two-writer defect
+this phase exists to collapse, observed directly rather than inferred from source.
 
 **Steps.**
 1. **W3-1.** Login zeroes the account-shared warband bank and fabricates a transfer:
@@ -1181,6 +1345,20 @@ Carries risk R3. Consumes Phase 0 items 2 and 3.
 **Symptoms that die with it: W3-2, W3-3, W3-5** — plus the same two bugs in the dead
 `IM:GetAccountNetWorth`, which reimplements `GetAccountBreakdown` and inherits both independently.
 
+**Evidence (W3-2/W3-3, observed, Phase 0).** Before opening a bank the character held 1 bag item
+worth `0c`. On bank open, `/im debug` logged `[InventorySnapshot] Scanned bank: 7 items` then
+`[NetWorth] Inventory scan: 27 items, 143g 2s 36c` → `Updated inventory value: 143g 2s 36c`. 1 bag
+item + 7 bank items = 8; the scan counted **27**, so roughly 19 warband-tab items were folded into
+the count, and `143g` is now stored on `Chzuljinn-Zul'jin`'s `inventoryValue` — the ×alt-count
+inflation (W3-2) is not theoretical, it is already sitting in the owner's live database. The same
+event is direct proof of W3-3: that `143g 2s 36c` figure came from `0c` purely by opening a bank,
+on the per-character scalar the very next bags-only pass overwrites back toward `0c`.
+
+**Evidence (A6, partially verified, Phase 0 W0-2 — affects step 9 below).**
+`C_Bank.FetchPurchasedBankTabIDs(Enum.BankType.Account)` returns a live table cold (no bank frame
+open), not `nil`. **Its element count is unmeasured and stays open** — step 9's cold-refresh
+capability is written as conditional on that count, not confirmed by it.
+
 **Steps.**
 1. **W3-2.** Warband bank item value is multiplied by the alt count:
    `CalculateInventoryValue(true)` folds `Enum.BagIndex.AccountBankTab_1..5` into one scalar
@@ -1214,6 +1392,13 @@ counts the warband contents once, not twice.
    it never reports whether an item was read (`:275`) — so `TryScanWithRetry`'s exponential backoff
    (`:63-82`) never fires because attempt 1 always "succeeds". `snapshot.bags = items` assigns
    unconditionally at `:270`, same shape at `:306` (bank) and `:328` (reagentBank).
+   **Backward reference — this is the other half of the Phase 3 collision, not an independent fix.**
+   Phase 3's login-settle latch (step 3 there, OQ-2) wraps this same `ScanBags` call in a per-login
+   completion latch, and that latch was built to consume this exact return value: before this step,
+   `ScanBags` always reports success, so the latch behaves as a fire-once latch; after this step,
+   an honest `false` leaves the latch unset and the path re-runnable. **Do not treat this as done
+   once the return-value change lands** — re-run Phase 3's Half 3 smoke check and this phase's own
+   cross-check exit criterion below, with the latch live, before calling either phase complete.
 6. **W3-7.** `ScanWarbandBank` destroys account-shared data unconditionally: `:337-374` writes
    `IM.db.global.warbandBankInventory = { timestamp = time(), items = items }` at `:368-371` **even
    when `tabIDs` is nil or empty** — the `if tabIDs` guard at `:346-348` skips the **loop, not the
@@ -1221,7 +1406,11 @@ counts the warband contents once, not twice.
 7. **The one rule for 6+7, applied at the write sites.** Never replace a non-empty stored snapshot
    with an empty one. Make `ScanBags` return `false` when `totalSlots == 0` so the retry actually
    retries. `ScanWarbandBank` additionally needs an **"is the account bank readable" precondition
-   before it may write at all** (Phase 0 items 2 and 3 supply the test).
+   before it may write at all** (Phase 0 items 2 and 3 supply the test). **Item 3's answer (A7,
+   Phase 0 W0-3) came back "no usable event" — the warband bank fires no distinct interaction, ever,
+   on this client** — so this precondition cannot be an event listener either; it is the same
+   process-time `C_Bank.IsAccountBankPanelShown()` check Phase 7 uses for W2-18, not an event-driven
+   one. Do not design this precondition around `AccountBanker` firing.
 
 **CHECKPOINT** — `/reload` and immediately query cross-character inventory: no snapshot is emptied;
 with `/im debug` on, a failed first scan visibly retries.
@@ -1229,15 +1418,26 @@ with `/im debug` on, a failed first scan visibly retries.
 8. **W3-15.** Currencies are never captured, though `C_CurrencyInfo` needs **no bank or vendor
    visit** — this is the direct answer to requirement 5. `currencyFavorites`
    (`Database.lua:144-146`) is the only currency state, and `Modules/CurrencySearch.lua` is purely
-   a search box over Blizzard's `TokenFrame`. Fix: on `PLAYER_ENTERING_WORLD` and a debounced
-   `CURRENCY_DISPLAY_UPDATE`, walk `GetCurrencyListSize`/`GetCurrencyListInfo`/`GetCurrencyInfo`
-   and store account-wide currencies **once globally** (same rule as the warband bank) and
-   genuinely per-character ones under `characters[charKey].currencies`. Use the project's 0.5s
-   debounce shape for `CURRENCY_DISPLAY_UPDATE`.
-9. **If Phase 0 item 2 came back true**, add the cold warband-item refresh capability here:
-   `ScanWarbandBank` becomes callable anywhere rather than only at the bank, which is the
-   "let's get creative" win. If it came back false, record that and move on — no substitute
-   mechanism, no guessing.
+   a search box over Blizzard's `TokenFrame`. Fix: walk
+   `GetCurrencyListSize`/`GetCurrencyListInfo`/`GetCurrencyInfo` and store account-wide currencies
+   **once globally** (same rule as the warband bank) and genuinely per-character ones under
+   `characters[charKey].currencies`.
+   **Two triggers, two different mechanisms — do not give both their own debounce.** The
+   `PLAYER_ENTERING_WORLD` half is startup work, so it routes through Phase 3's login-settle latch
+   (this capture becomes a fifth wrapped path, alongside BagUI's bindings, `BagData`'s refresh,
+   `InventorySnapshot`'s scan and `NetWorth`'s logging) rather than inventing a second, independent
+   startup debounce — that would be the exact duplication this plan spends Phase 3 (OQ-2) and Phase
+   17's B8 killing everywhere else. The `CURRENCY_DISPLAY_UPDATE` half fires during play, not at
+   startup, so it keeps its own debounce, at the project's 0.5s shape. **Dependency: this step needs
+   Phase 3's latch to exist first** — see §3.4, Phase 3 precedes Phase 9.
+9. **Phase 0 item 2 (A6) came back partially verified: the tab-ID table reads cold and is not
+   `nil`, but its element count is unmeasured.** That count, not the table's mere existence, is
+   what decides this step: a non-empty count unlocks the cold warband-item refresh capability —
+   `ScanWarbandBank` becomes callable anywhere rather than only at the bank, the "let's get
+   creative" win — while an empty or unusable count means no substitute mechanism and no guessing.
+   **This step therefore stays conditional on a check that has not been run yet**: before writing
+   the capability, read `#C_Bank.FetchPurchasedBankTabIDs(Enum.BankType.Account)` cold and record
+   the number. Do not guess it from the table's existence alone.
 
 **Exit criteria (in-game smoke checklist).**
 - With two alts that have each opened the account bank, the account total counts warband item value
@@ -1251,9 +1451,17 @@ with `/im debug` on, a failed first scan visibly retries.
   timestamp unchanged.
 - Currencies appear for the current character after one login; a second character adds its own
   per-character currencies without disturbing the account-wide set.
+- **The latch/retry cross-check (Phase 3 collision, OQ-2 — this is the proof the two phases
+  actually compose, not an assumption).** With Phase 3's login-settle latch live, force a failed
+  first scan — either a login where bags are genuinely not yet populated, or a temporary forced
+  `return false` at the top of `ScanBags` — and confirm: (1) `TryScanWithRetry`'s exponential
+  backoff still fires and eventually stores a non-empty snapshot, and (2) the per-login latch for
+  `InventorySnapshot`'s path did **not** set on the failed attempt (a subsequent legitimate scan in
+  the same login still runs). Remove any temporary forced-failure code before commit.
 
 **Reviewer fan-out prediction.** Data-model seat (the triple return and where each value lives),
 a data-integrity seat for the never-write-empty rule, and a performance note on the currency walk.
+The latch/retry cross-check earns its own small correctness seat shared with Phase 3's reviewer.
 
 ---
 
@@ -1368,6 +1576,14 @@ a normalized producer against un-normalized storage.
 **The rows that exist only in the legacy store go with it — a deliberate accepted loss on the
 owner's decision, recorded with all four fields as Appendix B L1.** Revision six planned a
 consolidation merge here; revision seven withdrew it on the merits. Do not re-add it.
+
+**Evidence (A13/A14, observed, Phase 0 step 7).** The owner's realms are `Warsong` and `Zul'jin`,
+and `GetNormalizedRealmName()` **preserves the apostrophe** in `Zul'jin` — normalization strips
+spaces and hyphens, not punctuation. `realmMap = {Warsong→Warsong, Zul'jin→Zul'jin}` — **identity**
+for both. This is exactly the equality-proof input step 9A needs, and it is also why the seven
+synthetic fixtures (Sustainment, above) are re-scoped to be the sole coverage of the key-rewrite
+path rather than merely pathological cases alongside a real-data check — see step 9A and step 11 for
+the mechanism, and the reviewer fan-out prediction below for the consequence to reviewer scope.
 
 **This phase lands THREE commits, and which member goes in which one is the thing revision six
 changed.** In order: (1) step 1's `IM:SplitCharacterKey` helper — safe alone, format-independent;
@@ -1771,6 +1987,15 @@ beyond step 1's helper commit). This is the cheapest possible green state to be 
    which is the exact failure atomicity was bought to prevent, and it is **invisible to the Docker
    proof**, because the harness has no `GetNormalizedRealmName()` to compare against. The proof is
    what ties the pure transform back to the API it must imitate. Nothing else in this phase does.
+   **Observed (Phase 0 step 7, A14): the proof is now trivial to state but stays mandatory to run.**
+   Two realms, both identity — `(Warsong, Warsong)` and `(Zul'jin, Zul'jin)` — so `realmMap`'s two
+   entries both map a string to itself, and normalization here strips spaces and hyphens, not
+   punctuation. **"Trivial" describes the map's content, not the obligation to assert it**: this
+   step's harness assertion (step 11 below) still runs, still blocks the atomic commit if either
+   pair is missing, and still exists to catch the day one of these facts stops being true. A future
+   realm transfer, a realm rename, or the owner rolling a character on a third, non-identity realm
+   re-opens this proof for real; an unmapped realm is left byte-identical by design (step 6), not
+   guessed at.
 
 **CHECKPOINT — hard stop, not a convenience.** Green state before anything can touch the owner's
 database: steps 1-9A are in the tree, the realm map is written from Phase 0's recorded pairs and
@@ -1825,6 +2050,13 @@ against raw keys with a raw producer. This is the last state from which nothing 
    keys where one lacks `lastSeen`, a case whose `src` is a non-character string, **a case for each
    of the three `"Unknown"` shapes, and a case whose realm is absent from `realmMap` (which must come
    out untouched and unmerged)**.
+   **These synthetic cases are not optional colour on top of the real-data run — per A14 (Phase 0
+   step 7) they are the ONLY thing in this harness that exercises the rewrite, merge and exemption
+   logic at all**, because both of the owner's real realms are identity under `realmMap` and the
+   real-data run therefore rewrites, merges and exempts nothing. **A real-data run showing zero key
+   changes is the expected result of that fact, not a passing test of this logic** — do not read it
+   as one, and do not let a future pass trim these fixtures because the real-data run "already looks
+   clean."
    **One assertion about what the migration must NOT do, because the drop is destructive by
    design.** `#transactions.entries` before vs after must be **unchanged** — the v3 pass rewrites
    `transactions` keys and drops `sellHistory`; it must never insert, append or re-import a
@@ -2040,14 +2272,12 @@ format and can only be written safely from here.
   `git log -p` proves no earlier commit in this phase touched `IM:GetCharacterKey`,
   `Panels/MailHelper.lua:400` or `MailHelper.lua:587`** — that is the check that the window was
   never reopened by accident.
-- **OQ-1's one visible consequence is observed and accepted, not treated as a regression.** If
-  Phase 0's verdict is that `UI/Panels/History.lua` is **reachable**, open it after the migration:
-  the sell-history view's span shortens from "the last 100 entries, however long that takes" to
-  `ledger.maxAgeDays` (default 30 days). Confirm that is what you see and record it — **the Ledger
-  tab has always behaved this way, so the History panel was the anomaly**, and the two views now
-  agree. If Phase 0's verdict is "unreachable", there is no visible consequence at all and this
-  criterion is discharged by that verdict line. Either way the row loss itself is the accepted
-  outcome of Appendix B **L1**; do not open a defect for it.
+- **OQ-1's one visible consequence is observed and accepted, not treated as a regression.**
+  Phase 0's verdict is now settled: `UI/Panels/History.lua` is **confirmed unreachable** (both
+  directions, see this phase's A11/W0-6 evidence), so there is **no visible consequence at all** —
+  no view exists to observe a span change in — and this criterion is discharged by that verdict
+  line alone, with no in-game step. The row loss itself is still the accepted outcome of Appendix B
+  **L1**; do not open a defect for it.
 - **The mail queue is gone, not orphaned**: after the migration, `/reload` and open the mailbox —
   the mail popup shows an empty queue with no phantom rows and no stale item counts, and
   `pendingQueue` is absent from the saved variables. Then run Auto-Fill once and confirm a fresh
@@ -2082,27 +2312,23 @@ format and can only be written safely from here.
   (`rule.alt` vs `_mailQueue`), `GetAlts` still excludes the *current* character rather than
   listing it as its own alt, and `SendToAlt` builds a recipient with **no** doubled or spurious
   realm suffix. Send one item to it and confirm arrival.
-- **The History panel opens without a Lua error AFTER the migration**, and `/im reset sellHistory`
-  either reports an invalid section or is gone from the advertised list — **run both of these after
-  the atomic commit, not before.** Phase 10's equivalent criterion runs while the key still exists
-  and structurally cannot catch this.
-  **Stated fallback, because the first half may have no executable form.** `UI/Panels/History.lua`
-  is loaded by the `.toc` (`:80`) but **resolved by nothing**: the only two dynamic resolvers are
-  `UI/Config.lua:158` (`self.Panels[tabInfo.module]`, over the seven tabs at `:17-25` — General,
-  BagUI, UI, Selling, Dashboard, MailHelper, Currency) and `UI/Panels/Selling.lua:53`
-  (`UI.Panels[panel.module]`, over the four sub-tabs at `:16-21` — AutoSell, Categories, Whitelist,
-  JunkList). Neither names `History`, and `UI.Panels.History` is assigned only inside
-  `History.lua:10` itself. So there may be **no click path that opens this panel.**
-  - The `/im reset sellHistory` half is **executable regardless** and is not optional.
-  - For the reader half: **if Phase 0's verdict is "unreachable", a grep proof discharges it** —
-    `rg 'sellHistory|GetFormattedHistory|ClearSellHistory' UI/Panels/History.lua` returning zero
-    hits (or the file having been deleted under Phase 18 step 10) closes the criterion, and the
-    reason is written into the commit. **If Phase 0's verdict is "reachable", the in-game check is
-    mandatory and there is no grep substitute** — find the path Phase 0 found and click it, and
-    while it is open, record the span change named two criteria above.
-  - Either way, this is **not** a licence to skip the check: an unreachable panel still gets its
-    dead readers deleted in the retirement commit, because they live in `Database.lua` and
-    `SellHistory.lua`, which are very much reachable.
+- **`UI/Panels/History.lua` is CONFIRMED UNREACHABLE (Phase 0, both directions — see this phase's
+  A11/W0-6 evidence and Phase 18's evidence note). The grep proof is the stated method for this
+  criterion, not a fallback, and there is no in-game half to run.** `UI/Config.lua:17-25` names no
+  History tab, and the tree's one dynamic resolver over sub-tabs, `UI/Panels/Selling.lua:53`,
+  resolves only its own four `subTabs` — nothing can construct `UI.Panels.History`, so there is no
+  click path to test and no Lua-error-on-open case to reproduce. Discharge this criterion with
+  `rg 'sellHistory|GetFormattedHistory|ClearSellHistory' UI/Panels/History.lua` returning zero hits,
+  or with the file already deleted under Phase 18 step 10 (order-independent: Phase 18 runs after
+  this phase, so at this point in the sequence the grep is what runs). Record the discharge in the
+  commit; do not attempt to open the panel in-game looking for a path that Phase 0 already proved
+  does not exist.
+  **`/im reset sellHistory` either reports an invalid section or is gone from the advertised
+  list — this half runs in-game regardless, and after the atomic commit, not before.** Phase 10's
+  equivalent criterion runs while the key still exists and structurally cannot catch this.
+  **Neither half is a licence to skip anything**: the unreachable panel's dead readers were already
+  deleted in the retirement commit, because they live in `Database.lua` and `SellHistory.lua`,
+  which are very much reachable regardless of whether `History.lua` itself is.
 - Alt-to-alt mail rows recorded **before** this migration still classify as transfers afterwards
   (pick one known historical pair, confirm it is a transfer both before and after the run) — the
   `src` normalization check for W2-16.
@@ -2121,10 +2347,13 @@ format and can only be written safely from here.
 
 **Reviewer fan-out prediction.** Data-migration seat (idempotency and the character-merge
 tie-break), a data-model seat for the key format, one adversarial seat asked specifically to break
-the character-key merge with pathological keys (spaced realms, hyphenated realms, colliding keys
-with a missing `lastSeen`, all three `"Unknown"` shapes, a realm absent from `realmMap`) **and to
-check one thing first: that nothing in the migration pass calls a WoW API and that
-`GetNormalizedRealmName` appears exactly once in the tree** — and one seat on the retirement
+the character-key merge with the synthetic fixtures (spaced realms, hyphenated realms, colliding
+keys with a missing `lastSeen`, all three `"Unknown"` shapes, a realm absent from `realmMap`) —
+**these are no longer "pathological cases" run alongside a real-data check; per A14 they are the
+sole coverage of the key-rewrite path**, since both of the owner's real realms are identity under
+`GetNormalizedRealmName()` and the real-data run cannot exercise a rewrite, a merge or an exemption
+at all — **and to check one thing first: that nothing in the migration pass calls a WoW API and
+that `GetNormalizedRealmName` appears exactly once in the tree** — and one seat on the retirement
 commit's blast radius across
 `Database.lua`, `SellHistory.lua`, `Panels/History.lua`, `Core.lua` and the four Tracking modules
 (`LootTracking`, `VendorTracking`, `AuctionTracking`). The retirement commit and the atomic commit
@@ -2937,6 +3166,10 @@ empties: no "failed to render" lines, no missing sections, no items acting on th
 5. **B8.** `BAG_UPDATE_DELAYED` and `PLAYER_EQUIPMENT_CHANGED` trigger an **undebounced** full
    rebuild (`BagUI/Core.lua:581-602` calls `Refresh()` synchronously), while the search path **is**
    debounced (0.15s, `:42-58`) and the settings sliders are (0.12s, `Panels/BagUI.lua:109-135`).
+   **Observed, Phase 0**: opening a bank produced **two complete `CategoryView` render cycles**
+   (`Width chain` → `MasonryLayout` → `Rendering` → `Content bounds`, twice) on both bank opens in
+   the recorded log — a live instance of the undebounced-rebuild class this step fixes, not a
+   separate finding.
    `PLAYER_EQUIPMENT_CHANGED` fires **twice per swap** and once per slot on an equipment-set change
    — up to ~16 full rebuilds for one click — and `BagData.lua:486-488` queues its own refresh on the
    same event, doubling the work. Each rebuild is `ReleaseAll` + `GatherItems` (up to 3×
@@ -2976,6 +3209,12 @@ debounce window, no per-item formatting cost, and every item renders even after 
    `BagUI:ApplyBindingOverrides()` that both Setup and Clear route through, deferring to
    `PLAYER_REGEN_ENABLED` when locked down. (A10: the API restriction is documented but unverified
    in-game; the guard is correct regardless.)
+   **Observed, Phase 0, compounding this finding**: the override bindings are cleared and re-set
+   **five times in ~2 seconds on every login**, not once — see Phase 3's login-storm evidence and
+   its login-settle guard (step 3 there). That guard collapses this to one clear-then-set per
+   login, which shrinks the window this step's fix has to close from five chances per login down
+   to one; it does not replace this step's `InCombatLockdown`/`PLAYER_REGEN_ENABLED` fix, which
+   still stands on its own for the in-combat case.
 9. **B13 — dead code, delete it (git is the archive).** Resize scaffolding:
    `SetResizable`/`SetResizeBounds` (`:246-247`), `resizeGrip` (`:550-561`) **which is `Hide()`n at
    `:553`**, and `BagUI:OnResize` (`:780-797`) — the grip is the only caller of `StartSizing`, so
@@ -3220,6 +3459,17 @@ exist.
 Runs last among the work phases: several items describe code that earlier phases changed, so
 writing the docs first would be documenting a moving target.
 
+**Evidence (A11/W0-6, observed, Phase 0), and a new in-scope item of the same class.**
+`UI/Panels/History.lua` is now **confirmed unreachable, proven in both directions**: `UI/Config.lua:17-25`
+lists General, BagUI, UI, Selling, Dashboard, MailHelper, Currency — no History — and the only
+dynamic resolver in the tree, `UI/Panels/Selling.lua:53` (`UI.Panels[panel.module]`), resolves only
+its own four `subTabs` (`:16-21`, AutoSell/Categories/Whitelist/JunkList). Nothing can construct
+`UI.Panels.History`. This is no longer "candidate only" — step 10 below deletes it outright.
+**New in-scope item, of W7's own class (a doc/UX claim contradicted by the code), not a new
+finding**: `Core.lua:511` prints *"Check /im -> History tab to verify"* after `/im test sell`,
+directing the user to a tab that cannot be opened. Fixed in step 10, in the same commit that
+deletes the panel, since both are the same lie about the same dead tab.
+
 **Steps.**
 1. **W7-1 — the expensive one.** The `local module = self` rule is **wrong**. CLAUDE.md calls it
    CRITICAL and claims "24 of 25 modules violate" it, prescribing a 25-file sweep. In Lua, `self`
@@ -3273,9 +3523,11 @@ writing the docs first would be documenting a moving target.
    exists to make item destruction impossible rather than merely unlikely. This is a **reversal of
    a recorded Decision, not a drift correction**, so the reasoning goes in the commit
    (decision-records rule) and the doc carries only the new current state.
-9. **Three CLAUDE.md claims THIS PLAN invalidates.** W7's list was drawn from the audit, i.e. from
-   claims that were already false. These three are claims this plan *makes* false, so they are not
-   in W7 and would otherwise be left standing:
+9. **Three CLAUDE.md claims THIS PLAN invalidates, plus one standing instruction this plan's own
+   diagnosis adds.** W7's list was drawn from the audit, i.e. from claims that were already false.
+   The three claims below are ones this plan *makes* false, so they are not in W7 and would
+   otherwise be left standing. The fourth item, at the end, is not a false claim being corrected —
+   it is a methodology gap OQ-2 exposed that CLAUDE.md never named at all:
    - **The "0.5 second throttle" debouncing standard.** Phase 17's B8 deliberately uses **0.2s**
      for `BagUI:QueueRefresh`, with a stated reason (0.5s of stale icons after a loot is
      perceptible and would need owner approval). Rewrite the standard as "0.5s for settings-panel
@@ -3326,6 +3578,18 @@ writing the docs first would be documenting a moving target.
    - **"NOT `button:SetText()` — that method doesn't exist."** Phase 13 step 1 makes it exist, at
      the producer. Rewrite to say `button:SetText(t)` is supported and is the preferred call, with
      `button.text` remaining the underlying FontString.
+   - **A methodology gap, not a false claim: audits and reviews of a startup/login path must read a
+     real trace, not just the handler list.** Every one of the five audits reasoned about
+     steady-state event handling — what a handler does when it fires during play — and none of
+     them read an actual `/im debug` trace across a `/reload` to see how many times a startup
+     handler actually fires before the client settles. **OQ-2 is the worked example**: BagUI's
+     override bindings, `BagData`'s full refresh, `InventorySnapshot`'s startup scan and
+     `NetWorth`'s gold-update logging each fired multiple times per login, invisible to any review
+     of the handler registrations alone, and found only by reading `/im debug` output across a
+     `/reload` during Phase 0. Add this as a standing instruction, next to the character-key five
+     above: *before auditing or reviewing any startup/login-time code path, capture and read a real
+     `/im debug` trace across a `/reload` — reasoning about the handler list alone is exactly what
+     let four redundant startup paths through five audits and four review rounds.*
    Same rule as the rest of this phase: describe the code as it now is, no history in the doc.
 
 **CHECKPOINT** — steps 1-9 are docs-only and carry zero runtime risk; step 10 deletes code whose
@@ -3344,13 +3608,14 @@ work here, separately, so a deletion rollback never drags the documentation back
    `Database.lua:269-271`, defined nowhere — remove the invocation or define it, do not leave a
    call to nothing); `defaults.char` (`:164-167`, empty, never read); and the two overlapping
    welcome messages (`Core.lua:16,110-118,353-363` — keep one).
-   **`UI/Panels/History.lua` is a CANDIDATE ONLY.** Four panels are reachable **only** by dynamic
-   string lookup `UI.Panels[panel.module]` (`UI/Panels/Selling.lua:53`), and recon did not read
-   `UI/Panels/Dashboard.lua` past line 40 or `UI/Panels/Currency.lua`. **If Phase 0's verdict says
-   reachable, it stays** — and it then gets W6-16's row pooling applied to its
-   `:116-119` destroy-and-rebuild loop, on top of the `IM:GetLedgerStats` repoint from Phase 10 and
-   the reader retirement from Phase 11 step 12, both of which have already rewired `:38`, `:124`
-   and `:268`. This is R7; a deletion without a verdict line is a plan violation.
+   **`UI/Panels/History.lua` is CONFIRMED DEAD, not a candidate — Phase 0 proved it in both
+   directions (see this phase's evidence note above): `UI/Config.lua:17-25` names no History tab,
+   and the tree's one dynamic resolver, `UI/Panels/Selling.lua:53`, resolves only its own four
+   `subTabs`. Delete the file.** In the same commit, fix `Core.lua:511`'s
+   *"Check /im -> History tab to verify"* message (after `/im test sell`) — it currently points the
+   user at a tab that has never been openable; either remove the line or repoint it at the ledger's
+   equivalent view, and record which in the commit. This is R7; the deletion still cites Phase 0's
+   written verdict line, which now reads "unreachable" rather than "pending."
 
 **Exit criteria.**
 - CLAUDE.md contains **no claim that contradicts the code**: spot-verify the accent colour, the
@@ -3360,7 +3625,9 @@ work here, separately, so a deletion rollback never drags the documentation back
   BankItemTracking entry against their files — **plus the three claims this plan itself
   invalidated**: the debounce standard reads 0.5s/0.2s-in-bag, the character-key section names
   `IM:GetCharacterKey`/`IM:SplitCharacterKey` rather than raw `GetRealmName()`, and the button
-  section says `button:SetText` works.
+  section says `button:SetText` works — **and the standing instruction OQ-2 added**: CLAUDE.md
+  names reading a real `/im debug` startup trace as a prerequisite for auditing or reviewing any
+  login-time code path.
 - No dangling pointer remains: `grep -c '\.analysis/' .claude/CLAUDE.md` returns 0.
 - The `local module = self` rule is a style preference and the 25-file sweep is explicitly
   cancelled in writing, so no future session re-opens it.
@@ -3368,7 +3635,10 @@ work here, separately, so a deletion rollback never drags the documentation back
   tabs and all three dashboard tabs, plus the minimap menu — no Lua error, no missing panel (this
   is the only test that can catch a dynamic-lookup break, since it fails at runtime, not load).
 - `/reload` produces exactly one welcome message.
-- If `History.lua` survived: its rows are pooled and its stats come from `IM:GetLedgerStats`.
+- **`UI/Panels/History.lua` is deleted** (confirmed dead, not a survivor — see this phase's evidence
+  note), the `.toc` entry loading it is removed, and `Core.lua:511`'s dangling "History tab"
+  message is fixed in the same commit. `grep` confirms no remaining reference to the file outside
+  `git log`.
 
 **Reviewer fan-out prediction.** Docs-only for steps 1-9 → **zero seats**. Step 10's deletions earn
 one dead-code seat. Do not run a code reviewer over a documentation diff.
@@ -3393,12 +3663,16 @@ are no per-wave releases.
    half is gate **G9**; an owner **decision** on G9 (approve-and-ship or decline-and-record) closes
    it, an undecided G9 does not. **W4-11's second half lives inside Phase 11's atomic commit and
    W3-8's inside Phase 11's preceding retirement commit, so it takes `git show` on BOTH commits to
-   close them** — one commit is not the proof of the other. **The table is 126 rows now**: OQ-1 is
+   close them** — one commit is not the proof of the other. **The table is 127 rows now**: OQ-1 is
    its own row and is **closed by an owner decision to accept the loss** (Appendix B **L1**), not by
    W3-8 and not by any fix. Read it the way the gate reads a declined approval gate: a recorded
    **decision** closes the row; **silence would not have closed it**, and neither would shipping the
    drop without the decision on record. Confirm the L1 entry exists with all four fields before
-   marking the row closed.
+   marking the row closed. **OQ-2 is also its own row, closed by a fix rather than a decision** —
+   Phase 3's login-settle latch (step 3) plus Phase 9's `ScanBags` honest-return fix (step 5) — and
+   its close condition is the in-game cross-check both phases carry in their exit criteria: the
+   latch fires exactly once per login for all four paths **and** a forced failed scan still
+   retries and does not set the latch. A green `git show` on Phase 3 alone does not close this row.
 2. **Manual `.toc` edit.** Confirm `## Interface: 120100` is correct for the live build and edit it
    by hand if not — **`publish.sh` rewrites `## Version:` and `IM.version` only and never touches
    `## Interface:`**.
@@ -3406,14 +3680,12 @@ are no per-wave releases.
    `InventoryManagerDB.lua` out of `WTF/Account/<ACCOUNT>/SavedVariables/` before first login on
    1.4.0.* Advisory by explicit user decision — **do not turn this into a gate and do not add a
    backup mechanism.**
-   **Release-note line about the one visible change, if `UI/Panels/History.lua` turned out to be
-   reachable** (Phase 0's verdict decides whether this line is written at all): *the old sell-history
-   store is gone; the sell-history view now covers the same retention window as the Ledger
-   (Dashboard → Data Retention, default 30 days) instead of "the last 100 entries".* State the
-   change, not an apology — the Ledger already behaved this way, and the History panel was the
-   anomaly. **Do not turn this into a retention advisory**: the owner's decision was to accept the
-   loss of rows past his window, and telling him to widen the setting to dodge his own policy would
-   reverse that decision by footnote.
+   **Release-note line about the sell-history span change is NOT written.** Phase 0 confirmed
+   `UI/Panels/History.lua` unreachable in both directions, and Phase 18 deletes it, so there is no
+   surviving view whose span changes and nothing to advise the user about on this point. Do not
+   write a retention advisory in its place — the owner's decision was to accept the loss of rows
+   past his window, and telling him to widen the setting to dodge his own policy would reverse that
+   decision by footnote.
 4. **Clear `publish.sh`'s four hard gates**: clean working tree; no untracked files except
    `VERSION_GUIDE.md`/`*.zip`; branch `main`; monotonic version increment (1.3.3 → 1.4.0).
 5. **Publish once.** `X-Curse-Project-ID: 1422035`, `SavedVariables: InventoryManagerDB` unchanged.
@@ -3424,8 +3696,8 @@ are no per-wave releases.
 - Appendix A fully closed; Appendix B's deferrals each carry all four fields.
 - `.toc` interface verified by hand; `## Version: 1.4.0` and `IM.version = "1.4.0"` agree.
 - One CurseForge release exists for 1.4.0; no intermediate releases were cut.
-- The advisory `cp` line appears in the release notes, **and so does the sell-history span line if
-  Phase 0 found `History.lua` reachable** (if not, the verdict line discharges it).
+- The advisory `cp` line appears in the release notes. **No sell-history span line appears** —
+  Phase 0's verdict (`History.lua` confirmed unreachable) discharges it.
 - A fresh login on 1.4.0 runs the v3 migration once, produces no error, and a second login changes
   nothing (final in-game confirmation of Phase 11's idempotency proof) — **including
   `#transactions.entries`, which must not change on either login.**
@@ -3515,6 +3787,14 @@ checklist, and `publish.sh` is the mechanical gate.
     search semantics** — the change alters what `IM:GetTransactions` means for exactly three
     callers: `Database.lua:757`, `Ledger.lua:168`, `Ledger.lua:180`. Check those three, not the
     world.
+14. **Phase 3 precedes Phase 9 — two independent reasons, both real.** First, Phase 9's currency
+    capture (step 8) routes its `PLAYER_ENTERING_WORLD` half through Phase 3's login-settle latch
+    rather than inventing a second startup debounce — the latch has to exist to be consumed.
+    Second, Phase 9's `ScanBags` honest-return fix (step 5, W3-6) and Phase 3's login-settle latch
+    (step 3, OQ-2) are the two halves of one collision: the latch, if built wrong, would silently
+    suppress the retry this fix depends on. Phase 9 must land, and be smoke-tested, with Phase 3's
+    latch already in place, and Phase 3's Half 3 check must be re-run afterward — see the forward
+    and backward references in each phase's steps.
 
 **Verify-before-complete gates.**
 - **No phase completes on "the file loads."** Every phase's exit criteria is an in-game smoke
@@ -3569,10 +3849,10 @@ checklist, and `publish.sh` is the mechanical gate.
   **no change to `sellHistory`'s stored rows** (same entry count before and after). A retirement
   commit that deleted the data would separate the drop from the `defaults` removal.
 - **OQ-1 carries no completion gate, and that is deliberate.** It is closed by the owner's recorded
-  decision to accept the loss (Appendix B **L1**), not by a proof. What Phase 11 owes it is one
-  observation, not a pass/fail: if `History.lua` is reachable, note that its view's span is now the
-  retention window. An executor who finds himself building a merge, a backup or a retention override
-  to satisfy this line has reversed an owner decision.
+  decision to accept the loss (Appendix B **L1**), not by a proof. Phase 0 confirmed
+  `UI/Panels/History.lua` unreachable, so there is no view left to observe a span change in and
+  nothing more owed here. An executor who finds himself building a merge, a backup or a retention
+  override to satisfy this line has reversed an owner decision.
 - **Phase 11 also completes only after its derivation greps return zero unhandled hits** (Phase 11
   steps 2-3 and the matching exit criterion). **This is what replaces the retired "no
   character-keyed table is indexed with an unresolved key" gate, and it is deliberately a
@@ -3584,10 +3864,13 @@ checklist, and `publish.sh` is the mechanical gate.
   exhaustiveness the plan cannot mechanically prove is derived at execution time by grep, with any
   written list demoted to a non-exhaustive seed.** A phase that closes a completeness criterion by
   pointing at a list in this document has not closed it.
-- **Phase 11 also completes only after the two post-migration checks that structurally cannot run
-  earlier**: the History panel opens with no Lua error, and `/im reset sellHistory` no longer
-  reaches a section with no default. Both must be run **after** the atomic commit; Phase 10's
-  equivalent criterion runs while `sellHistory` still exists and cannot catch either.
+- **Phase 11 also completes only after the post-migration check that structurally cannot run
+  earlier**: `/im reset sellHistory` no longer reaches a section with no default. Must be run
+  **after** the atomic commit; Phase 10's equivalent criterion runs while `sellHistory` still
+  exists and cannot catch it. **The History-panel half of this gate is retired, not deferred**:
+  Phase 0 confirmed `UI/Panels/History.lua` unreachable in both directions, so there is no panel to
+  open and no Lua error to watch for — the grep proof in Phase 11's own exit criteria is what
+  discharges that half, not an in-game check.
 - **No deletion lands without Phase 0's written verdict line** for that file or function.
 - **No approval-gated BagUI item lands without a recorded owner approval.** That now includes G9,
   whose subject file is `UI/OverlayFactory.lua`.
@@ -3607,8 +3890,8 @@ checklist, and `publish.sh` is the mechanical gate.
 - **The underlying audits' counts are unreliable, and so were two of this plan's own.** The audits
   said 5 charKey parse sites, 40 `hooksecurefunc` sites (30) and 1-of-25 closure-pattern modules
   (false in both directions); the brief's own finding total was 96 over 125 numbered entries until
-  the conductor corrected it to **125**, and this plan now covers **126** — the 126th being OQ-1,
-  which no audit and no review pass produced. Then recon said "24
+  the conductor corrected it to **125**, and this plan now covers **127** — OQ-1 and OQ-2, neither
+  of which any audit or review pass produced. Then recon said "24
   charKey sites" and the brief and this plan both transcribed it — over an enumeration holding
   **25** line entries, of which **18** are the defective greedy parse. Corrected throughout; the
   gate is now `rg 'match\("\^\(\.\+\)-"\)'` returning zero, which is what actually closes W3-13.
@@ -3624,8 +3907,8 @@ checklist, and `publish.sh` is the mechanical gate.
   - **Any redesign of the bag UI.** Invisible fixes and approved individual changes only.
   - **Any migration backup mechanism** — no backup table, no `/im restore`, no release gate. User
     decision on record, asked twice, answered "just write it and ship it" both times. The residual
-    risk this leaves is scored honestly as R2 with an unsigned override; the answer to it is not a
-    backup, it is the Docker proof.
+    risk this leaves is scored honestly as R2, signed HIGH per the RISK OVERRIDE block above (O2);
+    the answer to it is not a backup, it is the Docker proof.
   - Edge resizing (G7) and `CustomCategories` in the bag view (G8) — new plans if wanted.
   - Localization of `ParseMoneyFromMessage` — deferral D1.
   - A true net-worth curve / sparkline — deferral D2.
@@ -3653,6 +3936,17 @@ checklist, and `publish.sh` is the mechanical gate.
   with the consolidation merge**: the older-than-retention `sellHistory` row plus its already-copied
   mirror, and the `dbVersion = 1` database that existed only to prove the mapping extraction was
   behaviour-neutral. There is no extraction and no merge, so neither has anything to prove.
+  **Re-scoped by Phase 0's realm observation (A14): these fixtures are now the SOLE coverage of the
+  key-rewrite path, not "pathological cases" alongside a real-data check.** Both of the owner's real
+  realms (`Warsong`, `Zul'jin`) are identity under `GetNormalizedRealmName()`, so `realmMap` maps
+  each to itself and the real-data Docker run is a provable no-op on every key it touches — it
+  cannot exercise the rewrite, the merge rule, the `"Unknown"`-class exemption or the unmapped-realm
+  path at all. **A clean real-data run showing zero key changes is the *expected* result, not
+  evidence the rewrite works.** No future executor may trim these seven fixtures as "redundant with
+  the real-data pass" — they are not redundant with it, they are the only thing that runs the code
+  the real data cannot reach. A future realm transfer, rename, or a second account with a
+  non-identity realm reopens the question of whether the map still needs proving against a live
+  case; until then, the synthetic fixtures carry that proof alone.
 - **Credentials**: CurseForge publish credentials, already configured in `publish.sh`. Nothing new.
 - **Test characters needed for the smoke checklists**: at least three characters, one of which has
   never been logged in with the addon (for W3-4 and W5-5), one on a spaced or connected realm (for
@@ -3670,12 +3964,14 @@ checklist, and `publish.sh` is the mechanical gate.
   1. this `plan.md` — §3.2's ancestor table and §3.4's sequencing list are the load-bearing parts;
   2. `Appendix A` to find which findings are still open;
   3. `.claude/plans/active/audit-remediation/brief.md` for the full file:line evidence behind any
-     finding (this plan compresses it; the brief does not). **One exception: OQ-1 is not in the
-     brief and never was** — it came from the owner, asked while reading revision five and answered
-     in revision six, so its only evidence is
-     Appendix B **L1** and §1's `Database.lua` terrain note. Do not conclude it is out of scope
-     because the brief is silent on it, and do not conclude it is unresolved: it is closed by an
-     owner decision to accept the loss;
+     finding (this plan compresses it; the brief does not). **Two exceptions: OQ-1 and OQ-2 are not
+     in the brief and never were.** OQ-1 came from the owner, asked while reading revision five and
+     answered in revision six, so its only evidence is Appendix B **L1** and §1's `Database.lua`
+     terrain note. OQ-2 came from reading the owner's in-game debug log during Phase 0 execution,
+     so its only evidence is Phase 3's evidence note and its Appendix A row. Do not conclude either
+     is out of scope because the brief is silent on it, and do not conclude either is unresolved:
+     OQ-1 is closed by an owner decision to accept the loss, OQ-2 by Phase 3's fix cross-checked
+     against Phase 9;
   4. `git log --grep=audit-remediation` for every decision already made and why — **do this before
      relitigating anything**;
   5. `.claude/sessions/inventorymanager-state.md` for the last session's working context;
@@ -3691,11 +3987,15 @@ checklist, and `publish.sh` is the mechanical gate.
 
 ---
 
-## RISK OVERRIDE — UNSIGNED
+## RISK OVERRIDE — SIGNED 2026-09-07
 
 Three residuals stand at HIGH and cannot be mitigated lower. All three are Floor-B classes, where
-the rule fixes the floor at HIGH regardless of how good the mitigation is. **This block is drafted,
-not signed. Surfacing it is the planner's job; signing it is the owner's, never the planner's or
+the rule fixes the floor at HIGH regardless of how good the mitigation is. **Signed by the owner on
+2026-09-07 — see the acceptance block below the table, which records his words verbatim, the
+redirect he was offered on O2 and declined, and the forfeit condition that voids this signature.**
+The rows and their reasoning are unchanged since signing; any edit to a mitigation cell that lowers
+a bucket requires re-signature. Surfacing this block was the planner's job; signing it is the
+owner's, never the planner's or
 the conductor's.**
 
 **Three rows. There is no fourth, and no retired one hiding as a footnote.** Earlier revisions
@@ -3732,10 +4032,10 @@ Phase 17A. Per O1's mitigation cell this is display-only and leaves no path to a
 
 ## Appendix A — Coverage index
 
-Every numbered finding in the brief — **125**, per the brief's corrected count — **plus OQ-1**,
-which came from the owner rather than from the audits, for a total of **126** — mapped to exactly
-one phase, or to two labelled work items in two phases, both of which must close (see the note
-below the table). **This table is the authority on completeness.**
+Every numbered finding in the brief — **125**, per the brief's corrected count — **plus OQ-1 and
+OQ-2**, neither of which came from the audits or a review pass, for a total of **127** — mapped to
+exactly one phase, or to two labelled work items in two phases, both of which must close (see the
+note below the table). **This table is the authority on completeness.**
 
 | Wave | Items | Phase |
 |---|---|---|
@@ -3743,6 +4043,7 @@ below the table). **This table is the authority on completeness.**
 | W1 | 1 (work item 1 of 2: the filter-side quality floor + nil guard), 2, 3 | **P1** |
 | W1 | 4, 5, 6 | **P2** |
 | W2 | 1 | **P3** |
+| **OQ-2** | **Four startup paths re-enter their own work on every login with no completion latch: BagUI's override bindings clear/re-set five times in ~2s (compounding B12), `BagData`'s full refresh fires twice, `InventorySnapshot`'s startup scan runs three times in ~1s, `NetWorth`'s gold-update logging fires three times in the same second. Resolution: a single login-settle latch (Phase 3 step 3), keyed on completion rather than on firing, so `InventorySnapshot`'s scan stays re-runnable when Phase 9's `ScanBags` fix (step 5) reports a real failure — closed by the cross-check exit criterion both phases carry, not by either phase's `git show` alone.** **Provenance: found by reading the owner's in-game debug log during Phase 0 execution — by no audit and no review pass.** **Boundary with B8** (Phase 17): B8 debounces an interval-triggered rebuild recurring during play (`BAG_UPDATE_DELAYED`/`PLAYER_EQUIPMENT_CHANGED` firing repeatedly while the user plays); OQ-2 is a one-shot re-entry at a single event (login) across four unrelated modules, fixed by a completion latch, not a debounce interval — same producer class, different trigger, different mechanism, so none of the four instances is closed by B8's fix. | **P3** |
 | W2 | 2, 3, 4, 5, 6, 7, 17 | **P4** (one ancestor: the claim queue) |
 | W2 | 8, 9, 10, 11 | **P5** |
 | W2 | 12, 13, 15, 16, 19, 20 | **P6** (20 = deferral D1 + in-scope guard) |
@@ -3752,7 +4053,7 @@ below the table). **This table is the authority on completeness.**
 | W3 | 8 (work item 1 of 2: `SellHistory.lua`'s own writers + `ItemLock.lua:157`), 9 (one ancestor) | **P10** |
 | W3 | 10, 11, 13 (one ancestor), 12, 14, 8 (work item 2 of 2: the legacy history writer family + its nine Tracking/`Core.lua` call sites) | **P11** — the atomic phase: producer + migration in one commit |
 | W4 | 11 (work item 1 of 2: the `ledgerCharFilter` → `ledgerCharKey` field, migration and reader) | **P11** — pulled into the atomic commit (it is the reshape) |
-| **OQ-1** | **The two stores expire on different axes (`sellHistory` by count, `transactions` by age), so dropping `sellHistory` destroys rows that exist nowhere else.** **Resolution: CLOSED BY OWNER DECISION TO ACCEPT THE LOSS** — no merge, no backup, no retention override; the drop proceeds and the rows go. Recorded with all four fields as Appendix B **L1**; the only visible consequence (the sell-history view's span shortening to the retention window, if `History.lua` is reachable) is noted in Phase 11's criteria and Phase 19's release notes. **Closed by a recorded decision, NOT by silence and NOT by a fix** — Phase 19's gate must read the L1 entry, not just the absence of open work. **Provenance: found by the owner's question — asked while reading revision five, answered in revision six — not by any of the five audits and not by any of the four review passes.** Descends from W3-8 (same store, same retirement) but is a distinct defect with a distinct resolution | **P11** — the accepted consequence of step 5's drop |
+| **OQ-1** | **The two stores expire on different axes (`sellHistory` by count, `transactions` by age), so dropping `sellHistory` destroys rows that exist nowhere else.** **Resolution: CLOSED BY OWNER DECISION TO ACCEPT THE LOSS** — no merge, no backup, no retention override; the drop proceeds and the rows go. Recorded with all four fields as Appendix B **L1**. **Phase 0 confirmed `UI/Panels/History.lua` unreachable in both directions, so there is no visible consequence at all** — no view's span shortens, because no view exists — noted in Phase 11's criteria and Phase 19's release notes. **Closed by a recorded decision, NOT by silence and NOT by a fix** — Phase 19's gate must read the L1 entry, not just the absence of open work. **Provenance: found by the owner's question — asked while reading revision five, answered in revision six — not by any of the five audits and not by any of the four review passes.** Descends from W3-8 (same store, same retirement) but is a distinct defect with a distinct resolution | **P11** — the accepted consequence of step 5's drop |
 | W3 | 16, 17, 18 | **P12** |
 | W4 | 6 (work item 1 of 2: additions), 7 (1 of 2: addition), 8 (1 of 2: the two added helpers) | **P13** |
 | W4 | 1, 2 (one ancestor), 3, 4, 5, 6 (2 of 2: consumption), 7 (2 of 2: consumption), 8 (2 of 2: consumption + dead `SetTextColor` removal), 9, 10, 11 (2 of 2: `typeIndex`/`dateIndex`), 12 | **P14** |
@@ -3810,14 +4111,24 @@ consolidation merge removed *work*, not a finding. OQ-1 was a real defect and is
 defect; it is now closed by an owner decision to accept its consequence rather than by a fix, and a
 finding closed by decision is closed, not deleted. **A row removed from the table because the answer
 turned out to be "accept it" would be exactly the silent discharge R11 exists to catch.**
-**What revision EIGHT changed about the count: nothing. The total stays 126.** It corrected *how*
+**What revision EIGHT changed about the count: nothing. The total stayed 126.** It corrected *how*
 W3-10 normalizes stored keys (a pure injected transform instead of a WoW API call that would have
 merged every alt into the running character — see Phase 11 step 6), widened the `"Unknown"`
 exemption from one literal to the class of three shapes `Database.lua:216` can produce, and added
 two mechanism steps (Phase 0 step 7's realm pairs, Phase 11 step 9A's equality proof). **A
 correction to a finding's fix is not a new finding, and a mechanism step is not a finding at all** —
 both live inside W3-10/W3-11, which were already counted.
-**126 is the number Phase 19's coverage gate reads.**
+**What revision NINE changed about the count: +1, to 127.** Revision eight's login-storm evidence
+(the observed BagUI-binding/`BagData`/`InventorySnapshot`/`NetWorth` re-entry) was wrongly folded
+into Phase 3's scope as work with no coverage-index row — a **coverage-index correction, not a
+newly-discovered defect**: the four startup-path observations were real remediation work from the
+moment they were first written down in Phase 3, they simply had not been given a row. **OQ-2** is
+that row now: same defect, same fix (Phase 3 step 3, cross-checked against Phase 9's exit
+criteria), now indexed so Phase 19's coverage gate can verify it closed and a future reader can see
+it was ever decided rather than quietly absorbed into a phase's prose. This is the exact shape R11
+exists to catch — real remediation work with no coverage-index row — caught here against this
+plan's own earlier revision, not against the brief.
+**127 is the number Phase 19's coverage gate reads.**
 
 **Nothing is dropped.** Two items resolve to documented deferrals (Appendix B, D1-D2), both with all
 four fields, and one resolves to a documented **accepted loss** (Appendix B, L1), also with all four
