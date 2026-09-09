@@ -17,9 +17,9 @@ local _popup = nil
 -- sell.
 --
 -- The debounce and the GET_ITEM_INFO_RECEIVED handler live in AutoSell, not here. This popup and
--- the consent prompt were each polling "has item data settled?" on their own clocks, so a cold
--- cache produced independent walks of every bag on the same burst of data. One signal now, and
--- this is a subscriber to it rather than a second source of truth.
+-- the sell path were each polling "has item data settled?" on their own clocks, so a cold cache
+-- produced independent walks of every bag on the same burst of data. One signal now, and this is
+-- a subscriber to it rather than a second source of truth.
 local _dataEventsHooked = false
 
 local function _HookItemDataEvents()

@@ -1,5 +1,5 @@
 --[[
-    Offline behaviour tests for the auto-sell consent gate and the quality floor.
+    Offline behaviour tests for what stops an item reaching a vendor.
 
     Run it:
         .claude/tests/autosell/run.sh
@@ -7,14 +7,20 @@
     These load the REAL Core.lua, Database.lua, Filters.lua and Modules/AutoSell.lua against
     wow_stub.lua.
 
+    There is no confirm dialog and no session consent. `autoSellEnabled`, off by default, IS the
+    permission to sell unattended, so the cases that used to drive a dialog now drive the setting.
+
     COVERED, as the shipping code rather than a description of it: the quality floor, the stored
     maxQuality clamp (both directions, and its fail-closed fallbacks - asked of GetMaxSellQuality
-    directly, because the floor masks it in every sale outcome), the database defaults, the consent
-    fingerprint, the approved-list exemption's unforgeability, the sale loop's re-validation,
-    Core.lua's quality accessors (IM:GetQualityInfo, IM:GetQualityName, IM:GetQualityColorHex) and
-    the settings dropdown deriving its list from them, and the consent dialog - which is answered
-    by pressing its buttons, not by calling the handler underneath them, and whose own text is read
-    back rather than assumed.
+    directly, because the floor masks it in every sale outcome), the configured maxQuality
+    threshold through a sale in both directions, the junk list overriding a filter that would have
+    refused, the category-exclusion, mail-rule and no-vendor-value tiers, the database defaults,
+    the master toggle governing the merchant-open sale, the addon's own later continuations (the
+    item-data retry and the post-sale sweep) and the drain of a queue already running, the sale
+    loop's per-item re-validation against the bags and the filter, the retry budgets, the popup's
+    Sell All click driven through the shipping handler, and Core.lua's quality accessors
+    (IM:GetQualityInfo, IM:GetQualityName, IM:GetQualityColorHex) with the settings dropdown
+    deriving its list from them.
 
     NOT COVERED, and a change that stops any of them protecting an item will leave this suite
     green:
@@ -23,14 +29,20 @@
       constant: soulbound (C_Item.IsBound), warbound-until-equip
       (C_Item.IsBoundToAccountUntilEquip), uncollected transmog
       (C_TransmogCollection.PlayerHasTransmog), toys (C_ToyBox.GetToyInfo) and equipment sets
-      (C_EquipmentSet).
+      (C_EquipmentSet). Also the minSellPrice threshold, which nothing here sets.
     - Modules/TooltipInfo.lua is not loaded here. It is a MODULE, not part of the UI layer, so
       "the UI layer is not loaded" does not cover it and nothing below tests it.
-    - The UI layer is not loaded either, so UI/AutoSellPopup.lua and the settings panels are
-      reached only by reading their source, never by driving them.
+    - Of the UI layer, only UI/Core.lua and UI/AutoSellPopup.lua are loaded, only in the Sell All
+      case, and only far enough to call a click handler under a frame stub that answers every
+      method - nothing here shows that anything DRAWS. The settings panels are reached by reading
+      their source, never by driving them.
     - No claim about the live client can be proven here: buyback lifetime and event ordering at a
-      real vendor are in-game checks. The buyback PAGE SIZE is the exception - it is derived from
-      Blizzard's constant rather than asserted, so section 9 checks the derivation.
+      real vendor are in-game checks.
+
+    This list is hand-written, which is the shape this project's registry keeps catching. Read it
+    as "these were known uncovered when it was written", never as "everything else is covered" -
+    the only version of that claim worth believing is someone else deleting a guard and watching
+    the suite go red.
 ]]
 
 package.path = ".claude/tests/autosell/?.lua;" .. package.path
@@ -89,11 +101,8 @@ local function Reset()
     Stub.ClearTimers()
     Stub.ClearBags()
     Stub.items = {}
+    Stub.itemVariants = {}
     Stub.sold = {}
-    Stub.refuseSale = {}
-    Stub.shownPopups = {}
-    Stub.activePopup = nil
-    Stub.refusePopup = false
     Stub.onSell = nil
     MerchantFrame.shown = true
 
@@ -101,19 +110,6 @@ local function Reset()
     AutoSell = IM.modules.AutoSell
     DefineStandardItems()
 end
-
--- Answer a confirm the test expects to be there. A missing one is reported as a named failure and
--- the run continues: a suite that aborts on the first surprise tells you one thing, where the rest
--- of the checks would have told you which guard actually went missing.
-local function AnswerConfirm(label, answer, verb)
-    if answer() then return true end
-    check(label .. ": a confirm was expected to " .. verb .. " but none was shown", false)
-    return false
-end
-
-local function AcceptConfirm(label) return AnswerConfirm(label, Stub.PopupAccept, "accept") end
-local function DeclineConfirm(label) return AnswerConfirm(label, Stub.PopupCancel, "decline") end
-local function EscapeConfirm(label) return AnswerConfirm(label, Stub.PopupEscape, "escape") end
 
 local function Printed(needle)
     for _, line in ipairs(IM.prints) do
@@ -180,9 +176,6 @@ RunSection("Quality floor (real Filters.lua)", function()
             IM.db.global.autoSellEnabled = true
             IM.db.global.autoSell.maxQuality = maxQuality
             OpenMerchant()
-            -- A protected item produces no eligible list, so usually there is no dialog at all. Accept
-            -- one if it appears: "no dialog" must not be the only reason nothing sold.
-            if Stub.PopupOnScreen() then Stub.PopupAccept() end
             Stub.DrainTimers()
             if SoldCount() > 0 then soldAtSomeSetting = true end
 
@@ -194,7 +187,6 @@ RunSection("Quality floor (real Filters.lua)", function()
             IM.db.global.autoSell.maxQuality = maxQuality
             IM.db.global.junkList[SELLABLE] = true
             OpenMerchant()
-            if Stub.PopupOnScreen() then Stub.PopupAccept() end
             Stub.DrainTimers()
             if SoldCount() > 0 then junkSoldAtSomeSetting = true end
         end
@@ -212,9 +204,8 @@ RunSection("Quality floor (real Filters.lua)", function()
     IM.db.global.autoSellEnabled = true
     IM.db.global.autoSell.maxQuality = 2
     OpenMerchant()
-    AcceptConfirm("poor-quality sale")
     Stub.DrainTimers()
-    check("a Poor-quality item with a vendor price IS sold once approved", SoldCount() == 1, Prints())
+    check("a Poor-quality item with a vendor price IS sold", SoldCount() == 1, Prints())
 
     -- An item whose data has not arrived has nil quality and must fail closed.
     Reset()
@@ -234,7 +225,6 @@ RunSection("Quality floor (real Filters.lua)", function()
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
     IM.db.global.autoSellEnabled = true
     OpenMerchant()
-    if Stub.PopupOnScreen() then Stub.PopupAccept() end
     Stub.DrainTimers(200)
     check("an item whose quality is missing but whose name is not is never sold",
         SoldCount() == 0, Prints())
@@ -329,7 +319,6 @@ RunSection("Quality floor (real Filters.lua)", function()
         IM.db.global.autoSellEnabled = true
         IM.db.global.autoSell.maxQuality = stored   -- a value only an older build could have written
         OpenMerchant()
-        if Stub.PopupOnScreen() then Stub.PopupAccept() end
         Stub.DrainTimers()
         check("a stored maxQuality of " .. stored .. " does not resurrect a quality-" .. stored ..
             " sale", SoldCount() == 0, Prints())
@@ -337,291 +326,258 @@ RunSection("Quality floor (real Filters.lua)", function()
 end)
 
 -- ============================================================================
--- 2. The consent gate, driven through the real dialog
+-- 2. The master toggle is the whole permission
 -- ============================================================================
 
-RunSection("Consent gate", function()
+--[[
+    autoSellEnabled, off by default, is what a fresh install has instead of a prompt: nothing can
+    be vendored until the user opens the settings and switches it on. Once they have, the addon
+    sells at a vendor without asking, because "may I sell at vendors" is the question the setting
+    already answered - asking it again every session would turn an automatic feature into a
+    two-click manual one.
+]]
+RunSection("The master toggle is the whole permission", function()
 
-    Reset()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    IM.db.global.autoSellEnabled = true
-    OpenMerchant()
-    check("MERCHANT_SHOW with sellable items and no session grant sells nothing",
-        SoldCount() == 0, Prints())
-    check("...and puts the confirm on screen", Stub.PopupOnScreen())
-
-    AcceptConfirm("first confirm")
-    Stub.DrainTimers()
-    check("...and pressing Sell on that confirm sells the quoted item", SoldCount() == 1, Prints())
-
-    Reset()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    IM.db.global.autoSellEnabled = true
-    OpenMerchant()
-    DeclineConfirm("declined confirm")
-    Stub.DrainTimers()
-    check("declining the confirm sells nothing", SoldCount() == 0, Prints())
-    check("...and says so", Printed("declined"), Prints())
-    check("...and grants nothing", AutoSell:HasSessionConsent() == false)
-
-    Reset()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    IM.db.global.autoSellEnabled = true
-    OpenMerchant()
-    EscapeConfirm("escaped confirm")
-    Stub.DrainTimers()
-    check("dismissing the confirm with Escape sells nothing and grants nothing",
-        SoldCount() == 0 and AutoSell:HasSessionConsent() == false, Prints())
-
-    -- The master toggle. Default is off, and off must mean nothing happens at all.
     Reset()
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
     check("autoSellEnabled defaults to false", IM.db.global.autoSellEnabled == false)
     OpenMerchant()
-    check("a fresh profile shows no confirm and sells nothing on the first merchant visit",
-        SoldCount() == 0 and not Stub.PopupOnScreen(), Prints())
+    Stub.DrainTimers()
+    check("a fresh profile sells nothing on the first merchant visit", SoldCount() == 0, Prints())
 
     Reset()
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
     IM.db.global.autoSellEnabled = true
     OpenMerchant()
-    AcceptConfirm("second-visit setup")
-    Stub.DrainTimers()
+    check("with the setting on, MERCHANT_SHOW sells what the filter approves and asks nothing",
+        SoldCount() == 1, Prints())
+    check("...and says what it sold", Printed("Sold 1 items for"), Prints())
+
+    -- Every later vendor too. There is no per-session state left to go stale, so the second visit
+    -- behaves exactly like the first.
     CloseMerchant()
     Stub.PutItem(0, 1, { itemID = SELLABLE_2, stackCount = 1 })
     OpenMerchant()
-    check("a second merchant visit in the same session does not re-ask",
-        not Stub.PopupOnScreen(), Prints())
-    check("...and sells without asking", SoldCount() == 2, table.concat(SoldIDs(), ","))
+    check("a second merchant visit sells the same way, with no session state in between",
+        SoldCount() == 2, table.concat(SoldIDs(), ","))
+
+    -- Switching it back off stops the automatic path dead...
+    Reset()
+    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
+    IM.db.global.autoSellEnabled = false
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("switching the setting off stops the merchant-open sale", SoldCount() == 0, Prints())
+
+    -- ...but never the button the player is looking at: Sell All is a sale they asked for by hand,
+    -- on the list the popup is showing them, and the setting governs the unattended path only.
+    IM.prints = {}
+    AutoSell:SellJunk()
+    Stub.DrainTimers()
+    check("...and leaves Sell All working, because that is a sale asked for by hand",
+        SoldCount() == 1, Prints())
 end)
 
 -- ============================================================================
--- 3. An approved sale is still re-validated against the bags and the filter
+-- 3. The sale loop re-validates immediately before the vendor call
 -- ============================================================================
 
-RunSection("Approved sales are re-validated", function()
-
-    Reset()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    IM.db.global.autoSellEnabled = true
-    OpenMerchant()
-    Stub.PutItem(0, 1, { itemID = SELLABLE_2, stackCount = 1 })  -- different item moved into the slot
-    AcceptConfirm("slot holds a different itemID")
-    Stub.DrainTimers()
-    check("an approved slot now holding a different itemID is not sold", SoldCount() == 0, Prints())
-    check("...and no session grant follows a sale that never started",
-        AutoSell:HasSessionConsent() == false)
-
-    Reset()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 5 })
-    IM.db.global.autoSellEnabled = true
-    OpenMerchant()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 9 })  -- looted into the stack before answering
-    AcceptConfirm("stack grew after approval")
-    Stub.DrainTimers()
-    check("a stack that grew after approval is not sold", SoldCount() == 0, Prints())
-
-    Reset()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    IM.db.global.autoSellEnabled = true
-    OpenMerchant()
-    IM.db.global.whitelist[SELLABLE] = true  -- locked between the dialog and the answer
-    AcceptConfirm("item whitelisted after approval")
-    Stub.DrainTimers()
-    check("an approved item the filter now refuses is not sold", SoldCount() == 0, Prints())
-
-    Reset()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    IM.db.global.autoSellEnabled = true
-    OpenMerchant()
-    Stub.PutItem(0, 1, nil)  -- the item leaves the bag before the player answers
-    AcceptConfirm("items vanished before answering")
-    Stub.DrainTimers()
-    check("an approval whose items vanished sells nothing", SoldCount() == 0)
-    check("...and records no session grant", AutoSell:HasSessionConsent() == false)
-    check("...and says why", Printed("was not approved"), Prints())
-
-    Reset()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    IM.db.global.autoSellEnabled = true
-    OpenMerchant()
-    MerchantFrame.shown = false
-    AcceptConfirm("merchant closed before answering")
-    Stub.DrainTimers()
-    check("an approval answered after the merchant closed records no grant",
-        AutoSell:HasSessionConsent() == false)
-    check("...and names the merchant closing rather than an empty list",
-        Printed("merchant closed"), Prints())
-end)
-
--- ============================================================================
--- 4. One gate for every sale-start path
--- ============================================================================
-
-RunSection("Sale-start paths share one gate", function()
+RunSection("The sale loop re-validates before every vendor call", function()
 
     --[[
-        The re-fire hole, with the timer intact.
+        ProcessNextItem re-asks Filters:ShouldAutoSell for each queued item immediately before
+        handing its slot to C_Container.UseContainerItem. The queue is built from one scan and
+        drained over many frames, and a whitelist edit or a bag move can land in between - so with
+        no dialog left to pause at, this re-validation is the last thing between the filter and the
+        vendor.
 
-        A vendor that fires MERCHANT_SHOW again for a window already on screen used to schedule an
-        unbounded SellJunk 0.2s later - at a vendor whose dialog had just said nothing else would be
-        sold. The previous suite called ClearTimers() immediately after the re-fire and so discarded
-        the exact timer that carried the bug.
+        Driven through Stub.onSell, which fires inside the first sale: that is the only moment a
+        change can land in a queue that has already been built.
     ]]
+
     Reset()
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    IM.db.global.autoSellEnabled = true
-    OpenMerchant()
-    -- A straggler lands after the dialog was drawn, so it is NOT on the approved list and the dialog
-    -- has already promised it will not be sold.
     Stub.PutItem(0, 2, { itemID = SELLABLE_2, stackCount = 1 })
-    AcceptConfirm("approved sale with a straggler")
+    IM.db.global.autoSellEnabled = true
+    Stub.onSell = function(bagID, slotID)
+        -- The player alt-clicks the second item while the first one is going to the vendor.
+        if bagID == 0 and slotID == 1 then IM.db.global.whitelist[SELLABLE_2] = true end
+    end
+    OpenMerchant()
     Stub.DrainTimers()
-    check("an approved sale sells the approved item and not the straggler beside it",
+    check("an item locked after the queue was built is not sold",
         SoldCount() == 1 and SoldIDs()[1] == SELLABLE, table.concat(SoldIDs(), ","))
-    check("...and the suppressed sweep names the approved list",
-        Printed("limited to the list you approved"), Prints())
+    check("...and is still in the bag",
+        (C_Container.GetContainerItemInfo(0, 2) or {}).itemID == SELLABLE_2)
 
-    local soldAfterApproval = SoldCount()
-    IM.prints = {}
-    Stub.Fire("MERCHANT_SHOW")   -- re-fire for the window already open
-    Stub.DrainTimers()           -- and let its 0.2s timer actually come due
-    check("a MERCHANT_SHOW re-fire during an approved visit does not sell the straggler",
-        SoldCount() == soldAfterApproval, table.concat(SoldIDs(), ","))
-    check("...and does not put a second confirm on screen", not Stub.PopupOnScreen())
-    -- The re-fire is the client's, not the player's, and some vendors emit it repeatedly for a
-    -- window already on screen. A chat line per re-fire is noise attributable to nothing they did,
-    -- so the merchant-open scheduler's visit-bound branch says nothing at all. That silence was
-    -- described in a comment and asserted nowhere.
-    check("...and says nothing at all, because the player did not do anything",
-        #IM.prints == 0, Prints())
-
-    -- The bind belongs to the visit, and the visit ends at MERCHANT_CLOSED. The same straggler is
-    -- still in the bag, so the next visit is where the session grant legitimately takes it.
-    IM.prints = {}
-    CloseMerchant()
-    OpenMerchant()
-    check("the next merchant visit is no longer bound to the old approval",
-        SoldCount() > soldAfterApproval, table.concat(SoldIDs(), ","))
-    check("...and does not claim a sale there was limited to a list nobody was shown",
-        not Printed("limited to the list you approved"), Prints())
-
-    -- The sweep keys on THIS sale being automatic, not on the session grant.
+    -- The control: the identical queue with nothing changed mid-sale vendors both items, so the
+    -- case above cannot pass because the second item was never going to be sold anyway.
     Reset()
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
+    Stub.PutItem(0, 2, { itemID = SELLABLE_2, stackCount = 1 })
     IM.db.global.autoSellEnabled = true
     OpenMerchant()
-    AcceptConfirm("sweep gate setup")
     Stub.DrainTimers()
-    CloseMerchant()
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    MerchantFrame.shown = true
-    IM.prints = {}
-    AutoSell:SellJunk(nil, false)   -- hand-clicked Sell All at a vendor visited AFTER consent
-    Stub.PutItem(0, 2, { itemID = SELLABLE_2, stackCount = 1 })
-    Stub.DrainTimers()
-    check("a manual Sell All does not sweep items the user never saw",
-        Printed("started by hand"), Prints())
+    check("...while the same queue with nothing changed sells both",
+        SoldCount() == 2, table.concat(SoldIDs(), ","))
+end)
+
+-- ============================================================================
+-- 4. The setting is re-read where the queue is built and on every item of the drain
+-- ============================================================================
+
+RunSection("The setting is re-read where the queue is built and while it drains", function()
 
     --[[
-        A grant withdrawn while a retry is in flight.
-
-        The item-data retry re-enters SellJunk with no approved list - a full-bag scan, started by
-        the addon, up to a whole retry budget's worth of deadlines after the schedulers checked
-        anything. If authorization lives at the schedulers, this path carries no check at all: the
-        player clicks Clear All on the Whitelist panel during the wait, every locked item stops
-        being protected, and the sale that comes due sells them under a grant that no longer holds.
-
-        The check has to live where the queue is built, which is why this case is the chokepoint's.
+        Three windows separate "auto-sell is on" from an item reaching the vendor: the item-data
+        retry (up to a whole retry budget of deadlines later), FinishSelling's post-sale sweep
+        (0.2s), and the drain of the queue itself (0.15s per item, longer on a locked slot). A
+        player who unticks auto-sell inside any of them has withdrawn the only permission that sale
+        had, and a check living at the schedulers cannot see that - the round that added the retry
+        added a sale-start path and no check with it. So the setting is read in SellJunk, where the
+        queue is built and which every sale-start path must traverse, and again in ProcessNextItem,
+        which every item must traverse.
     ]]
+
     local LATE = 555  -- data has not arrived yet, so the first scan finds nothing and waits
+
     Reset()
     IM.db.global.autoSellEnabled = true
-    IM.db.global.whitelist[7777] = true   -- something for Clear All to un-protect later
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    AcceptConfirm("grant taken before the retry window")
-    Stub.DrainTimers()
-    check("the session grant is standing before the retry window opens",
-        AutoSell:HasSessionConsent() == true, Prints())
-    CloseMerchant()
-
-    -- Next vendor. The only thing in the bags is an item whose data has not arrived, so the
-    -- automatic path arms a wait instead of selling. The setup sale above is dropped from the
-    -- record so the counts below are about this vendor only.
     Stub.PutItem(0, 1, { itemID = LATE, stackCount = 1 })
-    MerchantFrame.shown = true
-    IM.prints = {}
-    Stub.sold = {}
     Stub.Fire("MERCHANT_SHOW")
     -- Exactly one round: the 0.2s sell timer runs and arms the wait; the wait's own deadline is
     -- queued and deliberately left pending, which is the window this case is about.
     Stub.DrainTimers(1)
-    local soldBeforeWait = SoldCount()
     check("nothing has sold yet - the automatic path is waiting on item data",
-        soldBeforeWait == 0, table.concat(SoldIDs(), ","))
+        SoldCount() == 0, table.concat(SoldIDs(), ","))
 
-    -- Mid-wait: the data lands AND the player clears the whitelist, which withdraws the grant.
+    -- Mid-wait: the data lands AND the player unticks auto-sell.
     Stub.DefineItem(LATE, { quality = 0, sellPrice = 100, classID = 4 })
-    IM:ResetSection("whitelist")
-    check("...and clearing the whitelist mid-wait withdraws the grant",
-        AutoSell:HasSessionConsent() == false)
-
+    IM.db.global.autoSellEnabled = false
     Stub.DrainTimers()
-    check("a retry that comes due after the grant was withdrawn sells nothing",
-        SoldCount() == soldBeforeWait, table.concat(SoldIDs(), ","))
-    -- A silent stop here is indistinguishable from the addon being broken: the player is at a
-    -- vendor, the items are still in the bags, and nothing scheduled this sale but the addon.
-    check("...and names the stop rather than going quiet",
-        Printed("your settings changed since you approved automatic selling"), Prints())
-    check("...and says outright that nothing was sold, not that a sale was interrupted",
-        Printed("Nothing was sold automatically"), Prints())
-    check("...and points at the Sell All button that still works right now",
-        Printed("Sell All button still works right now"), Prints())
+    check("a retry that comes due after the setting was switched off sells nothing",
+        SoldCount() == 0, table.concat(SoldIDs(), ","))
+
+    -- The same wait with the setting left alone DOES sell once the data lands, so the case above
+    -- cannot pass because the retry never came due at all.
+    Reset()
+    IM.db.global.autoSellEnabled = true
+    Stub.PutItem(0, 1, { itemID = LATE, stackCount = 1 })
+    Stub.Fire("MERCHANT_SHOW")
+    Stub.DrainTimers(1)
+    Stub.DefineItem(LATE, { quality = 0, sellPrice = 100, classID = 4 })
+    Stub.DrainTimers()
+    check("...while the same retry with the setting left on does sell",
+        SoldCount() == 1 and SoldIDs()[1] == LATE, table.concat(SoldIDs(), ","))
 
     --[[
         The other side of the same chokepoint: the post-sale sweep.
 
-        FinishSelling asks the gate and then starts the sale 0.2s later, so the answer it acts on
-        is 200ms old. Withdrawing the grant inside that window is a sale authorised by a permission
-        that had already been taken back by the time the items went to the vendor.
-
-        Driven a round at a time rather than by a wall clock: the sweep is armed in the round after
-        the sale loop ends, which is the first round that leaves a timer queued with no sale
-        running.
+        FinishSelling arms the sweep and the sale starts 0.2s later, so the state it acted on is
+        200ms old. Driven a round at a time rather than by a wall clock: the sweep is armed in the
+        round after the sale loop ends, which is the first round that leaves a timer queued with no
+        sale running.
     ]]
     Reset()
     IM.db.global.autoSellEnabled = true
-    IM.db.global.whitelist[7777] = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    AcceptConfirm("grant taken before the sweep window")
-    Stub.DrainTimers()
-    CloseMerchant()
-
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
     -- Lands during the sale, so it is not in the queue: FinishSelling finds it and arms the sweep.
-    Stub.onSell = function() Stub.PutItem(0, 2, { itemID = SELLABLE_2, stackCount = 1 }) end
-    MerchantFrame.shown = true
-    IM.prints = {}
-    Stub.sold = {}   -- the setup sale is not part of what this vendor did
+    Stub.onSell = function()
+        Stub.onSell = nil
+        Stub.PutItem(0, 2, { itemID = SELLABLE_2, stackCount = 1 })
+    end
     Stub.Fire("MERCHANT_SHOW")
 
-    local withdrawn = false
+    local switchedOff = false
     for _ = 1, 60 do
         if Stub.PendingTimerCount() == 0 then break end
         Stub.DrainTimers(1)
-        if not withdrawn and not AutoSell:IsSelling() and Stub.PendingTimerCount() > 0 then
-            IM:ResetSection("whitelist")
-            withdrawn = true
+        if not switchedOff and not AutoSell:IsSelling() and Stub.PendingTimerCount() > 0 then
+            IM.db.global.autoSellEnabled = false
+            switchedOff = true
         end
     end
-    check("the sweep window was actually reached and the grant withdrawn inside it",
-        withdrawn and AutoSell:HasSessionConsent() == false, Prints())
-    check("a sweep that comes due after the grant was withdrawn sells nothing more",
+    check("the sweep window was actually reached and the setting switched off inside it",
+        switchedOff, Prints())
+    check("a sweep that comes due after the setting was switched off sells nothing more",
         SoldCount() == 1 and SoldIDs()[1] == SELLABLE, table.concat(SoldIDs(), ","))
-end)
 
+    -- The control again: the same straggler with the setting left on IS swept.
+    Reset()
+    IM.db.global.autoSellEnabled = true
+    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
+    Stub.onSell = function()
+        Stub.onSell = nil
+        Stub.PutItem(0, 2, { itemID = SELLABLE_2, stackCount = 1 })
+    end
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("...while the same sweep with the setting left on takes the straggler",
+        SoldCount() == 2, table.concat(SoldIDs(), ","))
+
+    -- A hand-clicked sale never sweeps, whatever the setting says: the user was shown a list and
+    -- clicked it, and an item that became eligible afterwards was not on that list.
+    Reset()
+    IM.db.global.autoSellEnabled = true
+    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
+    Stub.onSell = function()
+        Stub.onSell = nil
+        Stub.PutItem(0, 2, { itemID = SELLABLE_2, stackCount = 1 })
+    end
+    MerchantFrame.shown = true
+    IM.prints = {}
+    AutoSell:SellJunk()
+    Stub.DrainTimers()
+    check("a manual Sell All does not sweep items the user never saw",
+        SoldCount() == 1 and SoldIDs()[1] == SELLABLE, table.concat(SoldIDs(), ","))
+    check("...and says so, with a count and the button that would take them",
+        Printed("started by hand") and Printed("click Sell All"), Prints())
+
+    --[[
+        The third window, and the longest: the drain.
+
+        The two above are gaps between scheduling a sale and starting it. This one is a sale
+        already running - 0.15s per item and longer whenever a slot is locked, so a bag of junk is
+        several seconds of vendoring with the merchant frame open and the settings panel reachable
+        throughout. A check that only ran where the queue was BUILT would let the whole rest of the
+        queue go after the permission was withdrawn, which is the largest of the three exposures.
+    ]]
+    local function RemainingInBags(fromSlot, toSlot)
+        local remaining = 0
+        for slot = fromSlot, toSlot do
+            if C_Container.GetContainerItemInfo(0, slot) then remaining = remaining + 1 end
+        end
+        return remaining
+    end
+
+    Reset()
+    IM.db.global.autoSellEnabled = true
+    for slot = 1, 6 do Stub.PutItem(0, slot, { itemID = SELLABLE, stackCount = 1 }) end
+    Stub.onSell = function()
+        Stub.onSell = nil       -- the player unticks the setting during the first vendor call
+        IM.db.global.autoSellEnabled = false
+    end
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("unticking auto-sell mid-drain stops the queue where it stands",
+        SoldCount() == 1, table.concat(SoldIDs(), ","))
+    check("...leaving every item it had not reached yet in the bags",
+        RemainingInBags(2, 6) == 5, "remaining=" .. RemainingInBags(2, 6))
+    check("...and says so, because a sale that stops halfway without a word reads as a bug",
+        Printed("switched off during the sale") and Printed("5 item(s) left in your bags"), Prints())
+    check("...while still reporting the part that did sell",
+        Printed("Sold 1 items for"), Prints())
+
+    -- The control: the identical queue with the setting left alone drains all six, so the case
+    -- above cannot pass because the queue was never going to get past its first item.
+    Reset()
+    IM.db.global.autoSellEnabled = true
+    for slot = 1, 6 do Stub.PutItem(0, slot, { itemID = SELLABLE, stackCount = 1 }) end
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("...while the same queue with the setting left on drains all six",
+        SoldCount() == 6, table.concat(SoldIDs(), ","))
+end)
 -- ============================================================================
 -- 5. Retry budgets are not shared between the addon and the user
 -- ============================================================================
@@ -647,7 +603,7 @@ RunSection("Retry budgets", function()
 
     IM.prints = {}
     local manualScans = CountScans()
-    AutoSell:SellJunk(nil, false)
+    AutoSell:SellJunk(false)
     Stub.DrainTimers(200)
     check("the user's first manual click gets its own attempts, not the automatic path's empty budget",
         manualScans() > 1, "scans=" .. manualScans())
@@ -659,7 +615,7 @@ RunSection("Retry budgets", function()
     -- refused instantly on the back of the first one.
     IM.prints = {}
     local secondClickScans = CountScans()
-    AutoSell:SellJunk(nil, false)
+    AutoSell:SellJunk(false)
     Stub.DrainTimers(200)
     check("a second manual click is not refused on the first click's spent budget",
         secondClickScans() > 1, "scans=" .. secondClickScans())
@@ -678,432 +634,8 @@ RunSection("Retry budgets", function()
         Printed("gave up waiting"), Prints())
 end)
 
-
 -- ============================================================================
--- 6. Consent fingerprint: the mutation battery
--- ============================================================================
-
-RunSection("Consent fingerprint (mutation battery)", function()
-
-    --[[
-        What this locks, and why it is a battery rather than a list.
-
-        Session consent is bound to a fingerprint over settings. The set that fingerprint covers was
-        twice written by hand and twice wrong: the first list omitted mail rules, so unticking Mail
-        Helper's master enable carried an old grant over every item a rule was protecting; the
-        replacement hashed the whole database minus an exclusion list, so opening a mailbox revoked
-        consent. Both survived a suite that only ever asked "does the fingerprint change?".
-
-        So each case below runs the mutation against BOTH observables and prints both:
-          - fingerprint moved  = the grant no longer holds (AutoSell:HasSessionConsent is false)
-          - verdict moved      = Filters:ShouldAutoSell answers differently for some probe item
-
-        The property is that those two agree, and the aggregate check at the end of the section
-        asserts it over every case at once rather than trusting the per-case expectations. Disagreeing
-        one way (verdict moves, fingerprint does not) is a sale nobody approved; the other way is a
-        confirm nobody needed.
-
-        What the aggregate can promise: every case that EXISTS is in it. A case cannot be labelled a
-        carve-out to take it out of both its own expectation and the aggregate, which is how a
-        failing case used to be made to disappear by relabelling it - an exclusion list inside the
-        suite built to kill exclusion lists.
-
-        What it cannot promise: completeness. A mutation nobody wrote is a mutation nobody tests, so
-        a case can still be exempted by simply never adding it - and that omission looks exactly
-        like green. Read the case list below as a list of things a user can do to their settings and
-        ask what is missing from it; the aggregate cannot ask that question for you.
-
-        Rules are edited straight in the database rather than through MailHelper:AddRule, because the
-        fingerprint reads the database and that is the state the settings panel leaves behind.
-    ]]
-
-    -- Probe items. Each is refused by exactly one setting under the baseline below, so a verdict flip
-    -- names the setting that caused it.
-    local PROBE_ORDER = { "plain", "rare", "consumable", "tradegood" }
-    local PROBE = {
-        plain      = 3001,  -- Miscellaneous, Poor, priced: only the baseline mail rule refuses it
-        rare       = 3002,  -- Armor, Rare (3): refused by the default maxQuality of 2 and nothing else
-        consumable = 3003,  -- classID 0: refused by the default consumables exclusion
-        tradegood  = 3004,  -- classID 7: no default category exclusion covers it, so it sells
-    }
-
-    -- One enabled rule matching the `plain` probe, and one DISABLED rule matching `tradegood`. The
-    -- disabled one is how "a rule that is off cannot refuse anything" gets tested rather than assumed.
-    local function Baseline()
-        Stub.DefineItem(PROBE.plain, { quality = 0, sellPrice = 100, classID = 15 })
-        Stub.DefineItem(PROBE.rare, { quality = 3, sellPrice = 100, classID = 4 })
-        Stub.DefineItem(PROBE.consumable, { quality = 0, sellPrice = 100, classID = 0 })
-        Stub.DefineItem(PROBE.tradegood, { quality = 0, sellPrice = 100, classID = 7 })
-
-        IM.db.global.mailHelper.rules = {
-            { name = "To bank", alt = "Bank-Realm", filterType = "classID", filterValue = "15", enabled = true },
-            { name = "Mats",    alt = "Bank-Realm", filterType = "classID", filterValue = "7",  enabled = false },
-        }
-    end
-
-    local function ProbeVerdicts()
-        local out = {}
-        for slot, key in ipairs(PROBE_ORDER) do
-            local itemID = PROBE[key]
-            local shouldSell = IM.Filters:ShouldAutoSell(0, slot, itemID, Stub.ItemLink(itemID))
-            table.insert(out, key .. "=" .. tostring(shouldSell and true or false))
-        end
-        return table.concat(out, ",")
-    end
-
-    -- Every case's raw result, so the aggregate below is computed rather than restated.
-    local battery = {}
-
-    --[[
-        @param name string - what the user did
-        @param mutate function(db) - the change
-        @param expectFingerprint boolean - consent should be withdrawn
-        @param expectVerdict boolean - some probe item's sell/keep answer should flip
-        @param setup function(db)|nil - state to establish BEFORE the grant is taken, for cases whose
-               mutation is a removal: the grant has to be given while the thing being removed is still
-               there, or the case tests an addition wearing a removal's name.
-    ]]
-    local function Case(name, mutate, expectFingerprint, expectVerdict, setup)
-        Reset()
-        Baseline()
-        if setup then setup(IM.db.global) end
-        AutoSell:GrantSessionConsent()
-
-        local before = ProbeVerdicts()
-        mutate(IM.db.global)
-        local after = ProbeVerdicts()
-
-        local fingerprintMoved = (AutoSell:HasSessionConsent() == false)
-        local verdictMoved = (before ~= after)
-        local detail = "fingerprint=" .. tostring(fingerprintMoved) ..
-            " verdict=" .. tostring(verdictMoved) .. " [" .. before .. " -> " .. after .. "]"
-
-        table.insert(battery, {
-            name = name,
-            fingerprintMoved = fingerprintMoved,
-            verdictMoved = verdictMoved,
-        })
-
-        check(name .. ": consent " .. (expectFingerprint and "re-arms" or "holds"),
-            fingerprintMoved == expectFingerprint, detail)
-        -- Named, not "...and": one wrong thing in the fingerprint fails a whole cluster of these at
-        -- once, and identically-named failures cannot be told apart in the output.
-        check(name .. ": the filter's verdict " .. (expectVerdict and "moves" or "holds"),
-            verdictMoved == expectVerdict, detail)
-    end
-
-    -- Sanity: the baseline itself must not already be re-arming consent, or every case below passes
-    -- for the wrong reason.
-    Case("nothing changed", function() end, false, false)
-
-    -- Scope settings: both observables move.
-    Case("Mail Helper master enable is unticked",
-        function(db) db.mailHelper.enabled = false end, true, true)
-
-    Case("a single mail rule is disabled",
-        function(db) db.mailHelper.rules[1].enabled = false end, true, true)
-
-    Case("a mail rule's filter is edited",
-        function(db) db.mailHelper.rules[1].filterValue = "7" end, true, true)
-
-    Case("a mail rule is deleted",
-        function(db) table.remove(db.mailHelper.rules, 1) end, true, true)
-
-    Case("a mail rule is added",
-        function(db)
-            table.insert(db.mailHelper.rules,
-                { name = "Mats too", alt = "Bank-Realm", filterType = "classID", filterValue = "7", enabled = true })
-        end, true, true)
-
-    Case("a disabled mail rule is switched on",
-        function(db) db.mailHelper.rules[2].enabled = true end, true, true)
-
-    -- A duplicate refuses exactly what the rule it duplicates refuses, so deleting it cannot widen
-    -- a sale by one item - and a confirm that re-arms for it is a confirm the user is asked to
-    -- answer for nothing, which is how a consent prompt gets trained into a reflex.
-    Case("a duplicate of an existing mail rule is deleted",
-        function(db) table.remove(db.mailHelper.rules, 3) end, false, false,
-        function(db)
-            table.insert(db.mailHelper.rules,
-                { name = "To bank", alt = "Bank-Realm", filterType = "classID", filterValue = "15", enabled = true })
-        end)
-
-    -- Per-item protection is sale scope too. Adding one item is the shape that made "these are
-    -- per-item instructions, not scope" sound right; the removals below are the shape that made it an
-    -- asset-loss defect, because the Whitelist panel's Clear All and /im reset whitelist un-protect
-    -- every locked item at once, under a grant given while they were all still locked.
-    Case("an item is whitelisted",
-        function(db) db.whitelist[PROBE.tradegood] = true end, true, true)
-
-    Case("a whitelisted item is unlocked",
-        function(db) db.whitelist[PROBE.tradegood] = nil end, true, true,
-        function(db) db.whitelist[PROBE.tradegood] = true end)
-
-    -- The real bulk path: IM:ResetSection is what /im reset whitelist calls, and it leaves the same
-    -- empty table the panel's Clear All (wipe) leaves.
-    Case("the whole whitelist is cleared",
-        function() IM:ResetSection("whitelist") end, true, true,
-        function(db)
-            db.whitelist[PROBE.tradegood] = true
-            db.whitelist[PROBE.plain] = true
-            db.whitelist[PROBE.consumable] = true
-        end)
-
-    Case("an item is junk-listed",
-        function(db) db.junkList[PROBE.rare] = true end, true, true)
-
-    Case("an item is taken off the junk list",
-        function(db) db.junkList[PROBE.rare] = nil end, true, true,
-        function(db) db.junkList[PROBE.rare] = true end)
-
-    Case("maxQuality is raised",
-        function(db) db.autoSell.maxQuality = 4 end, true, true)
-
-    Case("a category exclusion is unticked",
-        function(db) db.categoryExclusions.consumables = false end, true, true)
-
-    Case("a custom category exclusion is added",
-        function(db) db.customCategoryExclusions["7"] = true end, true, true)
-
-    Case("the minimum sell price is raised above the probes",
-        function(db) db.autoSell.minSellPrice = 500 end, true, true)
-
-    -- Runtime state and unrelated subsystems: neither observable moves.
-    Case("a mailbox visit rewrites the pending queue",
-        function(db) db.mailHelper.pendingQueue = { ["Bank-Realm"] = { items = { 1 }, gold = 0 } } end,
-        false, false)
-
-    Case("a mail rule is renamed",
-        function(db) db.mailHelper.rules[1].name = "Send to the bank alt" end, false, false)
-
-    Case("a mail rule is pointed at a different alt",
-        function(db) db.mailHelper.rules[1].alt = "Other-Realm" end, false, false)
-
-    Case("a DISABLED mail rule's filter is edited",
-        function(db) db.mailHelper.rules[2].filterValue = "0" end, false, false)
-
-    Case("mail rules are reordered",
-        function(db)
-            db.mailHelper.rules[1], db.mailHelper.rules[2] = db.mailHelper.rules[2], db.mailHelper.rules[1]
-        end, false, false)
-
-    Case("a ledger tracking toggle is turned off",
-        function(db) db.ledger.trackLoot = false end, false, false)
-
-    Case("the minimap button is hidden",
-        function(db) db.ui.showMinimapButton = false end, false, false)
-
-    Case("the bag window is reconfigured",
-        function(db) db.bagUI = { enabled = false, height = 720 } end, false, false)
-
-    Case("a transaction is recorded",
-        function(db) table.insert(db.transactions.entries, { ts = 1, t = "loot" }) end, false, false)
-
-    Case("an inventory snapshot is stored",
-        function(db) db.inventorySnapshots["Alt-Realm"] = { timestamp = 1 } end, false, false)
-
-    Case("debug mode is toggled",
-        function(db) db.debug = true end, false, false)
-
-    --[[
-        Composed mutations. Each pair below is already covered one at a time and passed that way; the
-        composition is where the fingerprint's own short-circuits have to match ShouldAutoSell's.
-
-        ItemMatchesAnyRule returns false on the master toggle before it looks at a single rule, so with
-        the toggle off NO rule edit can move a verdict. A fingerprint that hashes the rules anyway
-        re-arms the confirm on every rule edit made while Mail Helper is switched off.
-    ]]
-    Case("a mail rule is edited while the master enable is off",
-        function(db) db.mailHelper.rules[1].filterValue = "7" end, false, false,
-        function(db) db.mailHelper.enabled = false end)
-
-    Case("a mail rule is deleted while the master enable is off",
-        function(db) table.remove(db.mailHelper.rules, 1) end, false, false,
-        function(db) db.mailHelper.enabled = false end)
-
-    -- ItemMatchesFilter looks its filterType up in FILTER_TYPES and returns false when it is not
-    -- there, so a rule naming a type that does not exist refuses nothing however it is edited.
-    Case("a rule whose filterType does not exist is edited",
-        function(db) db.mailHelper.rules[1].filterValue = "7" end, false, false,
-        function(db) db.mailHelper.rules[1].filterType = "notAFilterType" end)
-
-    -- Filters consults mail rules only when the module is loaded, and the fingerprint's collapse is
-    -- read off the same reference rather than a copy of the condition.
-    Case("the MailHelper module is not loaded",
-        function() IM.modules.MailHelper = nil end, true, true)
-
-    -- The property itself, computed over the battery rather than restated case by case. Every case
-    -- counts; nothing can opt out.
-    local disagreements, moved, held = {}, 0, 0
-    for _, case in ipairs(battery) do
-        if case.fingerprintMoved ~= case.verdictMoved then
-            table.insert(disagreements, case.name ..
-                " (fingerprint=" .. tostring(case.fingerprintMoved) ..
-                " verdict=" .. tostring(case.verdictMoved) .. ")")
-        end
-        if case.fingerprintMoved then moved = moved + 1 else held = held + 1 end
-    end
-
-    check("the fingerprint moves if and only if a verdict can move (" .. #battery ..
-        " mutations, none exempt)",
-        #disagreements == 0, table.concat(disagreements, "; "))
-
-    -- A battery where nothing ever moves, or everything always moves, would satisfy the line above
-    -- while testing nothing.
-    check("...over a battery that actually exercises both outcomes",
-        moved > 0 and held > 0, "moved=" .. moved .. " held=" .. held)
-
-    -- The reason string the re-armed confirm quotes.
-    Reset()
-    AutoSell:GrantSessionConsent()
-    IM.db.global.mailHelper.enabled = false
-    local allowed, reason = AutoSell:HasSessionConsent()
-    check("a changed grant reports reason 'settings-changed'",
-        allowed == false and reason == "settings-changed", tostring(reason))
-
-    Reset()
-    local neverAllowed, neverReason = AutoSell:HasSessionConsent()
-    check("a grant that never existed reports no reason",
-        neverAllowed == false and neverReason == nil, tostring(neverReason))
-
-    --[[
-        Injectivity of the encoding. Two different configurations that produce the same string are
-        one stale grant, and a stale grant sells items the user protected.
-
-        _Field defends this with two things - a length prefix and a type tag - and each is worth
-        exactly one case. The adversarial values below are CRAFTED AGAINST a named weakening: each
-        one is the string that collides when that specific defence is removed and the other is left
-        in place. That is a deliberate dependency on the encoding, so when the encoding changes
-        these values stop biting silently. The way to tell they still bite is the same procedure
-        the rest of this section is checked with: remove the guard, watch the named check go red.
-
-        Every configuration here stays a real one - both filterTypes are ones
-        MailHelper:GetFilterTypes returns, so no rule drops out of the fingerprint and no string
-        moves merely because a rule vanished.
-    ]]
-
-    -- One rule's value spelling out what two rules spell out. `name` is a filterType whose value is
-    -- free text the user types, so these are strings a real rule can hold.
-    for _, collision in ipairs({
-        -- Spelled against the exact shape _AutoSellFingerprint emits for a rule, which is
-        -- `mailHelper.rule=<filterType>=<filterValue>` with both leaves through _Field. Two
-        -- details a value written by eye gets wrong: the type tag survives the length-prefix
-        -- weakening, so `_Field("name")` is `s:name` there and not `sname`; and the `=` between
-        -- the two leaves comes from _AppendSettings. Miss either and the value collides with
-        -- nothing and the case passes for no reason at all.
-        { weakening = "the length prefix removed", value = "a;mailHelper.rule=s:name=s:b" },
-        { weakening = "the encoding unprefixed entirely", value = "a;mailHelper.rule=name=b" },
-    }) do
-        Reset()
-        IM.db.global.mailHelper.rules = {
-            { alt = "Bank-Realm", filterType = "name", filterValue = "a", enabled = true },
-            { alt = "Bank-Realm", filterType = "name", filterValue = "b", enabled = true },
-        }
-        AutoSell:GrantSessionConsent()
-        IM.db.global.mailHelper.rules = {
-            { alt = "Bank-Realm", filterType = "name", filterValue = collision.value, enabled = true },
-        }
-        check("one mail rule cannot spell out what two spell out, with " .. collision.weakening,
-            AutoSell:HasSessionConsent() == false)
-    end
-
-    -- The same question on _AppendSettings' key path: a flat key holding the key separator against
-    -- the nested shape that flattens to the same place.
-    for _, collision in ipairs({
-        -- Same correction as above: with the tag still in place a nested key flattens through
-        -- `.s:9`, so the flat key that has to collide with it carries the colon too.
-        { weakening = "the length prefix removed", key = "7.s:9" },
-        { weakening = "the encoding unprefixed entirely", key = "7.9" },
-    }) do
-        Reset()
-        IM.db.global.customCategoryExclusions = { [collision.key] = true }
-        AutoSell:GrantSessionConsent()
-        IM.db.global.customCategoryExclusions = { ["7"] = { ["9"] = true } }
-        check("a settings key is not confusable with a nested table, with " .. collision.weakening,
-            AutoSell:HasSessionConsent() == false)
-    end
-
-    --[[
-        A table-valued filterValue, edited in place.
-
-        The rule part used to hash filterValue through _Field directly - the one leaf in the whole
-        fingerprint that skipped the recursion - and _Field on a table hashes its ADDRESS, which
-        does not move when the table behind it is edited. That is precisely the stale-grant miss
-        _AppendSettings exists to kill, reintroduced on the single line that routed around it.
-
-        No shipping filterType holds a table today, so this locks the contract rather than a live
-        shape. It is worth locking anyway: "no filterType does this yet" is exactly the sort of
-        claim that stops being true without anyone revisiting the hash.
-    ]]
-    Reset()
-    local sharedValue = { "Herb", "Ore" }
-    IM.db.global.mailHelper.rules = {
-        { alt = "Bank-Realm", filterType = "name", filterValue = sharedValue, enabled = true },
-    }
-    AutoSell:GrantSessionConsent()
-    sharedValue[2] = "Cloth"   -- same table, different contents, same address
-    check("a table-valued filterValue edited in place does not carry its grant forward",
-        AutoSell:HasSessionConsent() == false)
-
-    -- tostring collapses types. Whitelist keys are itemIDs, and an itemID that arrives as text -
-    -- from a saved variable, from a panel that never called tonumber - is a different table key
-    -- protecting a different set of items.
-    Reset()
-    IM.db.global.whitelist = { [5000] = true }
-    AutoSell:GrantSessionConsent()
-    IM.db.global.whitelist = { ["5000"] = true }
-    check("a numeric whitelist key does not hash like the string of the same digits",
-        AutoSell:HasSessionConsent() == false)
-
-    Reset()
-    IM.db.global.autoSell.skipSoulbound = true
-    AutoSell:GrantSessionConsent()
-    IM.db.global.autoSell.skipSoulbound = "true"
-    check("a boolean setting does not hash like the string of the same word",
-        AutoSell:HasSessionConsent() == false)
-
-    --[[
-        Big whitelists, and why they are enumerated rather than digested.
-
-        A player with hundreds of locked items is the case that makes a cheaper summary tempting: a
-        count, a sum, an xor. The swap below defeats count-and-sum together - two IDs out, two IDs in,
-        same number of entries and the same total - while genuinely un-protecting two items. Only an
-        injective encoding answers it, so the fingerprint enumerates.
-    ]]
-    Reset()
-    for id = 5000, 5999 do IM.db.global.whitelist[id] = true end
-    AutoSell:GrantSessionConsent()
-    -- 5000 and 5001 out, 4001 and 6000 in. Both incomers are outside the block, so the entry count is
-    -- unchanged at 1000, and 4001 + 6000 = 5000 + 5001, so the total is unchanged too. Two items that
-    -- were protected when the grant was given no longer are.
-    IM.db.global.whitelist[5000] = nil
-    IM.db.global.whitelist[5001] = nil
-    IM.db.global.whitelist[4001] = true
-    IM.db.global.whitelist[6000] = true
-    local swappedCount, swappedSum = 0, 0
-    for id in pairs(IM.db.global.whitelist) do
-        swappedCount = swappedCount + 1
-        swappedSum = swappedSum + id
-    end
-    check("the swap really does preserve the entry count and their total",
-        swappedCount == 1000 and swappedSum == 5499500,
-        "count=" .. swappedCount .. " sum=" .. swappedSum)
-    check("a 1000-entry whitelist that swaps two IDs for two others of the same count and sum " ..
-        "does not hash alike", AutoSell:HasSessionConsent() == false)
-
-    -- What that costs. Not a pass/fail check - a wall-clock number on whatever ran the suite,
-    -- printed so the price of enumerating is a measurement rather than an assurance.
-    Reset()
-    for id = 5000, 5999 do IM.db.global.whitelist[id] = true end
-    AutoSell:GrantSessionConsent()
-    local started = os.clock()
-    for _ = 1, 100 do AutoSell:HasSessionConsent() end
-    Stub.Say(string.format("  info HasSessionConsent over a 1000-entry whitelist: %.3f ms per call",
-        (os.clock() - started) * 10))
-end)
-
--- ============================================================================
--- 7. Guards that must survive being deleted
+-- 6. Guards that must survive being deleted
 -- ============================================================================
 
 RunSection("Guards nothing else covers", function()
@@ -1111,32 +643,33 @@ RunSection("Guards nothing else covers", function()
     --[[
         The slot identity check in ProcessNextItem, in the window it actually exists for.
 
-        Every other test changes a bag slot BEFORE the confirm is answered, where SellJunk's own
-        re-validation of the approved list catches it first - so the ProcessNextItem check could be
-        deleted with the suite still green. The window it owns is mid-queue: the sale is running, item
-        one has gone to the merchant, and something lands in item two's slot during the 0.15s timer
-        between the two sales. Nothing re-validates after that point.
+        The window it owns is mid-queue: the sale is running, item one has gone to the merchant,
+        and something lands in item two's slot during the 0.15s timer between the two sales.
+        Nothing re-scans after that point, so the per-item check is all there is.
 
-        The intruder is chosen to pass every filter on its own, so a failure here means the addon sold
-        a thing the player never saw quoted - not that it refused something it should have taken.
+        The intruder is Legendary, which the floor refuses at every setting, and that is what makes
+        the case bite: the filter re-check underneath is asked about the QUEUED itemID, not about
+        whatever is in the slot now, so with the identity check gone it approves the sale of an item
+        that is no longer there and UseContainerItem vendors a protected one. An intruder the filter
+        would have taken anyway proves nothing here - the post-sale sweep would sell it a moment
+        later, legitimately, and the two outcomes are indistinguishable in the sale record.
     ]]
     local INTRUDER = 444
 
     Reset()
-    Stub.DefineItem(INTRUDER, { quality = 0, sellPrice = 100, classID = 4 })
+    Stub.DefineItem(INTRUDER, { quality = 5, sellPrice = 100, classID = 4 })
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
     Stub.PutItem(0, 2, { itemID = SELLABLE_2, stackCount = 1 })
     IM.db.global.autoSellEnabled = true
-    OpenMerchant()
     Stub.onSell = function(bagID, slotID)
         if bagID == 0 and slotID == 1 then
-            -- Lands while the inter-sale timer is pending, after the accept, mid-queue.
+            -- Lands while the inter-sale timer is pending, mid-queue.
             C_Timer.After(0.05, function()
                 Stub.PutItem(0, 2, { itemID = INTRUDER, stackCount = 1 })
             end)
         end
     end
-    AcceptConfirm("mid-queue slot swap")
+    OpenMerchant()
     Stub.DrainTimers()
 
     local soldIntruder = false
@@ -1145,21 +678,67 @@ RunSection("Guards nothing else covers", function()
     end
     check("an item that lands in a queued slot mid-sale is not sold in the queued item's place",
         not soldIntruder, table.concat(SoldIDs(), ","))
-    check("...and the approved item that was still there was sold",
+    check("...and the queued item that was still there was sold",
         SoldCount() == 1 and SoldIDs()[1] == SELLABLE, table.concat(SoldIDs(), ","))
     check("...and the intruder is still in the bag",
         (C_Container.GetContainerItemInfo(0, 2) or {}).itemID == INTRUDER)
 
     --[[
-        "A manual sale grants NOTHING."
+        The same window, one step subtler: the intruder is the SAME itemID.
 
-        Asserted three times in AutoSell.lua's comments and, until now, locked by nothing: consent
-        could be granted from inside SellJunk - which every sale reaches, manual ones included - with
-        the whole suite still green. The four existing false-assertions on HasSessionConsent all sit on
-        paths where no sale started, so they pass whether or not a sale grants consent.
+        Bonus IDs make one itemID several items. The identity check compares itemIDs, so a
+        higher-ilvl variant swapped into a queued slot passes it - and everything after that has to
+        be asked about the LIVE link, not the link the queue was built from, or the maxItemLevel
+        ceiling gets applied to the variant that is no longer there.
 
-        Both manual entry points therefore assert it on a path where a sale DID start.
+        The ceiling is the owner's stated guard ("never sell items over 290"), so the scenario is
+        his: a 100-ilvl piece is queued, a 500-ilvl piece of the same itemID lands in the slot
+        mid-drain, and the ceiling has to refuse the thing actually in the slot.
     ]]
+    local UPGRADE = 333
+    local HIGH_ILVL_LINK = "|Hitem:333::::::::::::1:9999|h[Item 333 (upgraded)]|h"
+
+    Reset()
+    Stub.DefineItem(UPGRADE, { quality = 2, sellPrice = 5000, classID = 4, itemLevel = 100 })
+    Stub.DefineVariant(HIGH_ILVL_LINK, { quality = 2, sellPrice = 5000, classID = 4, itemLevel = 500 })
+    IM.db.global.autoSellEnabled = true
+    IM.db.global.autoSell.maxItemLevel = 290
+    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
+    Stub.PutItem(0, 2, { itemID = UPGRADE, stackCount = 1 })   -- queued at ilvl 100, below the ceiling
+    Stub.onSell = function(bagID, slotID)
+        if bagID == 0 and slotID == 1 then
+            Stub.onSell = nil
+            C_Timer.After(0.05, function()
+                Stub.PutItem(0, 2, { itemID = UPGRADE, stackCount = 1, hyperlink = HIGH_ILVL_LINK })
+            end)
+        end
+    end
+    OpenMerchant()
+    Stub.DrainTimers()
+
+    local soldUpgrade = false
+    for _, id in ipairs(SoldIDs()) do
+        if id == UPGRADE then soldUpgrade = true end
+    end
+    check("a higher-ilvl variant of the queued itemID is judged on the link in the slot, not the queued one",
+        not soldUpgrade, table.concat(SoldIDs(), ","))
+    check("...so the item-level ceiling still refuses it and it stays in the bag",
+        (C_Container.GetContainerItemInfo(0, 2) or {}).itemID == UPGRADE)
+
+    -- The control: the same queue with no swap sells the 100-ilvl piece, so the case above cannot
+    -- pass because the ceiling was refusing that slot all along.
+    Reset()
+    Stub.DefineItem(UPGRADE, { quality = 2, sellPrice = 5000, classID = 4, itemLevel = 100 })
+    IM.db.global.autoSellEnabled = true
+    IM.db.global.autoSell.maxItemLevel = 290
+    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
+    Stub.PutItem(0, 2, { itemID = UPGRADE, stackCount = 1 })
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("...while the same queue left alone sells it, because 100 is under the ceiling",
+        SoldCount() == 2, table.concat(SoldIDs(), ","))
+
+    -- Both hand-driven entry points sell the list in the bags right now.
     Reset()
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
     IM.db.global.autoSellEnabled = true
@@ -1167,11 +746,7 @@ RunSection("Guards nothing else covers", function()
     SlashCmdList["INVENTORYMANAGER"]("sell")
     Stub.DrainTimers()
     check("/im sell sells the items in the bags", SoldCount() == 1, Prints())
-    check("...and grants no session consent for the unattended path",
-        AutoSell:HasSessionConsent() == false)
 
-    -- The vendor popup's Sell All button reaches the same argument-free SellJunk, so the behavioural
-    -- half is the same assertion:
     Reset()
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
     IM.db.global.autoSellEnabled = true
@@ -1179,57 +754,54 @@ RunSection("Guards nothing else covers", function()
     AutoSell:SellJunk()
     Stub.DrainTimers()
     check("a manual SellJunk() sells the items in the bags", SoldCount() == 1, Prints())
-    check("...and grants no session consent either", AutoSell:HasSessionConsent() == false)
 
     --[[
-        ...and the binding half, read out of the shipping file rather than asserted about it.
+        ...and the binding half, by clicking the shipping button rather than reading its source.
 
-        UI/AutoSellPopup.lua needs the UI layer, which this harness does not load, so the click cannot
-        be driven. What can be checked without loading it is that the button's handler is still the
-        call the line above exercises: no approved list, no consent grant. A comment claiming those two
-        are the same call would be exactly the kind of hand-maintained claim this suite exists to stop.
+        This is the wired-up consumer of the rule the section above states: the setting gates the
+        unattended path, and Sell All keeps working while it is off. Checking that by grepping
+        AutoSellPopup.lua for the literal `AutoSell:SellJunk()` proves only that the text is still
+        in the file - wrap the handler in `if IM.db.global.autoSellEnabled then` and the literal
+        survives, the grep passes, and the escape hatch is silently gated.
+
+        So the UI layer is loaded here (only here) and the button's real OnClick closure is called
+        with the setting OFF. Residual, stated rather than implied: the frame stub answers every
+        method, so this proves what the click DOES, never that the button draws, is enabled, or is
+        reachable on screen.
     ]]
-    local sellAllHandler
-    do
-        local file = io.open("UI/AutoSellPopup.lua")
-        if not file then
-            check("the Auto-Sell popup source is readable from the harness", false,
-                "run the suite from the repo root")
-        else
-            local source = file:read("*a")
-            file:close()
-            sellAllHandler = source:match('local sellBtn = UI:CreateButton.-popup%.sellBtn = sellBtn')
-        end
+    Reset()
+    Stub.LoadUI()
+    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
+    IM.db.global.autoSellEnabled = false
+    MerchantFrame.shown = true
+
+    local popup = IM.UI.AutoSellPopup:Create()
+    local onClick = popup.sellBtn and popup.sellBtn:GetScript("OnClick")
+    check("the popup's Sell All button has a click handler to drive", type(onClick) == "function",
+        type(onClick))
+    if type(onClick) == "function" then
+        onClick(popup.sellBtn)
+        Stub.DrainTimers()
     end
-    check("the popup's Sell All button still calls SellJunk with no approved list",
-        sellAllHandler ~= nil and sellAllHandler:find("AutoSell:SellJunk()", 1, true) ~= nil,
-        tostring(sellAllHandler))
-    check("...and grants nothing on the way",
-        sellAllHandler ~= nil and sellAllHandler:find("Consent", 1, true) == nil,
-        tostring(sellAllHandler))
+    check("clicking Sell All sells while auto-sell is switched off, because it is a sale asked for by hand",
+        SoldCount() == 1, Prints())
 
     --[[
         MERCHANT_CLOSED drops anything waiting on item data.
 
-        A wait armed at one vendor that comes due at the next one starts a sale at a vendor the
-        player never approved anything at. The window is opened here WITHOUT firing MERCHANT_SHOW,
-        deliberately: with the show path running, its own sale would mask the stale waiter's, and
-        the thing under test is whether the waiter survived the close at all.
+        A wait armed at one vendor that comes due at the next one starts a sale the player never
+        stood in front of. The window is opened here WITHOUT firing MERCHANT_SHOW, deliberately:
+        with the show path running, its own sale would mask the stale waiter's, and the thing under
+        test is whether the waiter survived the close at all.
     ]]
     local LATE = 666
     Reset()
     IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    AcceptConfirm("grant before the stale-waiter window")
-    Stub.DrainTimers()
-    CloseMerchant()
 
     -- First vendor of the pair: the bags hold only an item whose data has not arrived, so the
     -- automatic path arms a wait rather than selling.
     Stub.PutItem(0, 1, { itemID = LATE, stackCount = 1 })
     MerchantFrame.shown = true
-    Stub.sold = {}
     Stub.Fire("MERCHANT_SHOW")
     Stub.DrainTimers(1)
     check("the first vendor armed a wait and sold nothing", SoldCount() == 0, table.concat(SoldIDs(), ","))
@@ -1247,95 +819,36 @@ RunSection("Guards nothing else covers", function()
         SoldCount() == 0, table.concat(SoldIDs(), ","))
 
     --[[
-        No free dialog slot.
+        A second Sell All while the first is still draining.
 
-        StaticPopup_Show hands back nil when other addons hold every Blizzard popup slot. There is
-        then no dialog, so no OnHide, so nothing to clear _consentPending - and a gate stuck at
-        "already asking" never asks again for the rest of the session, silently. The branch fails
-        closed instead: nothing sold, said out loud, and the gate left able to ask again.
-    ]]
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    Stub.refusePopup = true
-    OpenMerchant()
-    check("a confirm that cannot be shown sells nothing", SoldCount() == 0, Prints())
-    check("...and says so rather than failing silently",
-        Printed("no free dialog slot"), Prints())
-
-    -- The slot frees up while the player is still at the same vendor. The gate must not still think
-    -- a dialog is on screen: nothing but a merchant close would ever clear that, so a wedge here is
-    -- an addon that has gone quiet for the rest of the visit with no way for the player to tell.
-    Stub.refusePopup = false
-    IM.prints = {}
-    Stub.Fire("MERCHANT_SHOW")
-    Stub.DrainTimers()
-    check("...and asks again once a slot frees, instead of staying quiet for the rest of the visit",
-        Stub.PopupOnScreen(), Prints())
-
-    --[[
-        A manual sale takes the confirm down.
-
-        The dialog describes a sale of a specific list. If the player answers it by clicking Sell
-        All instead, that sale has happened - and a dialog still on screen is now describing it in
-        the future tense, with a live approved list behind it that Sell would act on a second time.
-    ]]
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    check("the confirm is on screen before the manual sale", Stub.PopupOnScreen(), Prints())
-    AutoSell:SellJunk()          -- the popup's Sell All, while the confirm is still up
-    Stub.DrainTimers()
-    check("a manual sale run while the confirm is up sells the bags",
-        SoldCount() == 1, table.concat(SoldIDs(), ","))
-    check("...and takes the confirm down rather than leaving it describing a sale that happened",
-        not Stub.PopupOnScreen())
-    check("...and still grants nothing", AutoSell:HasSessionConsent() == false)
-
-    --[[
-        ...but a click that sells NOTHING must destroy nothing either.
-
-        Sell All while a sale is already running is answered with "already-selling". The dismissal
-        above used to run BEFORE that guard, so the click took down a dialog the player was
-        part-way through answering, and its approved list with it, having vendored not one item.
+        Two queues over the same bag slots is a second sale trying to vendor slots the first one
+        has already emptied. It is refused rather than allowed to start, and the refusal is
+        reported so the caller can say something other than "nothing happened".
 
         Timers here are drained in rounds rather than by a clock, one queued item per round, so
         stopping after a single round leaves the sell loop mid-queue with its next timer pending -
         which is the only state in which a second click can meet a live sale.
     ]]
-    local BYSTANDER = 777
     Reset()
     IM.db.global.autoSellEnabled = true
-    Stub.DefineItem(BYSTANDER, { quality = 0, sellPrice = 100, classID = 4 })
     Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
     Stub.PutItem(0, 2, { itemID = SELLABLE, stackCount = 1 })
     Stub.PutItem(0, 3, { itemID = SELLABLE, stackCount = 1 })
     MerchantFrame.shown = true
     AutoSell:SellJunk()          -- the popup's Sell All: slot 1 goes, the queue keeps running
-    -- Lands after that queue was built, so the running sale will never reach it. It is what makes
-    -- the confirm below answerable afterwards instead of describing items already gone.
-    Stub.PutItem(0, 4, { itemID = BYSTANDER, stackCount = 1 })
-    Stub.Fire("MERCHANT_SHOW")   -- the vendor window the player is standing at
-    Stub.DrainTimers(1)          -- one round: the sale advances, and the confirm goes up
-    check("the confirm can be on screen while a sale is still running",
-        Stub.PopupOnScreen() and AutoSell:IsSelling(), Prints())
+    Stub.DrainTimers(1)          -- one round: the sale advances and stays mid-queue
+    check("the sale is still running after one round", AutoSell:IsSelling(), Prints())
 
     local soldMidSale = SoldCount()
     local busyStarted, busyReason = AutoSell:SellJunk()
     check("a second Sell All during that sale is refused as already-selling",
         busyStarted == false and busyReason == "already-selling", tostring(busyReason))
-    check("...and vendors nothing", SoldCount() == soldMidSale, table.concat(SoldIDs(), ","))
-    check("...and leaves the confirm the player was answering on screen", Stub.PopupOnScreen())
+    check("...and vendors nothing on top of the running queue",
+        SoldCount() == soldMidSale, table.concat(SoldIDs(), ","))
 
     Stub.DrainTimers()           -- the running sale finishes
-    local soldBeforeAnswer = SoldCount()
-    if AcceptConfirm("the confirm that survived a refused click") then
-        Stub.DrainTimers()
-        check("...still holding the approved list, so answering it sells what it quoted",
-            SoldCount() == soldBeforeAnswer + 1 and SoldIDs()[#SoldIDs()] == BYSTANDER,
-            table.concat(SoldIDs(), ","))
-    end
+    check("...and the running sale still gets through its own queue",
+        SoldCount() == 3, table.concat(SoldIDs(), ","))
 
     --[[
         MERCHANT_SHOW refills the automatic retry budget even with no intervening close.
@@ -1359,260 +872,18 @@ RunSection("Guards nothing else covers", function()
 end)
 
 -- ============================================================================
--- 8. The approved-list exemption is proof, not a bearer token
--- ============================================================================
-
---[[
-    Call the dangerous function directly, from a path nobody sanctioned, and confirm it refuses.
-
-    SellJunk exempts a sale carrying an approved list from the consent gate. While that exemption
-    keyed on "approvedItems is non-nil", the exemption was a BEARER TOKEN: a caller that built a
-    table shaped like an approved list sold without a dialog, without a grant and without binding
-    the visit, and the only thing making that safe was an unwritten list of callers.
-
-    Nothing in this suite exercised it, which is the disease rather than an oversight: the property
-    was guarded by throwaway probes that got deleted, so the code could regress in silence. These
-    cases are the guard. The corresponding legitimate paths stay green in every section above, so a
-    fix that refuses forgeries by refusing everything cannot pass.
-]]
-RunSection("The approved-list exemption cannot be forged", function()
-
-    -- A direct automatic sale with no grant at all. This is also the only case that reaches
-    -- SellJunk's own no-consent refusal message - the merchant-open scheduler asks for consent
-    -- instead of getting here, so the branch was deletable with the suite still green.
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    MerchantFrame.shown = true
-    IM.prints = {}
-    local bareStarted, bareReason = AutoSell:SellJunk(nil, true)
-    check("a direct automatic SellJunk with no grant refuses",
-        bareStarted == false and bareReason == "no-consent", tostring(bareReason))
-    check("...and vendors nothing", SoldCount() == 0, table.concat(SoldIDs(), ","))
-    check("...and says so instead of stopping silently",
-        Printed("Nothing was sold automatically") and
-        Printed("automatic selling has not been approved"), Prints())
-
-    -- A hand-built approved list, exactly as a bearer token would be presented.
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    MerchantFrame.shown = true
-    IM.prints = {}
-    local forged = { { bagID = 0, slotID = 1, itemID = SELLABLE, stackCount = 1, approved = true } }
-    local forgedStarted, forgedReason = AutoSell:SellJunk(forged, true)
-    check("a hand-built approved list is refused",
-        forgedStarted == false and forgedReason == "unapproved-list", tostring(forgedReason))
-    check("...and vendors nothing", SoldCount() == 0, table.concat(SoldIDs(), ","))
-    check("...and grants no session consent on the way",
-        AutoSell:HasSessionConsent() == false)
-    check("...and is loud about it, because only a bug or another addon can produce it",
-        Printed("without the confirmation that authorises it"), Prints())
-
-    -- The refusal must not wedge the gate: the player is still owed the real dialog.
-    Stub.Fire("MERCHANT_SHOW")
-    Stub.DrainTimers()
-    check("...and the real confirm still appears afterwards", Stub.PopupOnScreen(), Prints())
-
-    -- A truthy non-table. This used to skip the gate on `approvedItems ~= nil` and then raise
-    -- inside ipairs - a bypass that ends in a Lua error rather than a refusal.
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    MerchantFrame.shown = true
-    local okScalar, scalarStarted, scalarReason =
-        pcall(function() return AutoSell:SellJunk(true, true) end)
-    check("a truthy non-table approvedItems is refused rather than raising",
-        okScalar and scalarStarted == false and scalarReason == "unapproved-list",
-        tostring(okScalar) .. "/" .. tostring(scalarReason))
-    check("...and vendors nothing", SoldCount() == 0, table.concat(SoldIDs(), ","))
-
-    --[[
-        The sharpest one: mid-visit, with a session grant standing and the visit bound.
-
-        Here the forged list is the only thing between a straggler and the vendor. The dialog told
-        the player nothing else would be sold at this vendor; the grant means the session-level
-        half of the gate would say yes; and the approved-list exemption is what skips the
-        visit-level half. A bearer token sells the straggler the dialog promised to leave alone.
-    ]]
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    AcceptConfirm("approved visit before the forged calls")
-    Stub.DrainTimers()
-    local soldUnderApproval = SoldCount()
-    check("the approved sale ran and the grant is standing",
-        soldUnderApproval == 1 and AutoSell:HasSessionConsent() == true, Prints())
-
-    Stub.PutItem(0, 2, { itemID = SELLABLE_2, stackCount = 1 })   -- the straggler
-    IM.prints = {}
-    local midStarted, midReason = AutoSell:SellJunk(nil, true)
-    check("a direct automatic call during an approved visit refuses",
-        midStarted == false and midReason == "visit-bound", tostring(midReason))
-    -- Alone among the gate's refusals, this one is deliberately silent: it is the expected state
-    -- for the rest of an approved visit, and the player is told about left-behind items by
-    -- FinishSelling's suppressed sweep instead. Every other refusal prints, so the exemption is a
-    -- real branch and was locked by nothing.
-    check("...silently, because a visit-bound refusal is the state the dialog itself created",
-        #IM.prints == 0, Prints())
-
-    local midForged = { { bagID = 0, slotID = 2, itemID = SELLABLE_2, stackCount = 1, approved = true } }
-    local midForgedStarted, midForgedReason = AutoSell:SellJunk(midForged, true)
-    check("...and a forged approved list during that visit is refused too",
-        midForgedStarted == false and midForgedReason == "unapproved-list", tostring(midForgedReason))
-    check("...so the straggler the dialog promised to leave alone is still in the bag",
-        SoldCount() == soldUnderApproval and
-        (C_Container.GetContainerItemInfo(0, 2) or {}).itemID == SELLABLE_2,
-        table.concat(SoldIDs(), ","))
-
-    --[[
-        The nonce's other two terms, observed while a presentation is LIVE.
-
-        Every case above calls SellJunk at a moment when nothing has been presented, so only the
-        presence term can refuse them - and an independent mutation pass proved exactly that:
-        reducing the gate to `presented == nil`, and separately deleting the `_presentedNonce = nil`
-        spend line, each left the whole suite green. The identity comparison and the spend are
-        unobservable from outside a real ConfirmApprovedSale, because it mints the nonce, presents
-        it and hands it to SellJunk with no gap a caller can stand in.
-
-        So these two stand in for SellJunk itself, for exactly one call. That is the only seam
-        between "presented" and "spent", and it is a seam in the harness rather than a door in the
-        addon: the stand-in restores the real function before calling it, so the sale's own
-        continuations are the shipping ones.
-    ]]
-
-    -- The presented nonce holds THE list, by reference. A twin table carrying the very same
-    -- entries is a different list, and the exemption does not transfer to it.
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    IM.prints = {}
-    local realSellJunk = AutoSell.SellJunk
-    local swapStarted, swapReason
-    AutoSell.SellJunk = function(module, list, isAutomatic, isRetry)
-        AutoSell.SellJunk = realSellJunk
-        local twin = {}
-        for i, entry in ipairs(list) do twin[i] = entry end
-        swapStarted, swapReason = realSellJunk(module, twin, isAutomatic, isRetry)
-        return swapStarted, swapReason
-    end
-    AcceptConfirm("a twin approved list under a live presentation")
-    Stub.DrainTimers()
-    check("a twin of the approved list is refused even while its nonce is presented",
-        swapStarted == false and swapReason == "unapproved-list", tostring(swapReason))
-    check("...and vendors nothing", SoldCount() == 0, table.concat(SoldIDs(), ","))
-    check("...and grants no session consent", AutoSell:HasSessionConsent() == false)
-    check("...and is loud about it, the same as any other forgery",
-        Printed("without the confirmation that authorises it"), Prints())
-
-    --[[
-        One presentation authorises ONE call.
-
-        The spend is the first thing SellJunk does, whatever the call turns out to be, so a second
-        call carrying the very same table is a replay against a nonce that is already gone. The
-        replay here is aimed at a slot that has been refilled since the approved sale emptied it:
-        an item matching the approved entry exactly, that no dialog ever quoted and no player ever
-        saw. Without the spend, that item goes to the vendor.
-    ]]
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    IM.prints = {}
-    local realForReplay = AutoSell.SellJunk
-    local replayStarted, replayReason
-    AutoSell.SellJunk = function(module, list, isAutomatic, isRetry)
-        AutoSell.SellJunk = realForReplay
-        local started, reason = realForReplay(module, list, isAutomatic, isRetry)
-        Stub.DrainTimers()                                          -- the approved sale completes
-        Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })   -- a fresh, never-quoted item
-        replayStarted, replayReason = realForReplay(module, list, true)
-        return started, reason
-    end
-    AcceptConfirm("a replayed approved list under a spent presentation")
-    Stub.DrainTimers()
-    check("the approved sale itself went through, so the replay is the only thing being refused",
-        SoldCount() == 1 and SoldIDs()[1] == SELLABLE, table.concat(SoldIDs(), ","))
-    check("a second call carrying the same approved table is refused",
-        replayStarted == false and replayReason == "unapproved-list", tostring(replayReason))
-    check("...so the item that landed in the approved slot afterwards is still in the bag",
-        SoldCount() == 1 and (C_Container.GetContainerItemInfo(0, 1) or {}).itemID == SELLABLE,
-        table.concat(SoldIDs(), ","))
-end)
-
--- ============================================================================
--- 9. The buyback page size is read from the client, not typed into the addon
--- ============================================================================
-
-RunSection("Buyback page size is derived", function()
-
-    local livePageSize = BUYBACK_ITEMS_PER_PAGE
-
-    -- Deliberately NOT the live 12: a number hand-written into AutoSell.lua passes a test that
-    -- asserts 12, which is how the previous two wrong numbers survived.
-    BUYBACK_ITEMS_PER_PAGE = 7
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    local sentence = Stub.PopupText2() or ""
-    check("the confirm's buyback sentence quotes the client's page size",
-        sentence:find("lists 7 items at a time", 1, true) ~= nil, sentence)
-    AcceptConfirm("derived buyback page size")
-    Stub.DrainTimers()
-    -- The post-sale line does NOT quote it: itemCount sums item units across stacks, not buyback
-    -- slots, so a page-size number stated beside a stack-of-items count would invite a comparison
-    -- that does not hold. See section 9b for the overstatement this used to make.
-    check("...but the post-sale line states no page-size number at all",
-        not Printed("items at a time"), Prints())
-
-    -- No constant to read: the number is dropped, never guessed. The rest of the sentence - which
-    -- states no expiry, because nobody here has observed one - stands unchanged.
-    BUYBACK_ITEMS_PER_PAGE = nil
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    local bare = Stub.PopupText2() or ""
-    check("a client with no buyback constant gets the sentence with no number at all",
-        bare:find("Buyback tab -", 1, true) ~= nil and bare:find("lists", 1, true) == nil,
-        bare)
-
-    --[[
-        The constant is a client global, and any addon in the load order can overwrite it. Anything
-        that is not a whole count of at least one is unreadable rather than renderable: "lists 0
-        items at a time" and "lists -3 items at a time" are worse than saying nothing, and all
-        three of these used to render verbatim into the dialog the player is consenting through.
-    ]]
-    for _, junk in ipairs({ 0, -3, 1.5 }) do
-        BUYBACK_ITEMS_PER_PAGE = junk
-        Reset()
-        IM.db.global.autoSellEnabled = true
-        Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-        OpenMerchant()
-        local nonsense = Stub.PopupText2() or ""
-        check("a BUYBACK_ITEMS_PER_PAGE of " .. junk .. " is dropped rather than quoted",
-            nonsense:find("lists", 1, true) == nil and
-            nonsense:find(tostring(junk), 1, true) == nil, nonsense)
-    end
-
-    BUYBACK_ITEMS_PER_PAGE = livePageSize
-end)
-
--- ============================================================================
--- 9b. The post-sale line cannot overstate what buyback still holds
+-- 7. The post-sale line cannot overstate what buyback still holds
 -- ============================================================================
 
 --[[
     The buyback tab holds only the client's most recent entries. Sell more stacks in one session
-    than BUYBACK_ITEMS_PER_PAGE and the post-sale line must not read as a promise that every item
-    just sold is still sitting there - the older ones may already have fallen off the list.
+    than it holds and the post-sale line must not read as a promise that every item just sold is
+    still sitting there - the older ones may already have fallen off the list.
 
-    Also sells at a stack size (4) that makes itemCount (item units, summed across stacks) diverge
-    from both the stack count sold and the page size, so nothing here can be read as "N items sold,
-    N of them safe" arithmetic - the two numbers were never in the same unit.
+    It states no number at all, which is why no client constant is set up here: itemCount sums item
+    units across stacks while a buyback entry is one stack, so any count quoted beside it would
+    invite a comparison that does not hold. The sale below uses a stack size of 4 to keep those two
+    units visibly different.
 
     This case was checked red before it was checked green: restoring the old wording ("they are in
     this vendor's Buyback tab ... if you want any of them back") fails the second check below, which
@@ -1621,16 +892,12 @@ end)
 ]]
 RunSection("The post-sale line does not overstate what buyback still holds", function()
 
-    local livePageSize = BUYBACK_ITEMS_PER_PAGE
-    BUYBACK_ITEMS_PER_PAGE = 3
-
     Reset()
     IM.db.global.autoSellEnabled = true
     for slot = 1, 5 do
         Stub.PutItem(0, slot, { itemID = SELLABLE, stackCount = 4 })
     end
     OpenMerchant()
-    AcceptConfirm("selling more stacks than the buyback page holds")
     Stub.DrainTimers()
 
     check("all 5 stacks actually sold, so the scenario exercises the overstatement rather than a no-op",
@@ -1640,92 +907,12 @@ RunSection("The post-sale line does not overstate what buyback still holds", fun
     check("...it scopes the claim instead: only the most recent entries, older ones may be gone",
         Printed("only the most recently sold items are still in this vendor's Buyback tab") and
         Printed("earlier ones may already be gone"), Prints())
-    check("...and quotes no page-size number beside the count - itemCount is stack units, not slots",
+    check("...and quotes no buyback capacity beside the count - itemCount is stack units, not slots",
         not Printed("items at a time"), Prints())
-
-    BUYBACK_ITEMS_PER_PAGE = livePageSize
 end)
 
 -- ============================================================================
--- 10. What the confirm's own text says
--- ============================================================================
-
---[[
-    The dialog's first substitution is the sentence the player is consenting to, and not one word
-    of it was asserted: replacing the whole `summary` argument with "" left the suite green, taking
-    the item count, the money figure, the excluded-stragglers sentence and the re-prompt's lead
-    with it. Stub.PopupText existed for exactly this and was called by nothing - the same shape as
-    the round that added PopupText2 and only asserted on the accessor it happened to be using.
-
-    Every figure below is computed from the fixture rather than typed, so a change to what the
-    dialog counts fails here instead of being copied into the expectation.
-]]
-RunSection("The confirm says what is about to happen", function()
-
-    local PRICEY = 888
-
-    Reset()
-    Stub.DefineItem(PRICEY, { quality = 0, sellPrice = 2500, classID = 4 })
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 3 })   -- 3 x 100
-    Stub.PutItem(0, 2, { itemID = PRICEY, stackCount = 1 })     -- 1 x 2500
-    OpenMerchant()
-    local text = Stub.PopupText() or ""
-    check("the confirm quotes how many items it is about to sell, counting the stacks",
-        text:find("about to sell 4 items for ", 1, true) ~= nil, text)
-    check("...and the money figure, in the addon's own money formatting",
-        text:find(IM:FormatMoney(3 * 100 + 2500), 1, true) ~= nil, text)
-    check("...and does not claim a setting changed, because none did",
-        text:find("settings changed", 1, true) == nil, text)
-
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    OpenMerchant()
-    local single = Stub.PopupText() or ""
-    check("a one-item sale is worded in the singular",
-        single:find("about to sell 1 item for ", 1, true) ~= nil, single)
-
-    --[[
-        Items whose data never arrived are excluded from the sale. The dialog has to say so: the
-        count it quotes is the whole story as far as the player can tell, and a bag with items in
-        it that the confirm silently omitted looks like the filter refusing them.
-    ]]
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    Stub.PutItem(0, 2, { itemID = UNCACHED, stackCount = 1 })
-    OpenMerchant()
-    Stub.DrainTimers(200)   -- spend the wait-for-data budget, so the prompt stops waiting and quotes
-    local straggler = Stub.PopupText() or ""
-    check("an item that never loaded is named as excluded rather than silently dropped",
-        straggler:find("1 further item(s) never finished loading", 1, true) ~= nil, straggler)
-    check("...and the count quoted is only the items that did load",
-        straggler:find("about to sell 1 item for ", 1, true) ~= nil, straggler)
-
-    --[[
-        The re-prompt. A confirm re-armed by a settings change is otherwise word-for-word the
-        first-time confirm, and the player cannot tell "you changed something" from "the addon
-        forgot you already answered this".
-    ]]
-    Reset()
-    IM.db.global.autoSellEnabled = true
-    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
-    AutoSell:GrantSessionConsent()
-    IM.db.global.autoSell.maxQuality = 3    -- moves the fingerprint; Poor stays sellable either way
-    check("the grant is withdrawn by the settings change, so the confirm is a re-prompt",
-        AutoSell:HasSessionConsent() == false)
-    OpenMerchant()
-    local reprompt = Stub.PopupText() or ""
-    check("a re-armed confirm leads with why it is asking again",
-        reprompt:find("Your InventoryManager settings changed since you approved automatic selling",
-            1, true) ~= nil, reprompt)
-    check("...and still quotes the sale underneath that lead",
-        reprompt:find("about to sell 1 item for ", 1, true) ~= nil, reprompt)
-end)
-
--- ============================================================================
--- 11. The auto-sell settings dropdown derives its quality list
+-- 8. The auto-sell settings dropdown derives its quality list
 -- ============================================================================
 
 --[[
@@ -1812,6 +999,134 @@ RunSection("The quality dropdown derives its list", function()
         named == nil, "found " .. tostring(named))
 end)
 
+-- ============================================================================
+-- 9. The configured quality threshold, and the junk list overriding it
+-- ============================================================================
+
+--[[
+    Nothing above this point crosses the CONFIGURED threshold. Every fixture is quality 0 and every
+    other sale case runs at a quality the floor refuses, so the setting the auto-sell panel is
+    mostly about had no sale-level coverage at all: raising Database.lua's default maxQuality from
+    2 to 4 (every fresh profile silently vendoring up to Epic) and deleting ShouldAutoSell's
+    threshold tier outright both left the suite green.
+
+    Quality 3 is the item that can tell them apart: under the floor, over the default. The first
+    case deliberately does NOT set maxQuality - it is the shipped default that has to refuse this
+    item, which is what makes the default itself load-bearing here.
+]]
+RunSection("The configured quality threshold, and junk overriding it", function()
+
+    local RARE = 777
+
+    Reset()
+    Stub.DefineItem(RARE, { quality = 3, sellPrice = 5000, classID = 4 })
+    Stub.PutItem(0, 1, { itemID = RARE, stackCount = 1 })
+    IM.db.global.autoSellEnabled = true
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("a Rare item is not sold at the default maxQuality", SoldCount() == 0, Prints())
+
+    Reset()
+    Stub.DefineItem(RARE, { quality = 3, sellPrice = 5000, classID = 4 })
+    Stub.PutItem(0, 1, { itemID = RARE, stackCount = 1 })
+    IM.db.global.autoSellEnabled = true
+    IM.db.global.autoSell.maxQuality = 4
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("...and the same item IS sold once maxQuality is raised to Epic",
+        SoldCount() == 1, Prints())
+
+    --[[
+        Junk, in the direction that can break.
+
+        The junk checks in section 1 all sit ABOVE the floor, where the item is refused either way,
+        so they pass with the junk tier deleted outright. What the user actually bought with a
+        manual junk designation is this: an item the normal filters WOULD refuse sells anyway.
+    ]]
+    Reset()
+    Stub.DefineItem(RARE, { quality = 3, sellPrice = 5000, classID = 4 })
+    Stub.PutItem(0, 1, { itemID = RARE, stackCount = 1 })
+    IM.db.global.autoSellEnabled = true
+    IM.db.global.junkList[RARE] = true
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("an item the threshold refuses is sold anyway once the user junk-lists it",
+        SoldCount() == 1, Prints())
+end)
+
+-- ============================================================================
+-- 10. Protective tiers that no sale ever reached
+-- ============================================================================
+
+--[[
+    Three more tiers of ShouldAutoSell were listed as uncovered rather than covered. All three are
+    drivable here - they read the database and GetItemInfo, not a client API the stub answers with
+    a constant - so they are driven instead of named.
+]]
+RunSection("Category exclusions, mail rules and no vendor value", function()
+
+    -- CATEGORY EXCLUSIONS. classID 0 is Consumable, excluded by default.
+    local POTION = 888
+
+    Reset()
+    Stub.DefineItem(POTION, { quality = 0, sellPrice = 100, classID = 0 })
+    Stub.PutItem(0, 1, { itemID = POTION, stackCount = 1 })
+    IM.db.global.autoSellEnabled = true
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("an item in an excluded category is not sold", SoldCount() == 0, Prints())
+
+    Reset()
+    Stub.DefineItem(POTION, { quality = 0, sellPrice = 100, classID = 0 })
+    Stub.PutItem(0, 1, { itemID = POTION, stackCount = 1 })
+    IM.db.global.autoSellEnabled = true
+    IM.db.global.categoryExclusions.consumables = false
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("...and is sold once the user unexcludes that category", SoldCount() == 1, Prints())
+
+    --[[
+        MAIL RULES. Not a mail feature from auto-sell's point of view: a rule holding an item for an
+        alt is the reason it is not vendored, so the mail settings are auto-sell SCOPE settings.
+        The second case is the historical asset-loss shape - widening the sale from the mail panel,
+        with no visit to the auto-sell panel to suggest anything changed.
+    ]]
+    local MATS = 121
+
+    local function _MailRuleFixture()
+        Reset()
+        Stub.DefineItem(MATS, { name = "Bank Mats", quality = 0, sellPrice = 100, classID = 4 })
+        Stub.PutItem(0, 1, { itemID = MATS, stackCount = 1 })
+        IM.db.global.autoSellEnabled = true
+        IM.db.global.mailHelper.rules = {
+            { name = "Mats to the bank alt", alt = "Banker-Realm", filterType = "name",
+              filterValue = "Bank Mats", enabled = true },
+        }
+    end
+
+    _MailRuleFixture()
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("an item a mail rule is holding for an alt is not sold", SoldCount() == 0, Prints())
+
+    _MailRuleFixture()
+    IM.db.global.mailHelper.enabled = false
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("...and unticking Mail Helper's master enable widens the sale to take it",
+        SoldCount() == 1, Prints())
+
+    -- NO VENDOR VALUE. The control is the standard fixture: same quality, same class, sellPrice
+    -- 100, sold in the quality-floor section - so only the price differs here.
+    Reset()
+    Stub.DefineItem(SELLABLE, { quality = 0, sellPrice = 0, classID = 4 })
+    Stub.PutItem(0, 1, { itemID = SELLABLE, stackCount = 1 })
+    IM.db.global.autoSellEnabled = true
+    OpenMerchant()
+    Stub.DrainTimers()
+    check("an item the vendor pays nothing for is not sold", SoldCount() == 0, Prints())
+end)
+
 -- ---------------------------------------------------------------- summary --
 
 --[[
@@ -1826,7 +1141,7 @@ end)
     Bump this deliberately when adding or removing cases. A number that had to be changed without
     anyone intending to change it is the signal.
 ]]
-local EXPECTED_CHECKS = 225   -- this assertion included
+local EXPECTED_CHECKS = 98    -- this assertion included
 
 check("every expected check ran", checks + 1 == EXPECTED_CHECKS,
     "counted=" .. (checks + 1) .. " expected=" .. EXPECTED_CHECKS)

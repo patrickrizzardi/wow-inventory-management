@@ -1,19 +1,19 @@
 --[[
     Minimal WoW client stub, enough to load the REAL Core.lua, Database.lua, Filters.lua,
-    Modules/AutoSell.lua and Modules/MailHelper.lua under stock Lua 5.1.
+    Modules/AutoSell.lua and Modules/MailHelper.lua under stock Lua 5.1 - and, on request
+    (Stub.LoadUI), UI/Core.lua and UI/AutoSellPopup.lua.
 
         .claude/tests/autosell/run.sh
 
     Loading the real files rather than re-describing them is the whole point of this stub. A
     version that stubbed `ShouldAutoSell` to `return true` and hand-copied Database.lua's defaults
     made the quality floor, the pre-sale re-check and the defaults themselves untestable by
-    construction: a mutation battery deleted the consent gate, the pre-sale ShouldAutoSell
-    re-check, the slot identity check, OnAccept's approved-list binding and the autoSellEnabled
-    master toggle, and the suite stayed green.
+    construction: a mutation battery deleted the pre-sale ShouldAutoSell re-check, the slot
+    identity check and the autoSellEnabled master toggle, and the suite stayed green.
 
     It stubs behaviour, not semantics: timers are queued and drained by hand, so tests control
-    time rather than sleep, and the static popup runs the addon's own OnAccept/OnCancel/OnHide
-    rather than letting a test call the handler underneath them. Nothing here is loaded by the
+    time rather than sleep, and the sale runs through the addon's own event handlers rather than
+    being simulated beside them. Nothing here is loaded by the
     addon.
 ]]
 
@@ -28,10 +28,11 @@ end
 
 date = os.date
 strsplit = function(sep, str) return str end
+tinsert = table.insert
 
-local _clock = 1000
-function GetTime() return _clock end
-function Stub.AdvanceClock(seconds) _clock = _clock + (seconds or 1) end
+-- Frozen, and nothing advances it: the only clock-reading code loaded here is Filters.lua's item
+-- info cache, whose expiry nothing under test depends on.
+function GetTime() return 1000 end
 
 -- ----------------------------------------------------------------- timers --
 
@@ -132,6 +133,8 @@ Stub.NewFrame = _NewFrame
 
 UIParent = _NewFrame("UIParent")
 SettingsPanel = _NewFrame("SettingsPanel")
+-- Live: UI/AutoSellPopup.lua inserts its frame name here at Create() time, so the Sell All case
+-- raises without it.
 UISpecialFrames = {}
 function HideUIPanel() end
 function InterfaceOptions_AddCategory() end
@@ -164,88 +167,14 @@ end
 
 -- ---------------------------------------------------------- static popups --
 
+-- Nothing on the auto-sell path shows a dialog. Core.lua still registers dialogs into this table
+-- as it loads and /im reset shows one, so the table and StaticPopup_Show have to exist.
 StaticPopupDialogs = {}
-Stub.shownPopups = {}
-Stub.activePopup = nil
 
--- Blizzard has a fixed number of popup slots and hands back nil when every one of them is held by
--- another addon. Set this to make the next Show fail that way: the addon's fail-closed branch is
--- unreachable otherwise, and an unreachable branch is indistinguishable from a deleted one.
-Stub.refusePopup = false
-
--- Blizzard's signature is StaticPopup_Show(which, text_arg1, text_arg2, data). Both text args are
--- modelled because the addon uses both, and a stub that swallowed the second would let a
--- substitution the dialog depends on go missing without the suite noticing.
+-- Blizzard's signature is StaticPopup_Show(which, text_arg1, text_arg2, data).
 function StaticPopup_Show(which, arg1, arg2, data)
-    if Stub.refusePopup then return nil end
-    local dialog = { which = which, arg1 = arg1, arg2 = arg2, data = data }
-    Stub.activePopup = dialog
-    table.insert(Stub.shownPopups, dialog)
-    return dialog
+    return { which = which, arg1 = arg1, arg2 = arg2, data = data }
 end
-
--- Blizzard's hide path runs OnHide. The old stub did not, so every test that hid a popup left the
--- addon's OnHide bookkeeping unexecuted and the gate it clears untested.
-function StaticPopup_Hide(which)
-    local dialog = Stub.activePopup
-    if not dialog or dialog.which ~= which then return end
-    Stub.activePopup = nil
-    local definition = StaticPopupDialogs[which]
-    if definition and definition.OnHide then definition.OnHide(dialog) end
-end
-
-local function _AnswerPopup(handlerName)
-    local dialog = Stub.activePopup
-    if not dialog then return false end
-    local definition = StaticPopupDialogs[dialog.which]
-    if definition[handlerName] then definition[handlerName](dialog) end
-    -- The handler may already have hidden the dialog (and run OnHide) from inside itself.
-    if Stub.activePopup == dialog then
-        Stub.activePopup = nil
-        if definition.OnHide then definition.OnHide(dialog) end
-    end
-    return true
-end
-
---[[
-    Press the dialog's buttons, or dismiss it with Escape. These are the only production entry
-    points into the consent gate, so tests drive these instead of calling ConfirmApprovedSale.
-
-    A missing dialog returns false rather than raising: an abort here ends the run at the first
-    surprise and reports a fraction of the damage, so the caller turns the false into one named
-    failure and the remaining checks still say which guards went with it.
-
-    @return boolean - Was there a dialog to answer?
-]]
-function Stub.PopupAccept() return _AnswerPopup("OnAccept") end
-function Stub.PopupCancel() return _AnswerPopup("OnCancel") end
-function Stub.PopupEscape()
-    local dialog = Stub.activePopup
-    if not dialog then return false end
-    StaticPopup_Hide(dialog.which)
-    return true
-end
-
-function Stub.PopupOnScreen()
-    return Stub.activePopup ~= nil
-end
-
-function Stub.PopupText()
-    local dialog = Stub.activePopup
-    return dialog and dialog.arg1 or nil
-end
-
--- The dialog's second substitution, as the player would read it.
-function Stub.PopupText2()
-    local dialog = Stub.activePopup
-    return dialog and dialog.arg2 or nil
-end
-
--- Blizzard's buyback capacity constant (FrameXML MerchantFrame.lua). Defined here so the addon's
--- derived buyback wording runs against a client value rather than falling into its own
--- constant-is-missing branch; tests that care set it to something other than the live 12, so a
--- number typed into the addon by hand cannot pass for a derived one.
-BUYBACK_ITEMS_PER_PAGE = 12
 
 -- ------------------------------------------------------------------ items --
 
@@ -259,10 +188,20 @@ Stub.items = {}
 -- defensive branch is indistinguishable from a deletable one, and this one guards an asset.
 Stub.NO_QUALITY = {}
 
-function Stub.DefineItem(itemID, fields)
+--[[
+    A hyperlink -> item info override, for one itemID that exists at more than one item level.
+
+    A live link carries bonus IDs; two links with the same itemID can be a 100-ilvl item and a
+    500-ilvl one. Anything that asks GetItemInfo by itemID, or by the wrong link, gets the wrong
+    item level for the thing actually sitting in the slot - which is what the maxItemLevel ceiling
+    is read against.
+]]
+Stub.itemVariants = {}
+
+local function _NewItemInfo(label, fields)
     fields = fields or {}
-    Stub.items[itemID] = {
-        name = fields.name or ("Item " .. tostring(itemID)),
+    return {
+        name = fields.name or ("Item " .. tostring(label)),
         quality = (fields.quality ~= Stub.NO_QUALITY) and (fields.quality or 0) or nil,
         itemLevel = fields.itemLevel or 1,
         itemType = fields.itemType or "Miscellaneous",
@@ -272,7 +211,17 @@ function Stub.DefineItem(itemID, fields)
         subclassID = fields.subclassID or 0,
         bindType = fields.bindType or 0,     -- unbound, so skipSoulbound does not protect it
     }
+end
+
+function Stub.DefineItem(itemID, fields)
+    Stub.items[itemID] = _NewItemInfo(itemID, fields)
     return Stub.items[itemID]
+end
+
+-- The same itemID as an existing entry, at whatever this particular link's bonus IDs say.
+function Stub.DefineVariant(link, fields)
+    Stub.itemVariants[link] = _NewItemInfo(link, fields)
+    return Stub.itemVariants[link]
 end
 
 local function _ItemIDFrom(idOrLink)
@@ -286,23 +235,22 @@ function Stub.ItemLink(itemID)
 end
 
 function GetItemInfo(idOrLink)
-    local item = Stub.items[_ItemIDFrom(idOrLink)]
+    local id = _ItemIDFrom(idOrLink)
+    -- A variant is found only by its own link, exactly as the client behaves: ask by itemID and
+    -- you get the base item, whatever the slot actually holds.
+    local item = Stub.itemVariants[idOrLink] or Stub.items[id]
     if not item then return nil end
-    return item.name, Stub.ItemLink(_ItemIDFrom(idOrLink)), item.quality, item.itemLevel, 1,
+    local link = Stub.itemVariants[idOrLink] and idOrLink or Stub.ItemLink(id)
+    return item.name, link, item.quality, item.itemLevel, 1,
         item.itemType, item.itemSubType, 1, "", "Interface\\Icons\\Temp", item.sellPrice,
         item.classID, item.subclassID, item.bindType
 end
 
-GetItemInfoInstant = function(idOrLink)
-    local id = _ItemIDFrom(idOrLink)
-    local item = Stub.items[id]
-    if not item then return nil end
-    return id, item.itemType, item.itemSubType, "", "Interface\\Icons\\Temp", item.classID, item.subclassID
-end
-
 -- ------------------------------------------------------------------- bags --
 
--- Stub.bags[bagID][slotID] = { itemID, stackCount, isLocked, isBound }
+-- Stub.bags[bagID][slotID] = { itemID, stackCount, isLocked, isBound, hyperlink }
+-- `hyperlink` is optional and only needed for a slot holding a variant (see Stub.DefineVariant);
+-- without it the slot reports the plain link for its itemID.
 Stub.bags = {}
 Stub.bagSlots = {}
 
@@ -327,11 +275,12 @@ C_Container = {
         local bag = Stub.bags[bagID]
         local entry = bag and bag[slotID]
         if not entry then return nil end
-        local item = Stub.items[entry.itemID]
+        local link = entry.hyperlink or Stub.ItemLink(entry.itemID)
+        local item = Stub.itemVariants[link] or Stub.items[entry.itemID]
         return {
             itemID = entry.itemID,
             stackCount = entry.stackCount or 1,
-            hyperlink = Stub.ItemLink(entry.itemID),
+            hyperlink = link,
             quality = item and item.quality,
             isLocked = entry.isLocked or false,
             isBound = entry.isBound or false,
@@ -342,8 +291,7 @@ C_Container = {
         local bag = Stub.bags[bagID]
         local entry = bag and bag[slotID]
         table.insert(Stub.sold, { bagID = bagID, slotID = slotID, itemID = entry and entry.itemID })
-        local refused = Stub.refuseSale and entry and Stub.refuseSale[entry.itemID]
-        if not refused and bag then
+        if bag then
             bag[slotID] = nil
         end
         -- The bags keep changing while a queue is being worked through: loot lands, the player
@@ -379,7 +327,6 @@ C_EquipmentSet = {
 }
 C_ToyBox = { GetToyInfo = function() return nil end }
 C_TransmogCollection = { PlayerHasTransmog = function() return true end }
-C_MerchantFrame = { IsSellAllJunkEnabled = function() return false end }
 
 ITEM_QUALITY_COLORS = setmetatable({}, { __index = function() return { hex = "|cffffffff" } end })
 
@@ -420,9 +367,8 @@ end
     Load the addon the way the client does: Core, Database, Filters, then the module under test,
     then ADDON_LOADED (which initialises the database and calls OnEnable on every module).
 
-    Called once per test via Reset(). The consent grant lives in AutoSell.lua's file scope
-    precisely so a /reload re-arms the confirm, so reloading the file is also the only honest way
-    to get a clean slate between tests.
+    Called once per test via Reset(). AutoSell.lua keeps its per-visit state in file-locals, so
+    reloading the file is the only honest way to get a clean slate between tests.
 ]]
 function Stub.LoadAddon()
     IM.prints = {}
@@ -441,14 +387,30 @@ function Stub.LoadAddon()
     Stub.LoadAddonFile("Filters.lua")
     Stub.LoadAddonFile("Modules/AutoSell.lua")
     -- Real MailHelper, in .toc order after AutoSell. ShouldAutoSell's mail-rule tier is a no-op
-    -- unless IM.modules.MailHelper is present, so without this file the mutation battery would
-    -- report "changing a mail rule moves no verdict" - which is what the harness said while mail
-    -- rules were silently outside the consent fingerprint.
+    -- unless IM.modules.MailHelper is present, so a harness without this file runs a filter
+    -- pipeline that is one protective tier short of the shipping one.
     Stub.LoadAddonFile("Modules/MailHelper.lua")
 
     Stub.Fire("ADDON_LOADED", "InventoryManager")
 
     return IM
+end
+
+--[[
+    Load the UI layer's Auto-Sell popup on top of an already-loaded addon.
+
+    Opt-in rather than part of LoadAddon, because the popup hooks MERCHANT_SHOW's Show() call and
+    the item-data signal: loading it everywhere would put a second consumer of both into every
+    case in the suite, and the cases below are about the sell path.
+
+    The frame stub answers any method, so nothing here proves the button DRAWS. What it does give
+    is the real OnClick closure out of the shipping file, callable, which is the only way to check
+    what the click actually does rather than what its source text looks like.
+]]
+function Stub.LoadUI()
+    Stub.LoadAddonFile("UI/Core.lua")
+    Stub.LoadAddonFile("UI/AutoSellPopup.lua")
+    return IM.UI
 end
 
 return Stub

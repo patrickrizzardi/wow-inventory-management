@@ -556,9 +556,10 @@ end
     5. Protection Checks - Equipment sets, category exclusions
     6. Filter Checks - Soulbound, warbound, transmog, quality, item level, price
 
-    Note: This does NOT check autoSellEnabled - that setting only controls
-    automatic selling on merchant open, not whether items match sell criteria.
-    The OnMerchantShow handler checks autoSellEnabled before calling SellJunk.
+    Note: This answers "does this item match the sell criteria", never "is an unattended sale
+    allowed" - so it does NOT read autoSellEnabled, and a true return is not permission to sell.
+    Naming where that permission IS enforced would be a claim about a caller this file cannot see
+    go stale; ask AutoSell.lua.
 
     @param bagID number - Bag ID
     @param slotID number - Slot ID within bag
@@ -662,7 +663,7 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink, verbose)
     --
     -- This reads db.mailHelper, which makes mail rules an auto-sell SCOPE setting and not just a
     -- mail feature: disabling the master toggle or a single rule widens what an unattended sale
-    -- takes, which is why AutoSell's consent fingerprint hashes them.
+    -- takes, with no visit to the auto-sell panel to suggest it would.
     if IM.modules.MailHelper and IM.modules.MailHelper.ItemMatchesAnyRule then
         local matchesRule, altKey, ruleName = IM.modules.MailHelper:ItemMatchesAnyRule(itemID)
         if matchesRule then

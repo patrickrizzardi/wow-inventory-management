@@ -496,21 +496,9 @@ SlashCmdList["INVENTORYMANAGER"] = function(msg)
         -- Show addon status
         IM:Print("Status:")
 
-        -- Auto-sell has two independent gates: the setting, and this session's consent to sell
-        -- automatically. Reporting only the setting is what made "ON" mean two different things.
+        -- One gate, so one word. The setting IS the permission to sell unattended: ON means the
+        -- addon sells at the next vendor without asking, OFF means it never does.
         local autoSellState = IM.db.global.autoSellEnabled and "|cff00ff00ON|r" or "|cffff0000OFF|r"
-        if IM.db.global.autoSellEnabled and IM.modules.AutoSell and IM.modules.AutoSell.HasSessionConsent then
-            local consented, consentReason = IM.modules.AutoSell:HasSessionConsent()
-            if consented then
-                autoSellState = autoSellState .. " |cff888888(confirmed for this session)|r"
-            elseif consentReason == "settings-changed" then
-                -- Same reason the confirm names itself: "will ask again" and "will ask again
-                -- because you changed something" are different facts to whoever is reading this.
-                autoSellState = autoSellState .. " |cff888888(settings changed - will ask again before selling)|r"
-            else
-                autoSellState = autoSellState .. " |cff888888(will ask before selling)|r"
-            end
-        end
         IM:Print("  Auto-Sell: " .. autoSellState)
         IM:Print("  Auto-Repair: " .. (IM.db.global.autoRepairEnabled and "|cff00ff00ON|r" or "|cffff0000OFF|r"))
 
