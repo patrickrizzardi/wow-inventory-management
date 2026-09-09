@@ -775,6 +775,38 @@ seat: this phase's diff does not touch a bag file.
 
 ---
 
+**PHASE 1 EXECUTION LOG — sealed `cbfb3c3`, 2026-09-08. Code complete; phase NOT closed until the
+in-game checklist above is run and its results are written here.**
+
+Nine execution rounds, one seal commit. Seats were derived per round from that round's diff, never
+from a fixed roster; a round with only a rename or comment edits earned zero. Verdicts:
+
+| Seat | Rounds fired | Blockers found | What it caught that nothing else did |
+|---|---|---|---|
+| `green-check` | every round | 2 red | Both C3 instances — staged content diverging from tested content |
+| `critical-path-integrity` | 8 | 3 | The mail-rule fingerprint omission; the ungated retry path (reproduced, not argued); the bearer-token exemption |
+| `test-quality` | 5 | 5 | That the suite was green while the consent gate, the pre-sale re-check and the slot-identity check were each deletable |
+| `code-reviewer` | 8 | 3 | C1 instances 9 and 10; the 400k-config brute force proving `_Field` injective |
+| `plan-adherence` | 9 | 2 | That Phase 17 step 9 already owned the dead code Phase 1 was deleting; the two false plan-text claims |
+| `performance` | 3 | 0 | Deflated two inflated concerns, including one the conductor framed as a likely blocker |
+| `ux` | 3 | 1 | The dialog stating a falsehood about the player's property — this phase's first blocker |
+| `migration-safety` | 1 | 0 | Graded the live-SavedVariables deletion that a later round removed entirely |
+
+Three seats never fired, correctly: `a11y` (glob matched `UI/` twice, no interactive surface added),
+`seo`, `doc-auditor`.
+
+**Findings that changed the design rather than patching it:** the consent fingerprint was rebuilt
+three times — hand list, inverted exclusion list plus a runtime audit, then derived from what
+`ShouldAutoSell` actually reads. The middle version required declaring UI tables in `defaults`,
+which made a BagUI initialiser unreachable, which orphaned a key, which produced a destructive
+SavedVariables write in Phase 17's territory. All of that scaffolding was deleted in round 8 rather
+than maintained. `.claude/corpses.md` C1 and C2 are the durable record of why.
+
+**Owed before this phase closes:** the CHECKPOINT at §3.3 Phase 1 step 3, the in-game smoke
+checklist, and the buyback-lifetime observation. Write the results into this section.
+
+---
+
 #### Phase 2 — Mail asset safety
 
 **Task and purpose.** Guard the mail cursor and serialize Send All, in order that no mail action
