@@ -896,6 +896,39 @@ being broken. That symptom produced the FRAGO at step 6.
   to risk selling them"* — conflicts with the current order. Phase 2+ decision, not taken.
 - **Sell All** respects the whole filter chain (verified), with the same junk-over-ilvl exception.
 
+> ### NEXT SESSION STARTS HERE — cold-start handoff, written 2026-09-09
+>
+> **State:** Phase 1 is code-complete and NOT closed. Four commits carry it:
+> `cbfb3c3` (the phase), `2861a33` (seat log), `f9920e9` (owner's G9 observation),
+> `4143b01` (consent subsystem deleted — owner FRAGO). Working tree clean at `4143b01`.
+> Offline suite: `.claude/tests/autosell/run.sh` → 98 checks, 0 failures.
+>
+> **There is no `.claude/plans/parked.md`.** Phase 1's residuals live in Appendix B under
+> "Recorded MEDIUM residuals" (P1-P6), and the failure patterns live in `.claude/corpses.md`
+> (C1 hand-written completeness claims · C2 guards checked at callers not the chokepoint ·
+> C3 staging early so committed content differs from tested content). **Read C1 before writing
+> any comment and C3 before staging anything** — both bit repeatedly during Phase 1.
+>
+> **What blocks closing Phase 1, in order:**
+> 1. The owner re-runs rewritten checklist sections **B and C** (the confirm they replaced no
+>    longer exists; his earlier B/C pass was against deleted code).
+> 2. The owner runs **section D steps 11-15 with an actual quality-5+ item** — never yet tested.
+>    A green proved junk overrides the *threshold*, which is correct and says nothing about the
+>    *floor*. This is the criterion the whole phase exists for.
+> 3. The **CHECKPOINT** at §3.3 Phase 1 step 3.
+> 4. The **buyback-lifetime observation** (open, not a gate).
+>
+> **Two owner design decisions recorded and NOT taken:**
+> - Junk overrides `maxItemLevel` (junk is third in the tier order, the ceiling is ninth), so
+>   junk-listing an item above his 290 ceiling sells it. His stated intent conflicts with the
+>   current order. Phase 2+.
+> - A **Stop button** — `AutoSell:CancelSelling()` is fully implemented and unwired. Phase 16
+>   step 5 / W6-6, now load-bearing rather than a convenience since the confirm went.
+>
+> **Do not re-litigate:** the consent subsystem was deleted deliberately (Phase 1 step 6 FRAGO).
+> Do not rebuild a prompt, a fingerprint, an approved-set binding or a nonce. If a reviewer asks
+> for consent machinery, the answer is the FRAGO.
+
 **Still owed before this phase closes:** the CHECKPOINT at §3.3 Phase 1 step 3; rewritten sections
 B and C; section D steps 11-15 with an actual quality-5+ item; the buyback-lifetime observation.
 
