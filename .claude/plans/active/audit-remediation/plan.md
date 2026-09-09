@@ -698,6 +698,21 @@ and 4, and survives being on the junk list; an uncached item (nil quality) is no
    reason it is exempt.**
    **The rest of Phase 1 ships without waiting for G9** — G9 blocks only this step. Steps 1-3, 5
    and 6 are the asset-safety fix and they are not gated.
+
+   **OBSERVED IN-GAME 2026-09-09, owner, during Phase 1's smoke run — evidence for G9, do not act
+   on it before the gate.** A junk-listed item showed the gold-coin will-be-sold indicator and was
+   **not** sold. Reproduced condition: log out, log back in, open a merchant before item data
+   finishes caching. Mechanism confirmed by reading `UI/OverlayFactory.lua:462`, which paints on
+   `(isSellable or isJunk)` — `isJunk` is a bare table lookup at `:420` and answers `true` with
+   cold data, while `isSellable` comes from `ShouldAutoSell`, which correctly refuses an uncached
+   item. So the two disagree exactly as this step predicted, and the trigger is slightly broader
+   than the whitelist case written below: the refused-while-junk-listed set is whatever outranks
+   the junk branch, i.e. **whitelist**, **the quality floor** (which includes the nil-quality
+   cold-data path, the case actually observed), and a junk-listed item with **no vendor value**.
+   It is NOT the item-level ceiling or a mail rule — both sit below junk in the order and junk
+   overrides them, so the coin is telling the truth there. The item is not at risk;
+   the picture is wrong. `UI/OverlayFactory.lua` had zero diff for the whole of Phase 1, verified
+   every round, so this is the untouched pre-existing behaviour and not a regression.
    **Consequence of leaving it un-gated-and-unfixed for now, stated so nobody is surprised**: until
    G9 is decided, a whitelisted item that is *also* on the junk list can still wear a will-be-sold
    ring when `showLockOverlay` is off, because the `isJunk` term reaches `:462` while
