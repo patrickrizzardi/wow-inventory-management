@@ -18,7 +18,8 @@ local defaults = {
         debug = false,
 
         -- Feature toggles
-        autoSellEnabled = true,
+        -- OFF by default: a fresh install must not sell anything before the user asks for it.
+        autoSellEnabled = false,
         autoRepairEnabled = true,
 
         -- Auto-sell filters

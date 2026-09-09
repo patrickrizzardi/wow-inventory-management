@@ -8,17 +8,8 @@ local addonName, IM = ...
 local TooltipInfo = {}
 IM:RegisterModule("TooltipInfo", TooltipInfo)
 
--- Quality names for display
-local QUALITY_NAMES = {
-    [0] = "Poor",
-    [1] = "Common",
-    [2] = "Uncommon",
-    [3] = "Rare",
-    [4] = "Epic",
-    [5] = "Legendary",
-    [6] = "Artifact",
-    [7] = "Heirloom"
-}
+-- Quality names come from IM.QUALITY_INFO (IM:GetQualityName). This file used to keep its own
+-- list, which is how it kept naming qualities the filter had already stopped selling.
 
 -- Category exclusion names (matches database keys)
 local CATEGORY_NAMES = IM.CATEGORY_EXCLUSION_NAMES or {}
@@ -209,11 +200,16 @@ function TooltipInfo:GetThresholdProtections(itemQuality, itemLevel)
     local protections = {}
     local db = IM.db.global
 
-    -- Quality threshold
-    local maxQuality = db.autoSell.maxQuality
-    if itemQuality and itemQuality > maxQuality then
-        local maxQualityName = QUALITY_NAMES[maxQuality] or "Unknown"
-        table.insert(protections, "Quality > " .. maxQualityName)
+    -- Quality. The floor and the threshold are different statements and the tooltip must not
+    -- blur them: above the floor the item is never sold whatever the setting says, so saying
+    -- "Quality > Epic" there would imply that raising the setting could sell it.
+    if itemQuality and IM.Filters:IsProtectedByQuality(itemQuality) then
+        table.insert(protections, IM:GetQualityName(itemQuality) .. " is never auto-sold")
+    else
+        local maxQuality = IM.Filters:GetMaxSellQuality()
+        if itemQuality and itemQuality > maxQuality then
+            table.insert(protections, "Quality > " .. IM:GetQualityName(maxQuality))
+        end
     end
 
     -- Item level threshold
@@ -288,20 +284,43 @@ function TooltipInfo:AddTooltipInfo(tooltip, itemID, itemLink)
     -- ClassID/SubclassID for custom exclusions
     tooltip:AddDoubleLine("ID:", classID .. "_" .. (subclassID or 0), 0.5, 0.5, 0.5, 0.7, 0.7, 0.7)
 
-    -- Priority order: Whitelist > Junk List > Other Protections
-    -- Whitelist ALWAYS wins (item will never sell)
+    -- This block is the surface a player checks before trusting the addon with an irreplaceable
+    -- item, so the one thing it must never do is disagree with the filter - it once told them a
+    -- junk-listed legendary would be sold while Filters:ShouldAutoSell refused to sell it.
+    --
+    -- An earlier version of this comment answered that by restating ShouldAutoSell's priority
+    -- order here, by hand, in a list that was already missing a tier of it. A copy of the rules is
+    -- the disagreement waiting to happen, so the JUNK branch below asks the filter instead of
+    -- reciting what it would say.
+    local qualityFloored = itemQuality and IM.Filters:IsProtectedByQuality(itemQuality)
+
     if isWhitelisted then
         tooltip:AddLine(" ")
         tooltip:AddLine("|cff00ffffLOCKED|r - Protected from all sales", 0, 1, 1)
         -- Don't show junk status or other protections - whitelist is absolute
+    elseif isJunk and qualityFloored then
+        -- The junk list cannot reach past the quality floor. Say so on the item, not in a doc.
+        tooltip:AddLine(" ")
+        tooltip:AddLine("|cff00ffffPROTECTED|r - " .. IM:GetQualityName(itemQuality) ..
+            " is never auto-sold, even on the junk list", 0, 1, 1)
     elseif isJunk then
-        -- Junk list overrides all other protections
-        if noVendorValue then
-            tooltip:AddLine("|cffff8800JUNK|r - Marked but |cff888888no vendor value|r", 1, 0.5, 0)
+        -- Ask the filter what it will actually do with this item rather than asserting that the
+        -- junk list wins. Whatever outranks the junk list today or is added above it tomorrow,
+        -- this line says the same thing the merchant visit will do.
+        if bagID and slotID then
+            local willSell, sellReason = IM.Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink)
+            if willSell then
+                tooltip:AddLine("|cffff8800JUNK|r - Will auto-sell (overrides other protections)", 1, 0.5, 0)
+            else
+                tooltip:AddLine("|cffff8800JUNK|r - Marked, but |cff888888" ..
+                    (sellReason or "not sellable") .. "|r", 1, 0.5, 0)
+            end
         else
-            tooltip:AddLine("|cffff8800JUNK|r - Will auto-sell (overrides protections)", 1, 0.5, 0)
+            -- No bag slot to evaluate (a link in chat, the auction house). The filter needs one,
+            -- so say what is known - the item is marked - and claim nothing about the outcome.
+            tooltip:AddLine("|cffff8800JUNK|r - Marked for auto-sell", 1, 0.5, 0)
         end
-        -- Don't show other protections - junk list overrides them
+        -- Don't list separate protections - what the filter answered above is the whole answer
     else
         -- No vendor value warning (only if not junk - junk already shows this)
         if noVendorValue then

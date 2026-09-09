@@ -196,9 +196,81 @@ function Filters:GetEquipmentSets(itemID)
     return equipmentSetItemToSets[itemID]
 end
 
--- Check if item is protected by quality (heirloom, legendary, artifact)
+--[[
+    The auto-sell quality floor. Nothing but an explicit whitelist entry may override it -
+    not the maxQuality setting, not the junk list. Enforced in ShouldAutoSell.
+
+    `quality > IM.MAX_SELLABLE_QUALITY` (4) is exactly `quality >= IM.QUALITY_LEGENDARY` (5)
+    over the qualities Blizzard defines today, so it protects Legendary(5), Artifact(6),
+    Heirloom(7) and Token(8). The old `or quality == IM.QUALITY_HEIRLOOM` term was unreachable
+    (7 >= 5) and is gone; this is a restatement of the same boundary against a named constant,
+    not a loosening of it.
+
+    Quality 8 (WoW Token) is DELIBERATELY protected, not merely swept up: a token is real money,
+    and the alternative (carving out an exception) is what turns this comparison back into a hole.
+    The open-ended `>` is the point: any quality Blizzard adds above 8 is unknown to this addon
+    and fails closed on arrival.
+
+    Fails closed on a non-number: an uncached item has nil quality and is protected, never sold.
+
+    @param quality number|nil - Item quality index
+    @return boolean - True if the item must never be auto-sold
+]]
 function Filters:IsProtectedByQuality(quality)
-    return quality >= IM.QUALITY_LEGENDARY or quality == IM.QUALITY_HEIRLOOM
+    if type(quality) ~= "number" then
+        return true
+    end
+    return quality > IM.MAX_SELLABLE_QUALITY
+end
+
+--[[
+    The effective maxQuality setting: the stored value clamped to IM.MAX_SELLABLE_QUALITY.
+
+    The clamp lives on the read rather than on the write because an older build could already have
+    stored 5, 6 or 7, and the quality floor makes those behave exactly like 4: a UI rendering the
+    raw value would announce "Legendary and below" for a threshold the filter refuses to honour.
+    Clamping where the value is read makes the label and the behaviour the same statement without
+    rewriting what the user's profile says. Read-only by design: nothing rewrites the stored value
+    behind the user's back.
+
+    Fails closed the same way IsProtectedByQuality does. A missing database, a missing autoSell
+    table or a non-number stored value all resolve to QUALITY_POOR - the narrowest setting the UI
+    can express - rather than throwing or defaulting to something wider than the user chose. A
+    caller wrapping this in a fallback of its own is how that guarantee gets widened by accident,
+    so call it bare and let it answer.
+
+    @return number - Effective maximum quality to auto-sell
+]]
+
+-- Note a stored maxQuality that had to be clamped, so a legacy or corrupt value is visible rather
+-- than silently behaving like something else. Deduplicated by value - GetMaxSellQuality runs once
+-- per bag item, and a stored 5 would otherwise emit one identical line per item scanned. The
+-- sentinel start value is so that a nil stored value (no database yet) still reports once.
+local _NOTHING_REPORTED = {}
+local _reportedClampedQuality = _NOTHING_REPORTED
+local function _ReportClampedQuality(stored)
+    if stored == _reportedClampedQuality then return end
+    _reportedClampedQuality = stored
+    IM:Debug("[Filters] Stored autoSell.maxQuality is unusable (" .. tostring(stored) ..
+        "); clamping into [" .. IM.QUALITY_POOR .. ", " .. IM.MAX_SELLABLE_QUALITY .. "]")
+end
+function Filters:GetMaxSellQuality()
+    local autoSell = IM.db and IM.db.global and IM.db.global.autoSell
+    local quality = autoSell and autoSell.maxQuality
+
+    if type(quality) ~= "number" then
+        _ReportClampedQuality(quality)
+        return IM.QUALITY_POOR
+    end
+    if quality < IM.QUALITY_POOR then
+        _ReportClampedQuality(quality)
+        return IM.QUALITY_POOR
+    end
+    if quality > IM.MAX_SELLABLE_QUALITY then
+        _ReportClampedQuality(quality)
+        return IM.MAX_SELLABLE_QUALITY
+    end
+    return quality
 end
 
 -- Check if item is a toy (uses C_ToyBox API, not classID)
@@ -478,10 +550,11 @@ end
 
     Filter Priority (highest to lowest):
     1. Whitelist (locked items) - NEVER sell
-    2. Junk List - ALWAYS sell (overrides all protections except whitelist)
-    3. Mail Rules - Protect items destined for alts
-    4. Protection Checks - Equipment sets, category exclusions
-    5. Filter Checks - Soulbound, warbound, transmog, quality, item level, price
+    2. Quality Floor - NEVER sell above IM.MAX_SELLABLE_QUALITY, or at unknown quality
+    3. Junk List - ALWAYS sell (overrides all protections except 1 and 2)
+    4. Mail Rules - Protect items destined for alts
+    5. Protection Checks - Equipment sets, category exclusions
+    6. Filter Checks - Soulbound, warbound, transmog, quality, item level, price
 
     Note: This does NOT check autoSellEnabled - that setting only controls
     automatic selling on merchant open, not whether items match sell criteria.
@@ -494,6 +567,10 @@ end
     @param verbose boolean - Enable verbose debug logging (default: false, use true when actually selling)
     @return boolean shouldSell - True if item should be sold
     @return string reason - Reason for the decision
+    @return boolean pending - True when the refusal is "the client has not sent this item's data
+            yet", i.e. the answer may change once it arrives. Callers that retry must branch on
+            THIS, never on the prose of `reason` - matching reason strings is how "Quality unknown"
+            silently stopped being retried while "Item info not available" still was.
 ]]
 function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink, verbose)
     local db = IM.db.global
@@ -518,7 +595,7 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink, verbose)
         if verbose then
             IM:Debug("[Filters] ShouldAutoSell: " .. tostring(itemID) .. " - Item info not available")
         end
-        return false, "Item info not available"
+        return false, "Item info not available", true
     end
 
     -- Prefer the item instance's current item level (bag/slot) over GetItemInfo().
@@ -548,12 +625,31 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink, verbose)
         return false, "Whitelisted"
     end
 
-    -- JUNK LIST CHECK (second priority - ALWAYS sell junk items regardless of other protections)
-    -- Only whitelist can override junk list
+    -- QUALITY FLOOR (second priority - only an explicit whitelist entry outranks it)
+    -- Deliberately ABOVE the junk-list branch and the maxQuality threshold: a legendary,
+    -- artifact, heirloom or token must survive every maxQuality setting AND being junk-listed.
+    -- A nil quality (item info not yet cached) fails closed - protected, not sold.
+    --
+    -- Believed unreachable today: GetItemInfo returns quality whenever it returns a name, and the
+    -- nil-name branch above already returned. It stays because "believed" is not "guaranteed" for
+    -- a 14-return-value API, and the cost of being wrong here is a destroyed asset. It is reported
+    -- as PENDING (third return) for the same reason the nil-name branch is: if the value is ever
+    -- missing it is missing because data has not arrived, so a retry is the right response.
+    if itemQuality == nil then
+        if verbose then IM:Debug("[Filters]   -> Rejected: Quality floor (quality unknown, item not cached)") end
+        return false, "Quality unknown", true
+    end
+    if self:IsProtectedByQuality(itemQuality) then
+        if verbose then IM:Debug("[Filters]   -> Rejected: Quality floor (quality " .. tostring(itemQuality) .. " is never auto-sold)") end
+        return false, "Protected quality"
+    end
+
+    -- JUNK LIST CHECK (third priority - ALWAYS sell junk items regardless of other protections)
+    -- Only whitelist and the quality floor can override junk list
     if IM:IsJunk(itemID) then
         -- Only additional check: must have vendor value
         if sellPrice and sellPrice > 0 then
-            if verbose then IM:Debug("[Filters]   -> WILL SELL: On junk list (overrides all protections)") end
+            if verbose then IM:Debug("[Filters]   -> WILL SELL: On junk list (overrides every protection below the quality floor)") end
             return true, "On junk list"
         else
             if verbose then IM:Debug("[Filters]   -> Rejected: On junk list but no vendor value") end
@@ -561,8 +657,12 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink, verbose)
         end
     end
 
-    -- MAIL RULE CHECK (third priority - protect items destined for alts)
+    -- MAIL RULE CHECK (fourth priority - protect items destined for alts)
     -- Check if item matches any mail rule (intended to be sent to alt, not sold)
+    --
+    -- This reads db.mailHelper, which makes mail rules an auto-sell SCOPE setting and not just a
+    -- mail feature: disabling the master toggle or a single rule widens what an unattended sale
+    -- takes, which is why AutoSell's consent fingerprint hashes them.
     if IM.modules.MailHelper and IM.modules.MailHelper.ItemMatchesAnyRule then
         local matchesRule, altKey, ruleName = IM.modules.MailHelper:ItemMatchesAnyRule(itemID)
         if matchesRule then
@@ -615,8 +715,9 @@ function Filters:ShouldAutoSell(bagID, slotID, itemID, itemLink, verbose)
     end
 
     -- Check quality threshold
-    if itemQuality > db.autoSell.maxQuality then
-        if verbose then IM:Debug("[Filters]   -> Rejected: Quality " .. tostring(itemQuality) .. " > maxQuality " .. tostring(db.autoSell.maxQuality)) end
+    local maxQuality = self:GetMaxSellQuality()
+    if itemQuality > maxQuality then
+        if verbose then IM:Debug("[Filters]   -> Rejected: Quality " .. tostring(itemQuality) .. " > maxQuality " .. tostring(maxQuality)) end
         return false, "Quality too high"
     end
 
@@ -705,7 +806,7 @@ function Filters:GetAutoSellItems(verbose)
         for slotID = 1, numSlots do
             local info = C_Container.GetContainerItemInfo(bagID, slotID)
             if info and info.itemID then
-                local shouldSell, reason = self:ShouldAutoSell(bagID, slotID, info.itemID, info.hyperlink, verbose)
+                local shouldSell, reason, pending = self:ShouldAutoSell(bagID, slotID, info.itemID, info.hyperlink, verbose)
                 if shouldSell then
                     -- Get sell price for total value calculation
                     local _, _, _, _, _, _, _, _, _, _, sellPrice = _GetCachedItemInfo(info.itemID)
@@ -719,7 +820,7 @@ function Filters:GetAutoSellItems(verbose)
                         reason = reason,
                         totalValue = (sellPrice or 0) * stackCount,
                     })
-                elseif reason == "Item info not available" then
+                elseif pending then
                     if not pendingLookup[info.itemID] then
                         pendingLookup[info.itemID] = true
                         table.insert(pendingItems, info.itemID)

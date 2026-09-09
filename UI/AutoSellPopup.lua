@@ -11,14 +11,36 @@ UI.AutoSellPopup = {}
 local AutoSellPopup = UI.AutoSellPopup
 local _popup = nil
 
--- Quality colors for display
-local QUALITY_COLORS = {
-    [0] = "|cff9d9d9d", -- Poor (gray)
-    [1] = "|cffffffff", -- Common (white)
-    [2] = "|cff1eff00", -- Uncommon (green)
-    [3] = "|cff0070dd", -- Rare (blue)
-    [4] = "|cffa335ee", -- Epic (purple)
-}
+-- Item data arrives from the server asynchronously. Without a refresh when it lands, a player who
+-- opens a vendor right after /reload sees "No sellable items" for a bag full of uncached junk and
+-- the popup never corrects itself - indistinguishable from the addon deciding there is nothing to
+-- sell.
+--
+-- The debounce and the GET_ITEM_INFO_RECEIVED handler live in AutoSell, not here. This popup and
+-- the consent prompt were each polling "has item data settled?" on their own clocks, so a cold
+-- cache produced independent walks of every bag on the same burst of data. One signal now, and
+-- this is a subscriber to it rather than a second source of truth.
+local _dataEventsHooked = false
+
+local function _HookItemDataEvents()
+    if _dataEventsHooked then return end
+    if not IM.modules.AutoSell or not IM.modules.AutoSell.RegisterItemDataListener then return end
+    _dataEventsHooked = true
+
+    IM.modules.AutoSell:RegisterItemDataListener(function()
+        if _popup and _popup:IsShown() then
+            AutoSellPopup:Refresh()
+        end
+    end)
+end
+
+-- "The server has not sent this item's data yet", in the module that owns the condition. This
+-- window used to word it for itself while chat worded it differently, so one state was described
+-- two ways and read as two problems. Modules\AutoSell.lua loads before this file (see the .toc);
+-- if that ever stops being true this should fail loudly rather than fall back to a second wording.
+local function _StillLoadingText(count)
+    return IM.modules.AutoSell.PendingDataPhrase(count)
+end
 
 -- Create the popup frame
 function AutoSellPopup:Create()
@@ -127,6 +149,7 @@ function AutoSellPopup:Create()
     end)
 
     _popup = popup
+    _HookItemDataEvents()
     return popup
 end
 
@@ -136,40 +159,56 @@ function AutoSellPopup:Refresh()
 
     -- Get sellable items
     local sellableItems = {}
+    local pendingCount = 0
     local totalValue = 0
     local itemCount = 0
 
     if IM.Filters and IM.Filters.GetAutoSellItems then
-        sellableItems = IM.Filters:GetAutoSellItems()
+        local pendingItems
+        sellableItems, pendingItems = IM.Filters:GetAutoSellItems()
+        pendingCount = pendingItems and #pendingItems or 0
         for _, item in ipairs(sellableItems) do
             totalValue = totalValue + (item.totalValue or 0)
             itemCount = itemCount + (item.stackCount or 1)
         end
     end
 
-    -- Update summary
+    -- Update summary. "Still loading" is its own state: an empty list because the server has not
+    -- answered yet is a different fact from an empty list because nothing qualifies.
     if itemCount > 0 then
         _popup.itemCountLabel:SetText(UI:ColorText(itemCount .. " items", "accent") .. " to sell")
-        _popup.totalValueLabel:SetText("Worth: " .. IM:FormatMoney(totalValue))
+        local worth = "Worth: " .. IM:FormatMoney(totalValue)
+        if pendingCount > 0 then
+            worth = worth .. "  " .. UI:ColorText("(" .. _StillLoadingText(pendingCount) .. ")", "dim")
+        end
+        _popup.totalValueLabel:SetText(worth)
         _popup.sellBtn:Enable()
+    elseif pendingCount > 0 then
+        _popup.itemCountLabel:SetText(UI:ColorText("Loading item data...", "accent"))
+        _popup.totalValueLabel:SetText(UI:ColorText(_StillLoadingText(pendingCount), "dim"))
+        _popup.sellBtn:Disable()
     else
         _popup.itemCountLabel:SetText(UI:ColorText("No sellable items", "dim"))
         _popup.totalValueLabel:SetText("")
         _popup.sellBtn:Disable()
     end
 
-    -- Update filter info
-    local quality = IM.db and IM.db.global and IM.db.global.autoSell and IM.db.global.autoSell.maxQuality or 2
-    local qualityNames = {"Poor", "Common", "Uncommon", "Rare", "Epic", "Legendary"}
-    local qualityColor = QUALITY_COLORS[quality] or "|cffffffff"
-    _popup.filterInfo:SetText("Selling: " .. qualityColor .. (qualityNames[quality + 1] or "Unknown") .. "|r and below")
+    -- Update filter info (names and colours come from IM.QUALITY_INFO, never a local list)
+    -- No local fallback: GetMaxSellQuality already resolves a missing database to the narrowest
+    -- setting, and the fallback that used to sit here (QUALITY_UNCOMMON) was WIDER than that, so
+    -- the one state it covered was the one where it announced a bigger sale than the filter allows.
+    local quality = IM.Filters:GetMaxSellQuality()
+    _popup.filterInfo:SetText("Selling: |cff" .. IM:GetQualityColorHex(quality) ..
+        IM:GetQualityName(quality) .. "|r and below")
 
     -- Build items list
-    self:RefreshItems(sellableItems)
+    self:RefreshItems(sellableItems, pendingCount)
 end
 
 -- Refresh the sellable items list
-function AutoSellPopup:RefreshItems(sellableItems)
+-- @param sellableItems table - Items currently eligible
+-- @param pendingCount number|nil - Items whose data has not arrived yet
+function AutoSellPopup:RefreshItems(sellableItems, pendingCount)
     if not _popup or not _popup.itemsScrollContent then return end
 
     local scrollContent = _popup.itemsScrollContent
@@ -242,7 +281,11 @@ function AutoSellPopup:RefreshItems(sellableItems)
             scrollContent.noDataLabel = scrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             scrollContent.noDataLabel:SetPoint("TOPLEFT", UI.layout.paddingSmall, 0)
         end
-        scrollContent.noDataLabel:SetText(UI:ColorText("All items are protected or excluded", "dim"))
+        if (pendingCount or 0) > 0 then
+            scrollContent.noDataLabel:SetText(UI:ColorText(_StillLoadingText(pendingCount), "dim"))
+        else
+            scrollContent.noDataLabel:SetText(UI:ColorText("All items are protected or excluded", "dim"))
+        end
         scrollContent.noDataLabel:Show()
         yOffset = -rowHeight
         scrollContent:SetHeight(math.max(math.abs(yOffset), 1))
@@ -255,6 +298,10 @@ end
 -- Show the popup
 function AutoSellPopup:Show()
     local popup = self:Create()
+
+    -- Retried here as well as in Create: the first Create can happen before AutoSell has enabled,
+    -- and a popup that never subscribed would sit on stale item data forever.
+    _HookItemDataEvents()
 
     -- Position relative to MerchantFrame if visible
     if MerchantFrame and MerchantFrame:IsShown() then

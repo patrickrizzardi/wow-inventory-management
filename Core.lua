@@ -293,25 +293,6 @@ function IM:FormatMoney(copper)
     return result
 end
 
--- Item quality colors
-IM.qualityColors = {
-    [0] = { r = 0.62, g = 0.62, b = 0.62 }, -- Poor (gray)
-    [1] = { r = 1.00, g = 1.00, b = 1.00 }, -- Common (white)
-    [2] = { r = 0.12, g = 1.00, b = 0.00 }, -- Uncommon (green)
-    [3] = { r = 0.00, g = 0.44, b = 0.87 }, -- Rare (blue)
-    [4] = { r = 0.64, g = 0.21, b = 0.93 }, -- Epic (purple)
-    [5] = { r = 1.00, g = 0.50, b = 0.00 }, -- Legendary (orange)
-    [6] = { r = 0.90, g = 0.80, b = 0.50 }, -- Artifact (gold)
-    [7] = { r = 0.00, g = 0.80, b = 1.00 }, -- Heirloom (light blue)
-    [8] = { r = 0.00, g = 0.80, b = 1.00 }, -- WoW Token
-}
-
--- Get quality color as hex string
-function IM:GetQualityColorHex(quality)
-    local color = self.qualityColors[quality] or self.qualityColors[1]
-    return string.format("%02x%02x%02x", color.r * 255, color.g * 255, color.b * 255)
-end
-
 -- Item bind types (from LE_ITEM_BIND)
 IM.BIND_NONE = 0
 IM.BIND_ON_ACQUIRE = 1  -- BoP
@@ -328,6 +309,58 @@ IM.QUALITY_EPIC = 4      -- Purple
 IM.QUALITY_LEGENDARY = 5 -- Orange
 IM.QUALITY_ARTIFACT = 6  -- Gold
 IM.QUALITY_HEIRLOOM = 7  -- Light blue
+IM.QUALITY_TOKEN = 8     -- WoW Token
+
+--[[
+    Quality index -> display name, colour word, colour hex, for the auto-sell surfaces.
+
+    It exists because the auto-sell settings dropdown, the vendor popup's "Selling: X and below"
+    line and the tooltip's threshold line each carried their own quality list, and one of them
+    still offered Legendary/Artifact/Heirloom as sellable long after the filter stopped honouring
+    them. Those three read the accessors below now.
+
+    It is NOT the only place a quality colour is sourced in this addon - the whitelist and
+    junk-list panels read Blizzard's ITEM_QUALITY_COLORS, and UI/BagUI/ItemButton.lua deliberately
+    overrides one of those for its own window - so do not treat this as an inventory of quality
+    colour use, and do not add a claim here that it is one.
+    Anything that has to agree with the auto-sell FILTER, on the other hand, belongs here or it
+    will drift the way those three did.
+]]
+IM.QUALITY_INFO = {
+    [IM.QUALITY_POOR]      = { name = "Poor",      colorName = "Gray",       hex = "9d9d9d" },
+    [IM.QUALITY_COMMON]    = { name = "Common",    colorName = "White",      hex = "ffffff" },
+    [IM.QUALITY_UNCOMMON]  = { name = "Uncommon",  colorName = "Green",      hex = "1eff00" },
+    [IM.QUALITY_RARE]      = { name = "Rare",      colorName = "Blue",       hex = "0070dd" },
+    [IM.QUALITY_EPIC]      = { name = "Epic",      colorName = "Purple",     hex = "a335ee" },
+    [IM.QUALITY_LEGENDARY] = { name = "Legendary", colorName = "Orange",     hex = "ff8000" },
+    [IM.QUALITY_ARTIFACT]  = { name = "Artifact",  colorName = "Gold",       hex = "e6cc80" },
+    [IM.QUALITY_HEIRLOOM]  = { name = "Heirloom",  colorName = "Light Blue", hex = "00ccff" },
+    [IM.QUALITY_TOKEN]     = { name = "WoW Token", colorName = "Light Blue", hex = "00ccff" },
+}
+
+-- @param quality number|nil - Item quality index
+-- @return table|nil - The QUALITY_INFO entry, or nil for an index this addon does not know
+function IM:GetQualityInfo(quality)
+    return self.QUALITY_INFO[quality]
+end
+
+-- @return string - Display name, or "Unknown" for an index this addon does not know
+function IM:GetQualityName(quality)
+    local info = self.QUALITY_INFO[quality]
+    return info and info.name or "Unknown"
+end
+
+-- @return string - Colour as a bare hex string, no |cff prefix
+function IM:GetQualityColorHex(quality)
+    local info = self.QUALITY_INFO[quality] or self.QUALITY_INFO[IM.QUALITY_COMMON]
+    return info.hex
+end
+
+-- The highest quality auto-sell may ever touch. Everything ABOVE this is refused regardless of
+-- the user's maxQuality setting. Anything that has to agree with that boundary reads this rather
+-- than writing the number; a second copy of it is how the settings dropdown came to offer
+-- qualities the filter had already stopped honouring.
+IM.MAX_SELLABLE_QUALITY = IM.QUALITY_EPIC
 
 -- Initialize addon on ADDON_LOADED
 IM:RegisterEvent("ADDON_LOADED", function(event, loadedAddon)
@@ -462,7 +495,23 @@ SlashCmdList["INVENTORYMANAGER"] = function(msg)
     elseif cmd == "status" then
         -- Show addon status
         IM:Print("Status:")
-        IM:Print("  Auto-Sell: " .. (IM.db.global.autoSellEnabled and "|cff00ff00ON|r" or "|cffff0000OFF|r"))
+
+        -- Auto-sell has two independent gates: the setting, and this session's consent to sell
+        -- automatically. Reporting only the setting is what made "ON" mean two different things.
+        local autoSellState = IM.db.global.autoSellEnabled and "|cff00ff00ON|r" or "|cffff0000OFF|r"
+        if IM.db.global.autoSellEnabled and IM.modules.AutoSell and IM.modules.AutoSell.HasSessionConsent then
+            local consented, consentReason = IM.modules.AutoSell:HasSessionConsent()
+            if consented then
+                autoSellState = autoSellState .. " |cff888888(confirmed for this session)|r"
+            elseif consentReason == "settings-changed" then
+                -- Same reason the confirm names itself: "will ask again" and "will ask again
+                -- because you changed something" are different facts to whoever is reading this.
+                autoSellState = autoSellState .. " |cff888888(settings changed - will ask again before selling)|r"
+            else
+                autoSellState = autoSellState .. " |cff888888(will ask before selling)|r"
+            end
+        end
+        IM:Print("  Auto-Sell: " .. autoSellState)
         IM:Print("  Auto-Repair: " .. (IM.db.global.autoRepairEnabled and "|cff00ff00ON|r" or "|cffff0000OFF|r"))
 
         if IM.Filters then

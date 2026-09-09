@@ -12,17 +12,29 @@ UI.Panels.AutoSell = {}
 
 local AutoSellPanel = UI.Panels.AutoSell
 
--- Quality options with colors
-local QUALITY_DATA = {
-    {index = 0, label = "Poor (Gray)", color = "|cff9d9d9d"},
-    {index = 1, label = "Common (White)", color = "|cffffffff"},
-    {index = 2, label = "Uncommon (Green)", color = "|cff1eff00"},
-    {index = 3, label = "Rare (Blue)", color = "|cff0070dd"},
-    {index = 4, label = "Epic (Purple)", color = "|cffa335ee"},
-    {index = 5, label = "Legendary (Orange)", color = "|cffff8000"},
-    {index = 6, label = "Artifact (Gold)", color = "|cffe6cc80"},
-    {index = 7, label = "Heirloom (Light Blue)", color = "|cff00ccff"},
-}
+-- Quality options, derived from IM.QUALITY_INFO and stopping at IM.MAX_SELLABLE_QUALITY.
+-- Derived rather than written out: Legendary/Artifact/Heirloom/Token are refused by
+-- Filters:IsProtectedByQuality at any setting, so listing them here would be the UI promising
+-- something the filter never honours - which is exactly what a hand-maintained copy of this list
+-- did until the floor landed.
+--
+-- Two views of the same entries. QUALITY_BY_INDEX is keyed by the quality itself, so a lookup
+-- needs no arithmetic and cannot assume the array is gapless - the `if info` guard below means it
+-- might not be. QUALITY_ORDER keeps the ascending order the dropdown lists them in.
+local QUALITY_BY_INDEX = {}
+local QUALITY_ORDER = {}
+for quality = IM.QUALITY_POOR, IM.MAX_SELLABLE_QUALITY do
+    local info = IM:GetQualityInfo(quality)
+    if info then
+        local entry = {
+            index = quality,
+            label = info.name .. " (" .. info.colorName .. ")",
+            color = "|cff" .. IM:GetQualityColorHex(quality),
+        }
+        QUALITY_BY_INDEX[quality] = entry
+        table.insert(QUALITY_ORDER, entry)
+    end
+end
 
 local _qualityDropdown = nil
 local _updateStatsFunc = nil
@@ -72,8 +84,8 @@ function AutoSellPanel:Create(parent)
     _qualityDropdown = qualityDropdown
 
     local function QualityDropdown_Init()
-        local currentQuality = IM.db.global.autoSell.maxQuality or 2
-        for _, data in ipairs(QUALITY_DATA) do
+        local currentQuality = IM.Filters:GetMaxSellQuality()
+        for _, data in ipairs(QUALITY_ORDER) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = data.color .. data.label .. "|r"
             info.value = data.index
@@ -88,9 +100,15 @@ function AutoSellPanel:Create(parent)
     end
 
     UIDropDownMenu_Initialize(qualityDropdown, QualityDropdown_Init)
-    local currentQuality = IM.db.global.autoSell.maxQuality or 2
-    local currentData = QUALITY_DATA[currentQuality + 1] or QUALITY_DATA[3]
-    UIDropDownMenu_SetText(qualityDropdown, currentData.color .. currentData.label .. "|r")
+    -- GetMaxSellQuality returns a number inside the range these entries cover, but the entries are
+    -- built behind an `if info` guard, so the lookup can still miss. Say so rather than error out
+    -- on a nil field: a settings panel that fails to open is worse than one label reading oddly.
+    local currentData = QUALITY_BY_INDEX[IM.Filters:GetMaxSellQuality()]
+    if currentData then
+        UIDropDownMenu_SetText(qualityDropdown, currentData.color .. currentData.label .. "|r")
+    else
+        UIDropDownMenu_SetText(qualityDropdown, "Unknown quality")
+    end
 
     -- Item level threshold
     local ilvlLabelY = filterCard:AddContent(24)

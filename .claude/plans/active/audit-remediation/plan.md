@@ -4,8 +4,21 @@ plan-id: 2026-09-07-audit-remediation
 status: active
 tier: opord
 tier-reason: Mechanically triggered — unbounded blast radius (W2/W3), an EX-HIGH reversibility hazard (irreplaceable item destruction, unrecoverable SavedVariables loss), and two Floor-B classes touched (money movement, irreversible operations). No override available.
+execution-branch: main
+execution-worktree: none (/home/patrick/development/wow/InventoryManager)
 session-id:
   - 7d6ca3d0-55ef-47b1-8349-7f5fbbc6fb4b
+  - exec-p1-a1f7c2
+  - exec-p1-fix1-6b3e91
+  - exec-p1-fix2-d47a05
+  - exec-p1-fix3-9c02be
+  - exec-p1-fix4-e51d77
+  - exec-p1-fix5-3ab8e0
+  - exec-p1-fix6-7d41c9
+  - exec-p1-fix7-b82f10
+  - exec-p1-fix8-4e77a3
+  - exec-p1-fix9-c60f21
+  - exec-p1-fix10-a04b2e
 created_at: 2026-09-07
 updated_at: 2026-09-08
 ---
@@ -189,7 +202,13 @@ future phase touches one, it inherits the same freeze and the same gate.
 
 ### External constraints
 
-- Lua 5.1 (WoW's embedded runtime). No in-process test harness and none possible.
+- Lua 5.1 (WoW's embedded runtime). No harness can run *inside* the WoW client. An offline one
+  outside it exists as of Phase 1: `.claude/tests/autosell/` (`run.sh`, `wow_stub.lua`,
+  `test_autosell.lua`) loads the real `Core.lua`, `Database.lua`, `Filters.lua`, `AutoSell.lua`
+  and `MailHelper.lua` under Lua 5.1 in a digest-pinned container. It stubs the WoW API, so it
+  proves branch logic and never client behaviour; anything resting on a real API answer still
+  needs an in-game check. *(Corrected 2026-09-08 — this line previously read "No in-process test
+  harness and none possible," which was true of the client and false of everything else.)*
 - Published commitments: `.toc` `Interface: 120100`, `Version: 1.3.3`,
   `SavedVariables: InventoryManagerDB`, `X-Curse-Project-ID: 1422035`. `publish.sh` rewrites
   `## Version:` and `IM.version` only — **it never touches `## Interface:`**, so any interface bump
@@ -708,8 +727,26 @@ gate; deliberate rendering edit gets one.
   without an explicit confirm click; declining the confirm sells nothing.
 - After accepting the confirm once, a second merchant visit in the same session does not re-ask,
   and a `/reload` re-arms the confirm.
+  **FRAGO, applied by the conductor 2026-09-08, no human gate (risk direction down).** Add
+  "**with auto-sell settings unchanged**". Execution bound session consent to a fingerprint over
+  the settings that decide auto-sell scope, so changing any of them re-arms the confirm rather
+  than selling under a grant the user gave for a narrower set. `plan-adherence` graded the
+  divergence as lowering risk relative to R1 and did not tag it `frago-needed`; logged here
+  rather than left in a code comment, because this line is what the owner's smoke run reads.
 - The AutoSell settings panel offers no quality above index 4, and the previously-stored value 5/6/7
   in an existing profile does not resurrect a sale.
+- **OBSERVATION REQUESTED, not a pass/fail gate — buyback lifetime.** *(Written by an executor,
+  which is outside its charter; re-adopted by the conductor 2026-09-08 on plan-adherence's finding
+  that the content is correct and only the signature was wrong. A conductor FRAGO is not precedent
+  for an executor editing plan prose.)* Two rounds asserted a
+  specific expiry for the vendor Buyback tab ("until you close the merchant window", and before
+  that "selling cannot be undone"), both written offline and both wrong. The shipped copy now says
+  only what is certain: recently sold items are in the vendor's Buyback tab, it holds the last N —
+  where N is read from the client's own `BUYBACK_ITEMS_PER_PAGE` and omitted entirely if that
+  constant is missing — and the window does not last indefinitely. To let a future round say more, sell a junk item at a
+  vendor and record which of these actually clears it — closing the merchant window · reopening
+  the same vendor · opening a different vendor · a thirteenth sale · `/reload` · zoning · logout.
+  Write the answer here; the copy in `Modules/AutoSell.lua` stays vague until it exists.
 - **MANDATORY, because this phase touches `ItemLock`/`Filters`: `Alt+Click` and `Ctrl+Alt+Click`
   still lock and junk an item inside the CUSTOM bag.** BagUI does not handle lock/junk clicks at
   all (`ItemButton.lua:218-221`); it works only because those buttons inherit
@@ -3707,6 +3744,27 @@ checklist, and `publish.sh` is the mechanical gate.
 
 ### 3.4 Coordinating instructions
 
+**FRAGO — line anchors are ADVISORY; the symbol name governs. Applied by the conductor 2026-09-08,
+owner-approved, on `plan-adherence`'s `frago-needed` risk call after Phase 1.**
+
+Every `file:line` citation in this plan is a convenience, not an address. **The function, symbol or
+string named beside it is the authority; when they disagree, the anchor is wrong and the name is
+right.** Re-derive by grep at execution time.
+
+This is not a style preference — Phase 1 alone moved 142 citations across seven files:
+`Modules/AutoSell.lua` ≈+660, `Filters.lua` +70 rising to +99, `Core.lua` +33 to +49,
+`UI/AutoSellPopup.lua` +45, `Modules/TooltipInfo.lua` ≈+20, `UI/Panels/AutoSell.lua` +18,
+`Database.lua` +1. Phases 3, 11, 13, 15, 16, 17 and 17A all read anchors into those files, and
+Phase 11's atomic realm-key migration is driven off a `Database.lua` seed list every entry of
+which is now one line early. An executor that trusts a stale anchor and reports "not found" is the
+silent-discharge shape risk R11 exists to catch.
+
+The alternative considered and rejected: a mechanical re-anchor pass after every phase commit.
+Rejected because it is per-phase work that rots on its own and would itself need policing — the
+same hand-maintained-claim disease logged as C1 in `.claude/corpses.md`. This rule extends the
+posture §1 already takes on sets ("a hand-written list in a plan is a guess; a grep run in the
+tree is a fact") from set membership to line position.
+
 **Sequencing constraints — the complete list. Everything not named here is parallelizable.**
 1. Phase 0 precedes Phases 4, 8, 9 (API answers), Phase 18 (death verdicts), **and Phase 11 — a
    hard one, not an advisory: Phase 0 step 7's `(GetRealmName(), GetNormalizedRealmName())` pairs
@@ -4006,9 +4064,17 @@ mitigated, or the exemption argument that surrounded it.
 
 | # | Risk | Why not mitigable below HIGH | Mitigations already applied | Revisit trigger |
 |---|---|---|---|---|
-| O1 | **R1 — auto-sell destroys an irreplaceable item.** Residual HIGH (prob D × sev I, floored). | Floor B: irreversible operations never score below HIGH. Item destruction has no undo beyond WoW's own 12-slot buyback window, and severity cannot be reduced — a destroyed heirloom is destroyed. There is no test harness that can assert the filter's behavior without a live merchant. | Quality floor wired above both the threshold and the junk-list branch and below the whitelist; nil-quality fails closed; `maxQuality` dropdown clamped to 4; default `autoSellEnabled = false`; first automatic sale per session gated behind a `StaticPopupDialogs` confirm; Phase 1's smoke checklist tests every `maxQuality` setting plus the junk-list and uncached-item cases. **Every mitigation in this list is ungated and ships in Phase 1.** The one gated item (G9, the bag sell-ring predicate) is display-only: the filter is the sole authority over whether an item is sold, so a declined or undecided G9 leaves a wrong ring, never a wrong sale. | Any future change to `Filters:ShouldAutoSell`'s branch order, or any addition of a new "always sell" override alongside the junk list. |
+| O1 | **R1 — auto-sell destroys an irreplaceable item.** Residual HIGH (prob D × sev I, floored). | Floor B: irreversible operations never score below HIGH. Item destruction has no undo beyond WoW's own buyback window, whose slot count the addon reads from `BUYBACK_ITEMS_PER_PAGE` rather than asserting, and severity cannot be reduced — a destroyed heirloom is destroyed. An offline harness (`.claude/tests/autosell/`) asserts the filter's branch logic against the real files; it cannot assert client behaviour, so the live-merchant smoke run remains the only proof of the shipped behaviour. | Quality floor wired above both the threshold and the junk-list branch and below the whitelist; nil-quality fails closed; `maxQuality` dropdown clamped to 4; default `autoSellEnabled = false`; first automatic sale per session gated behind a `StaticPopupDialogs` confirm; Phase 1's smoke checklist tests every `maxQuality` setting plus the junk-list and uncached-item cases. **Every mitigation in this list is ungated and ships in Phase 1.** The one gated item (G9, the bag sell-ring predicate) is display-only: the filter is the sole authority over whether an item is sold, so a declined or undecided G9 leaves a wrong ring, never a wrong sale. | Any future change to `Filters:ShouldAutoSell`'s branch order, or any addition of a new "always sell" override alongside the junk list. |
 | O2 | **R2 — the v3 migration corrupts or destroys live SavedVariables.** Residual HIGH (prob C × sev I, floored). | Floor B: irreversible operation on irreplaceable data. WoW keeps no version history of SavedVariables. **The one mitigation that would drop severity — a backup table plus a restore command — was explicitly refused by the owner, twice, on the record ("just write it and ship it").** The conductor pushed back twice and dropped it. Offline verification reduces probability but cannot touch severity. | Migration written as pure functions over explicit inputs, **with the realm transform inside that contract rather than exempt from it**: stored keys are rewritten by a pure `opts.normalizeRealm` lookup over a Phase-0-derived `realmMap` — never by `GetNormalizedRealmName()`, which returns the *running* character's realm and would fuse every alt into one row — and the map's values are proven output-equal to the API for the owner's real realms before the commit exists (Phase 11 step 9A), with merges permitted only between map-verified keys and unmapped realms left byte-identical. **This is also what makes the Docker artefact honest**: every line of the pass, including the key rewrite, executes in the harness. Docker Lua 5.1 double-run deep-compare against a **copy** of the real SavedVariables, second run must be a byte-identical no-op; explicit assertions on character count, `sellHistory` absence from data **and** defaults, `ledgerCharFilter` absence plus `ledgerCharKey` validity, `mailHelper.pendingQueue` absence, per-table proof that every table the write-site grep placed in the pass was actually visited, and normalized `transactions.entries[i].char`; pathological cases for spaced realms and colliding keys with a missing `lastSeen`; `sellHistory` removed from `defaults` so `_mergeDefaults` cannot resurrect it; assertions that every `transactions.entries[i].src` matching a known character key is normalized and every other `src` is byte-identical; the never-replace-non-empty-with-empty rule from Phase 9; and one standing assertion that `#transactions.entries` is **unchanged** across the run, so no future edit can turn the pass into an inserting one. **Plus atomicity as a structural mitigation, not a procedural one**: the five reshape members — the producer change, the two raw `GetRealmName()` conversions, the `DB_VERSION` bump plus `_runMigrations` wiring, the `defaults` removal, and the `ledgerCharKey` reader conversion — are one commit, and the Docker proof is green before that commit exists, so there is no reachable intermediate state and no resolver whose later deletion could be forgotten. The two deletion-class members (the `sellHistory` reader and writer retirements) land in the preceding commit, which is gated on touching **no data** — a smaller atomic commit is a reviewable one, and a deletion has no disagreement window to protect. **And the migration's pass is derived from a write-site grep rather than from `defaults`**, which is what closes the `pendingQueue`-class hole a defaults-derived list cannot see. One **advisory** `cp` line in the release notes. **ONE LOSS INSIDE THIS RISK IS NOT MITIGATED AND IS NOT A DEFECT — it is destroyed by design, on the owner's decision, and the override signature covers it**: the v3 drop permanently destroys `sellHistory` rows older than `ledger.maxAgeDays` that have no counterpart left in `transactions` (survivors of the 100-entry count cap whose copies the age purge already removed). Revision six proposed a consolidation merge; revision seven withdrew it because the owner's retention setting already declares data past his window unwanted and rescuing those rows into the store that policy purges is circular. Recorded with all four fields as Appendix B **L1**. No merge, no backup, no retention override. | The owner changing his mind about a backup mechanism; OR the first report of a lost character or a doubled ledger after a 1.4.0 login; OR any future migration that merges or renames keys; **OR the discovery of a second store in this addon whose retention axis differs from the store it was migrated into — OQ-1's class, which no audit or review pass found**; OR any future edit that puts a WoW API call, or a derived string rule, inside the migration pass — that forfeits R2's `guard` bucket and returns the row to **EX-HIGH**, at which point this signature no longer covers it. |
 | O3 | **R4 — gold movements booked twice, with the wrong sign, or not at all.** Residual HIGH (prob B × sev II, floored). | Floor B: money movement and financial records never score below HIGH. The ledger *is* the financial record, and its inputs are 30 `hooksecurefunc` edges plus 11 `PLAYER_MONEY` handlers whose set is runtime-dependent (four modules return early on settings or API absence), so the handler population cannot be enumerated statically. Silent under-reporting is unfalsifiable without per-source tracing. | One amount-keyed FIFO claim queue inside `IM:AddTransaction`, order-independent by construction, replacing every context-guessing guard (`IsInTrackedContext` deleted); arm-and-confirm against the matching `PLAYER_MONEY` delta so rejected actions book nothing; pure-function design tested in Docker including the shared-amount collision case; deterministic handler order from Phase 3; Phase 4/5/6/7 smoke checklists **count entries per action** rather than eyeballing totals. | The first observed ledger entry that does not correspond to a real action, or any real action that produces no entry, after 1.4.0; OR the addition of any new gold-moving tracker that does not route through `IM:AddTransaction`. |
+
+**The Phase 1 harness does not move a bucket and does not require re-signature.** R1 is floored at
+HIGH by Floor B (irreversible operations); the floor keys on severity, and a destroyed heirloom is
+still destroyed. The harness lowers probability only. O1's rule that an edit to a mitigation cell
+which LOWERS a bucket requires re-signature is therefore not triggered — recorded explicitly so the
+next reader does not have to re-derive it. Two clauses in the row above were corrected on
+2026-09-08 (the hand-written buyback slot count, and a claim that no such harness could exist);
+the bucket, the reasoning and the signature are unchanged.
 
 **Accepted by**: Patrick Rizzardi  **Date**: 2026-09-07
 
@@ -4206,6 +4272,65 @@ trigger.
   being derivable.
 
 ### Recorded MEDIUM residuals (gate: pass, but record with a trigger)
+
+**Phase 1 residuals, recorded at seal 2026-09-08.** Everything below is a gap in *verification*,
+not a known defect: the code each item describes was graded correct by independent reviewers, and
+what is missing is the mechanism that would catch it regressing. Written here rather than left in
+code comments because a residual whose only record is a comment is one refactor from gone.
+
+- **P1 — the fingerprint's table list is hand-maintained one level up (residual MEDIUM).**
+  **WHAT**: `_AutoSellFingerprint` recurses wholesale into the settings tables it is given, so a new
+  *key* inside one is covered the moment it exists; the list of *tables* is written by hand. A new
+  top-level `db.global` table that `Filters:ShouldAutoSell` learns to read is hashed by nobody.
+  **WHY accepted**: the mutation battery enforces "the fingerprint moves iff some verdict can move"
+  over every table currently read, which is the strongest check available without a lint or CI path
+  in this repo. **COST**: a stale grant sells items the user protected, unattended — R1's own
+  failure mode. **TRIGGER**: any change giving `ShouldAutoSell` a new top-level `db.global` read;
+  the battery case lands in the same commit, or the list is rebuilt by a write-site grep.
+
+- **P2 — five filter tiers are stubbed inert, so the battery's iff is vacuous over them
+  (residual MEDIUM).** **WHAT**: soulbound, warbound, uncollected-transmog, toy and equipment-set
+  evaluation answer constants in `wow_stub.lua`. Independently measured: making any of those five
+  *stop protecting* leaves the suite green. **WHY accepted**: each needs a live client API with no
+  offline equivalent; modelling them would assert the stub's behaviour, not WoW's. **COST**: a
+  protection tier could be deleted and no offline check would notice. **TRIGGER**: Phase 0 API
+  answers making any of the five stubbable faithfully, or the first observed sale of an item one of
+  those tiers should have protected.
+
+- **P3 — the approved-sale exemption is authenticated, not attributed to a human
+  (residual MEDIUM).** **WHAT**: the one-shot nonce proves an approved list came from
+  `RequestSellConsent` and is spent once — it does not prove a *person* clicked Sell.
+  `AutoSell:ConfirmApprovedSale` and `GrantSessionConsent` are reachable on the public module table
+  via `_G.InventoryManager`. **WHY accepted**: Lua addons share one address space with no memory
+  protection, that same table already exposes `SellJunk()` as an unconditional manual vendor, and
+  the window is narrow (auto-sell on, merchant open, prompt live and unanswered). **COST**: one
+  unattended sale of exactly the list the dialog quoted, plus a session grant never given.
+  **TRIGGER**: any new caller of `ConfirmApprovedSale` outside the dialog's `OnAccept` — at which
+  point both become file-local, reachable only through the dialog definition.
+
+- **P4 — the offline suite does not exercise the item-data event path (residual MEDIUM).**
+  **WHAT**: the `GET_ITEM_INFO_RECEIVED` registration, its stale-token debounce, the listener
+  broadcast and the waiter registry are each individually deletable with the suite green; only the
+  2.0s deadline fallback is driven. **WHY accepted**: the tiers above it are covered and the
+  timeout path is the one that fails closed. **COST**: a regression in the data-arrived path shows
+  up in-game as a popup that never fills in, not as a wrong sale. **TRIGGER**: any edit to the item
+  data signal, or a report that the Auto-Sell popup stays on "Loading item data…".
+
+- **P5 — `UI/Panels/AutoSell.lua` and `Modules/TooltipInfo.lua` are graded by reading source, not
+  by running it (residual MEDIUM).** **WHAT**: the dropdown's derivation is checked with substring
+  searches over an unloaded file — appending index entries past the floor to `QUALITY_ORDER` leaves
+  the suite green, so the dropdown can again promise a threshold the filter refuses. `TooltipInfo`
+  is not loaded at all. **WHY accepted**: both need the UI layer stubbed, which is materially more
+  surface than the filter path required. **COST**: UI promising what the filter refuses — a lie in
+  the interface, never a wrong sale, since the floor is independent. **TRIGGER**: the next phase
+  that edits either file, or the UI layer becoming loadable offline.
+
+- **P6 — the expected-check-count pin is blind to a one-for-one swap (residual MEDIUM).**
+  **WHAT**: 35 conditional emission points exist; exactly one can cancel to zero, and it guards a
+  load-bearing assertion. Observed live during the final round. **WHY accepted**: not silent — the
+  helper always prints a named failure, so nothing has ever hidden behind it. **COST**: the pin
+  promises "every expected check ran" and delivers "the total is unchanged". **TRIGGER**: any new
+  conditionally-emitted check, or the pin being relied on as the sole evidence a case executed.
 
 - **R3 — account-shared data loss (residual MEDIUM).** The guards make a bad write improbable, not
   impossible, and the values remain a cache of server-authoritative data. **Trigger to revisit**:
