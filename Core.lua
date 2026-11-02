@@ -5,6 +5,7 @@
 
 -- Create addon namespace
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
 
 -- Make namespace globally accessible for debugging
 _G.InventoryManager = IM
@@ -59,8 +60,14 @@ end
 -- Register an event handler
 function IM:RegisterEvent(event, handler)
     if not eventHandlers[event] then
+        -- Registering an event the running client lacks (e.g. warband bank, BMAH,
+        -- transmog on World of Warcraft: Forever) throws; skip it instead.
+        local ok = pcall(IM.eventFrame.RegisterEvent, IM.eventFrame, event)
+        if not ok then
+            IM:Debug("RegisterEvent skipped, event unavailable on this client:", tostring(event))
+            return
+        end
         eventHandlers[event] = {}
-        IM.eventFrame:RegisterEvent(event)
     end
     table.insert(eventHandlers[event], handler)
 end

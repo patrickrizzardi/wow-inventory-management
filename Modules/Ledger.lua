@@ -15,6 +15,7 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
 
 local Ledger = {}
 IM:RegisterModule("Ledger", Ledger)

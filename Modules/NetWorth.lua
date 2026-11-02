@@ -12,6 +12,7 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
 
 local NetWorth = {}
 IM:RegisterModule("NetWorth", NetWorth)

@@ -5,6 +5,8 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
+local GetDetailedItemLevelInfo = C_Item.GetDetailedItemLevelInfo
 local UI = IM.UI
 
 -- Ensure BagUI namespace exists

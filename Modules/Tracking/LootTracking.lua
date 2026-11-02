@@ -10,6 +10,7 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfoInstant = C_Item.GetItemInfoInstant
 
 local LootTracking = {}
 IM:RegisterModule("LootTracking", LootTracking)
