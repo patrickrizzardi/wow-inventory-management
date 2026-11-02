@@ -23,6 +23,8 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
+local GetItemInfoInstant = C_Item.GetItemInfoInstant
 
 local BagData = {}
 IM:RegisterModule("BagData", BagData)

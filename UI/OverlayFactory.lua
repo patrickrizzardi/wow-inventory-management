@@ -22,6 +22,7 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
 
 -- Initialize UI namespace if needed
 IM.UI = IM.UI or {}

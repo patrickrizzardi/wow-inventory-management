@@ -14,6 +14,7 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfoInstant = C_Item.GetItemInfoInstant
 
 local MailTracking = {}
 IM:RegisterModule("MailTracking", MailTracking)

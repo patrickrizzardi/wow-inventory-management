@@ -4,6 +4,8 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
+local GetItemInfoInstant = C_Item.GetItemInfoInstant
 
 local SellHistory = {}
 IM:RegisterModule("SellHistory", SellHistory)

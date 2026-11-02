@@ -8,6 +8,7 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
 
 local JunkList = {}
 IM:RegisterModule("JunkList", JunkList)

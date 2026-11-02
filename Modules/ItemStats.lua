@@ -16,6 +16,7 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
 
 local ItemStats = {}
 IM:RegisterModule("ItemStats", ItemStats)

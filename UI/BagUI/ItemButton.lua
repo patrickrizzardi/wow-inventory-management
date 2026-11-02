@@ -5,6 +5,8 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
+local GetDetailedItemLevelInfo = C_Item.GetDetailedItemLevelInfo
 
 -- Quality colours are Blizzard's (ITEM_QUALITY_COLORS), but this bag chooses
 -- which colour to paint. Heirloom ships as #00CCFF, the same cyan the UI accent

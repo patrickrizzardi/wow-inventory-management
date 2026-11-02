@@ -21,6 +21,8 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
+local GetItemInfoInstant = C_Item.GetItemInfoInstant
 
 local AuctionTracking = {}
 IM:RegisterModule("AuctionTracking", AuctionTracking)

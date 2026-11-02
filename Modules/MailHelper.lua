@@ -12,6 +12,7 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
 
 local MailHelper = {}
 IM:RegisterModule("MailHelper", MailHelper)

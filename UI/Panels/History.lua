@@ -4,6 +4,7 @@
 ]]
 
 local addonName, IM = ...
+local GetItemInfo = C_Item.GetItemInfo
 local UI = IM.UI
 
 UI.Panels = UI.Panels or {}
