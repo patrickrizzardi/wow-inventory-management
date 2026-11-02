@@ -1,4 +1,4 @@
-## Interface: 120100, 16001
+## Interface: 120105, 16001
 ## Title: InventoryManager
 ## Notes: Comprehensive inventory management - auto-sell, item locking, and auto-repair
 ## Author: Cheddarbound

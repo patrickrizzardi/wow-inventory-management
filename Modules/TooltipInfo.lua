@@ -6,6 +6,7 @@
 local addonName, IM = ...
 local GetItemInfo = C_Item.GetItemInfo
 local GetItemInfoInstant = C_Item.GetItemInfoInstant
+local GetItemSubClassInfo = C_Item.GetItemSubClassInfo
 
 local TooltipInfo = {}
 IM:RegisterModule("TooltipInfo", TooltipInfo)

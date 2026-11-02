@@ -234,7 +234,7 @@ function Stub.ItemLink(itemID)
     return "|Hitem:" .. tostring(itemID) .. "|h[Item " .. tostring(itemID) .. "]|h"
 end
 
-function GetItemInfo(idOrLink)
+local function StubGetItemInfo(idOrLink)
     local id = _ItemIDFrom(idOrLink)
     -- A variant is found only by its own link, exactly as the client behaves: ask by itemID and
     -- you get the base item, whatever the slot actually holds.
@@ -313,6 +313,7 @@ ItemLocation = {
 }
 
 C_Item = {
+    GetItemInfo = StubGetItemInfo,
     IsBound = function() return false end,
     IsBoundToAccountUntilEquip = function() return false end,
     GetCurrentItemLevel = function() return nil end,
