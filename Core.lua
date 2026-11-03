@@ -11,7 +11,7 @@ local GetItemInfo = C_Item.GetItemInfo
 _G.InventoryManager = IM
 
 -- Addon version
-IM.version = "1.3.3"
+IM.version = "1.4.0"
 
 -- Show welcome message on first load
 IM.showWelcomeMessage = true
