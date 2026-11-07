@@ -106,6 +106,17 @@ function UIPanel:Create(parent)
         IM:RefreshAllUI()
     end
 
+    -- Zygor upgrade percent (green text)
+    local upgradeCheck = overlayCard:AddCheckbox(
+        "Show gear upgrade % (Zygor Guides)",
+        IM.db.global.ui.showUpgradeOverlay ~= false,
+        "|cff5eff53+N%|r - How much better an item is than what you wear. Needs Zygor Guides Viewer with its gear advice on"
+    )
+    upgradeCheck.checkbox.OnValueChanged = function(self, value)
+        IM.db.global.ui.showUpgradeOverlay = value
+        IM:RefreshAllUI()
+    end
+
     content:AdvanceY(overlayCard:GetContentHeight() + UI.layout.cardSpacing)
 
     -- ============================================================

@@ -62,8 +62,17 @@ local COLORS = {
         glow = { 0.3, 0.5, 0.9, 0.4 },
         border = { 0.4, 0.6, 1, 1 },
     },
+    -- Same green Zygor used for its own bag arrow.
+    upgrade = {
+        text = { 0.37, 1, 0.33, 1 },
+    },
     iconBg = { 0, 0, 0, 0.7 },
 }
+
+-- Upgrade percent text
+local UPGRADE_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
+local UPGRADE_TEXT_SIZE = 10
+local UPGRADE_TEXT_INSET = 2
 
 -- Mail icon
 local MAIL_ICON = "Interface\\Icons\\INV_Letter_15"
@@ -258,6 +267,16 @@ function OverlayFactory:Create(itemButton)
     -- Mail animation
     overlay.mailAnimGroup = _createPulseAnimation(overlay)
 
+    -- ============ UPGRADE PERCENT (Zygor) ============
+
+    -- Top-right: top-left holds lock/sell/mail, bottom-right holds the unsellable marker and
+    -- the custom bag's item level, bottom-left holds Blizzard's crafting-quality pip.
+    overlay.upgradeText = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    overlay.upgradeText:SetPoint("TOPRIGHT", -UPGRADE_TEXT_INSET, -UPGRADE_TEXT_INSET)
+    overlay.upgradeText:SetFont(UPGRADE_TEXT_FONT, UPGRADE_TEXT_SIZE, "OUTLINE")
+    overlay.upgradeText:SetTextColor(unpack(COLORS.upgrade.text))
+    overlay.upgradeText:Hide()
+
     -- Start hidden
     overlay:Hide()
 
@@ -380,7 +399,31 @@ function OverlayFactory:HideAll(overlay)
     self:ShowSell(overlay, false)
     self:ShowUnsellable(overlay, false)
     self:ShowMail(overlay, false)
+    overlay.upgradeText:Hide()
     overlay:Hide()
+end
+
+--[[
+    Shows or hides the Zygor upgrade percent. Independent of the lock/sell/mail/unsellable
+    states: it can sit on top of any of them, or stand alone, in which case it also keeps the
+    overlay frame itself visible (every other state's Show is what normally does that).
+
+    @param overlay Frame - Overlay frame created by OverlayFactory:Create()
+    @param percent number|nil - Percent better than the equipped item; nil hides it
+]]
+function OverlayFactory:ShowUpgrade(overlay, percent)
+    if not percent then
+        overlay.upgradeText:Hide()
+        return
+    end
+
+    if percent < 1 then
+        overlay.upgradeText:SetText("+<1%")
+    else
+        overlay.upgradeText:SetText(string.format("+%d%%", math.floor(percent + 0.5)))
+    end
+    overlay.upgradeText:Show()
+    overlay:Show()
 end
 
 function OverlayFactory:SetDimmed(overlay, dimmed)
@@ -425,6 +468,7 @@ function OverlayFactory:Update(itemButton, bagID, slotID)
     local showSellOverlay = IM.db and IM.db.global and IM.db.global.ui and IM.db.global.ui.showSellOverlay ~= false
     local showMailOverlay = IM.db and IM.db.global and IM.db.global.ui and IM.db.global.ui.showMailOverlay ~= false
     local showUnsellableIndicator = IM.db and IM.db.global and IM.db.global.ui and IM.db.global.ui.showUnsellableIndicator ~= false
+    local showUpgradeOverlay = IM.db and IM.db.global and IM.db.global.ui and IM.db.global.ui.showUpgradeOverlay ~= false
 
     -- Check if item matches a mail rule (shows blue border anytime, not just at mailbox)
     local isMailRuleMatch = false
@@ -475,6 +519,14 @@ function OverlayFactory:Update(itemButton, bagID, slotID)
     else
         self:HideAll(overlay)
     end
+
+    -- After the state chain: the chain's HideAll branch hides the frame, and the percent has
+    -- to be able to bring it back for an item that has no other state.
+    local upgradePercent = nil
+    if showUpgradeOverlay and IM.modules.ZygorUpgrades then
+        upgradePercent = IM.modules.ZygorUpgrades:GetUpgradePercent(info.hyperlink)
+    end
+    self:ShowUpgrade(overlay, upgradePercent)
 end
 
 --[[

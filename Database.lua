@@ -132,6 +132,7 @@ local defaults = {
             showSellOverlay = true,        -- Show coin icon on sellable items
             showMailOverlay = true,        -- Show mail border on mail helper items
             showUnsellableIndicator = true, -- Show gray border + icon on items with no vendor value
+            showUpgradeOverlay = true,     -- Show Zygor's "+N%" gear upgrade on bag items (needs Zygor Guides)
         },
 
         -- Dashboard filter persistence

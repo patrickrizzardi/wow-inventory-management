@@ -26,6 +26,7 @@ Modules\SellHistory.lua
 Modules\Ledger.lua
 Modules\AuctionHouseProtection.lua
 Modules\TooltipInfo.lua
+Modules\ZygorUpgrades.lua
 
 # Tracking Modules (Ledger System)
 Modules\Tracking\LootTracking.lua

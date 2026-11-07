@@ -15,5 +15,7 @@
 set -e
 image=akorn/lua@sha256:02c91360059f16c4b0b67e449c33444d24e0b0cc5398fc0bbfc450fd062466e0
 repo=$(cd "$(dirname "$0")/../../.." && pwd)
+# An optional first argument names a different suite under the repo root; the pinned image is
+# shared so there is one digest to repin.
 exec docker run --rm -v "$repo":/w -w /w "$image" \
-    lua .claude/tests/autosell/test_autosell.lua
+    lua "${1:-.claude/tests/autosell/test_autosell.lua}"
