@@ -381,7 +381,7 @@ end
 
 function IM:AddHistoryEntry(entryType, itemID, itemLink, quantity, value, source)
     local playerName = UnitName("player")
-    local realmName = GetRealmName()
+    local realmName = self:GetRealm()
 
     local entry = {
         timestamp = time(),
@@ -539,14 +539,33 @@ end
     CALLERS MUST handle nil return gracefully.
 ]]
 
+-- Resolve the player's realm name, or nil if no source has it yet.
+-- WoW Forever (Interface 16001) returns "" from GetRealmName() and
+-- GetNormalizedRealmName() all session and has no realmName CVar; only the
+-- second return of UnitFullName("player") carries it (tested in-game).
+function IM:GetRealm()
+    local realm = GetRealmName()
+    if realm and realm ~= "" then return realm end
+
+    if GetNormalizedRealmName then
+        realm = GetNormalizedRealmName()
+        if realm and realm ~= "" then return realm end
+    end
+
+    local _, fullRealm = UnitFullName("player")
+    if fullRealm and fullRealm ~= "" then return fullRealm end
+
+    return nil
+end
+
 -- Get character key in format "CharName-RealmName"
 -- Returns nil if player info not yet available
 function IM:GetCharacterKey()
     local name = UnitName("player")
-    local realm = GetRealmName()
+    local realm = self:GetRealm()
 
     -- Guard against early load before player data is available
-    if not name or not realm or name == "Unknown" or realm == "" then
+    if not name or not realm or name == "Unknown" then
         return nil
     end
 

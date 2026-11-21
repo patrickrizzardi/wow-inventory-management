@@ -258,7 +258,13 @@ end
 function NetWorth:UpdateInventoryValue(includeBank)
     local value, count = self:CalculateInventoryValue(includeBank)
 
+    -- nil while the realm name is still "" during early login (Database.lua GetCharacterKey);
+    -- skip persisting and caching so the next scan retries once the key resolves
     local charData = IM:GetCharacterData()
+    if not charData then
+        IM:Debug("[NetWorth] Skipping inventory value save - character data not ready")
+        return value
+    end
     charData.inventoryValue = value
     charData.lastInventoryUpdate = time()
 

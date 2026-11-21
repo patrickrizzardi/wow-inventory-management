@@ -585,7 +585,7 @@ function MailHelper:SendToAlt(altKey)
     -- Get recipient name (just the character name, no realm if same realm)
     local altName = altKey:match("^(.+)-") or altKey
     local altRealm = altKey:match("-(.+)$") or ""
-    local currentRealm = GetRealmName()
+    local currentRealm = IM:GetRealm()
 
     local recipient = altName
     if altRealm ~= "" and altRealm ~= currentRealm then

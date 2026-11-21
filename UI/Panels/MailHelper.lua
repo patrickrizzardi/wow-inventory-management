@@ -398,7 +398,8 @@ function MailHelperPanel:Create(parent)
             return
         end
         if recipient == "" then IM:Print("Please enter a recipient name") return end
-        if not recipient:find("-") then recipient = recipient .. "-" .. GetRealmName() end
+        local realm = IM:GetRealm()
+        if realm and not recipient:find("-") then recipient = recipient .. "-" .. realm end
         if name == "" then name = "Rule " .. (#(IM.modules.MailHelper:GetRules() or {}) + 1) end
 
         if IM.modules.MailHelper then
